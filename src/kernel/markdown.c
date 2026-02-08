@@ -293,7 +293,7 @@ static void md_paint(Window *win) {
     int max_display_lines = usable_content_height / MD_LINE_HEIGHT;
     
     // Draw content background
-    draw_rect(offset_x, content_start_y, content_width - 20, usable_content_height, COLOR_WHITE);
+    draw_rect(win->x + 4, content_start_y, win->w - 24, usable_content_height, COLOR_WHITE);
     
 
     

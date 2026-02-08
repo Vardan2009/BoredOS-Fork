@@ -800,7 +800,7 @@ static void cmd_paint(Window *win) {
     int offset_y = win->y + 24;
     
     // Fill background
-    draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_BLACK);
+    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_BLACK);
     
     int start_y = offset_y + 4;
     int start_x = offset_x + 4;

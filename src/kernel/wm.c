@@ -51,16 +51,17 @@ static int drag_offset_x = 0;
 static int drag_offset_y = 0;
 
 // File Dragging State
-static bool is_dragging_file = false;
+bool is_dragging_file = false;
 static char drag_file_path[256];
 static int drag_icon_type = 0; // 0=File, 1=Folder, 2=App
 static int drag_start_x = 0;
 static int drag_start_y = 0;
 static int drag_icon_orig_x = 0;
 static int drag_icon_orig_y = 0;
+static Window *drag_src_win = NULL;
 
 // Windows array for z-order management
-static Window *all_windows[10];
+static Window *all_windows[32];
 static int window_count = 0;
 
 // Redraw system
@@ -79,7 +80,6 @@ typedef struct {
     char name[64];
     int x, y;
     int type; // 0=File, 1=Folder, 2=App
-    bool selected;
 } DesktopIcon;
 
 static DesktopIcon desktop_icons[MAX_DESKTOP_ICONS];
@@ -165,8 +165,6 @@ static void refresh_desktop_icons(void) {
             if (files[i].is_directory) dest->type = 1;
             else if (str_ends_with(dest->name, ".shortcut")) dest->type = 2;
             else dest->type = 0;
-
-            dest->selected = false;
             dest->x = -1; // Mark as new for layout
             dest->y = -1;
             
@@ -276,49 +274,55 @@ void wm_show_message(const char *title, const char *message) {
 }
 
 static void draw_icon_label(int x, int y, const char *label) {
-    char line1[10] = {0};
-    char line2[10] = {0};
+    char line1[11] = {0}; // 10 chars + null
+    char line2[11] = {0}; // 10 chars + null
     int len = 0; while(label[len]) len++;
     
-    if (len <= 8) {
-        int i=0; while(i<len) { line1[i] = label[i]; i++; }
-        line1[i] = 0;
+    if (len <= 10) {
+        for (int i = 0; i < len; i++) line1[i] = label[i];
     } else {
-        int split = 8;
-        // Smart wrap: look for separator in first 8 chars (backwards)
-        // Prioritize keeping extension together (e.g. SEVENCH.MD -> split at 7)
-        int best_split = -1;
-        for (int i = 7; i >= 1; i--) {
-            if (label[i] == ' ' || label[i] == '.') {
-                best_split = i;
-                break;
+        // Dot-based wrap: keep extension together if prefix fits
+        int dot_pos = -1;
+        for (int i = len - 1; i >= 0; i--) {
+            if (label[i] == '.') { dot_pos = i; break; }
+        }
+
+        int split = -1;
+        if (dot_pos != -1 && dot_pos > 0 && dot_pos <= 10) {
+            split = dot_pos;
+        } else {
+            // Word-based wrap: look for space in the first 11 characters
+            for (int i = 10; i >= 0; i--) {
+                if (label[i] == ' ') {
+                    split = i;
+                    break;
+                }
             }
         }
-        
-        if (best_split != -1) {
-            split = best_split;
-        }
-        
-        // Copy line 1
-        int i;
-        for (i = 0; i < split; i++) line1[i] = label[i];
-        line1[i] = 0;
-        
-        // Copy line 2
-        int start2 = split;
-        if (label[split] == ' ') start2++; // Skip space at start of line 2
-        
-        int j = 0;
-        while (label[start2 + j] && j < 8) {
-            line2[j] = label[start2 + j];
-            j++;
-        }
-        line2[j] = 0;
-        
-        // Truncate with .. if longer than 16 (or if line 2 overflows)
-        if (label[start2 + j] != 0) {
-            if (j > 6) { line2[6] = '.'; line2[7] = '.'; line2[8] = 0; }
-            else { line2[j++] = '.'; line2[j++] = '.'; line2[j] = 0; }
+
+        if (split != -1) {
+            for (int i = 0; i < split; i++) line1[i] = label[i];
+            int start2 = (label[split] == ' ') ? split + 1 : split;
+            int j = 0;
+            while (label[start2 + j] && j < 10) {
+                line2[j] = label[start2 + j];
+                j++;
+            }
+            if (label[start2 + j] != 0) {
+                int t = (j > 8) ? 8 : j;
+                line2[t] = '.'; line2[t+1] = '.'; line2[t+2] = 0;
+            }
+        } else {
+            for (int i = 0; i < 10; i++) line1[i] = label[i];
+            int j = 0;
+            while (label[10 + j] && j < 10) {
+                line2[j] = label[10 + j];
+                j++;
+            }
+            if (label[10 + j] != 0) {
+                int t = (j > 8) ? 8 : j;
+                line2[t] = '.'; line2[t+1] = '.'; line2[t+2] = 0;
+            }
         }
     }
     
@@ -338,7 +342,6 @@ static void draw_icon_label(int x, int y, const char *label) {
 
 // --- Drawing Helpers ---
 
-// Draw a bevelled box (Win 3.1 style)
 void draw_bevel_rect(int x, int y, int w, int h, bool sunken) {
     draw_rect(x, y, w, h, COLOR_GRAY);
     
@@ -377,16 +380,14 @@ void draw_coffee_cup(int x, int y, int size) {
     draw_rect(x + cup_w - 2, y + 2, 1, cup_h - 3, COLOR_BLACK);  // Right
     draw_rect(x + 1, y + cup_h - 1, cup_w - 2, 1, COLOR_BLACK);  // Bottom
     
-    // Rounded bottom corners
     draw_rect(x + 1, y + cup_h - 1, 1, 1, COLOR_LTGRAY);
     draw_rect(x + cup_w - 2, y + cup_h - 1, 1, 1, COLOR_LTGRAY);
     
-    // Handle - much bigger (on the right side, pointing inward)
     draw_rect(x + cup_w, y + 3, 2, 8, COLOR_BLACK);
     draw_rect(x + cup_w - 2, y + 3, 2, 1, COLOR_BLACK);
     draw_rect(x + cup_w - 2, y + 10, 2, 1, COLOR_BLACK);
     
-    // Coffee liquid inside - rainbow Apple logo stripes (blue, green, yellow, red, purple, blue)
+
     int stripe_height = (cup_h - 5) / 6;
     int coffee_y = y + 4;
     draw_rect(x + 2, coffee_y, cup_w - 4, stripe_height, COLOR_APPLE_BLUE);
@@ -601,7 +602,7 @@ void draw_window(Window *win) {
     draw_button(win->x + win->w - 20, win->y + 5, 14, 14, "X", false);
     
     // Client Area
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_WHITE);
+    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_LTGRAY);
     
     if (win->paint) {
         win->paint(win);
@@ -696,6 +697,9 @@ void wm_paint(void) {
     int sw = get_screen_width();
     int sh = get_screen_height();
     
+    // Ensure no stale clipping state interferes with the new frame
+    graphics_clear_clipping();
+
     // First, erase the old cursor (before redrawing anything)
     if (cursor_visible) {
         erase_cursor(last_cursor_x, last_cursor_y);
@@ -734,14 +738,17 @@ void wm_paint(void) {
             else if (str_ends_with(icon->name, ".md")) {
                 draw_document_icon(icon->x, icon->y, icon->name);
                 draw_string(icon->x + 31, icon->y + 2, "MD", COLOR_BLACK);
+            } else if (str_ends_with(icon->name, ".c") || str_ends_with(icon->name, ".C")) {
+                draw_document_icon(icon->x, icon->y, icon->name);
+                draw_string(icon->x + 31, icon->y + 2, "C", COLOR_APPLE_BLUE);
             }
             else draw_document_icon(icon->x, icon->y, icon->name);
         }
     }
     
     // 3. Windows - sort by z-index and draw
-    // Simple bubble sort by z-index (5 windows max)
-    Window *sorted_windows[6];
+    // Simple bubble sort by z-index
+    Window *sorted_windows[32];
     for (int i = 0; i < window_count; i++) {
         sorted_windows[i] = all_windows[i];
     }
@@ -803,30 +810,32 @@ void wm_paint(void) {
     // Desktop Context Menu
     if (desktop_menu_visible) {
         int menu_w = 140;
-        int menu_h = 125; // 5 items * 25
+        int item_h = 25;
+        int menu_h = (desktop_menu_target_icon != -1) ? 125 : 75;
         
         draw_rect(desktop_menu_x, desktop_menu_y, menu_w, menu_h, COLOR_LTGRAY);
         draw_bevel_rect(desktop_menu_x, desktop_menu_y, menu_w, menu_h, true);
         
-        bool can_cut_copy = (desktop_menu_target_icon != -1);
-        bool can_paste = explorer_clipboard_has_content();
-        
-        // If target is a file (not folder), paste is disabled
         if (desktop_menu_target_icon != -1) {
+            bool can_paste = explorer_clipboard_has_content();
             DesktopIcon *icon = &desktop_icons[desktop_menu_target_icon];
             if (icon->type != 1) can_paste = false; // 1 is folder
+            
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5, "Cut", COLOR_BLACK);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h, "Copy", COLOR_BLACK);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_BLACK : COLOR_DKGRAY);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 3, "Delete", COLOR_RED);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 4, "Rename", COLOR_BLACK);
+        } else {
+            bool can_paste = explorer_clipboard_has_content();
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5, "New File", COLOR_BLACK);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h, "New Folder", COLOR_BLACK);
+            draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_BLACK : COLOR_DKGRAY);
         }
-        
-        int item_h = 25;
-        draw_string(desktop_menu_x + 5, desktop_menu_y + 5, "Cut", can_cut_copy ? COLOR_BLACK : COLOR_DKGRAY);
-        draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h, "Copy", can_cut_copy ? COLOR_BLACK : COLOR_DKGRAY);
-        draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_BLACK : COLOR_DKGRAY);
-        draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 3, "Delete", can_cut_copy ? COLOR_RED : COLOR_DKGRAY);
-        draw_string(desktop_menu_x + 5, desktop_menu_y + 5 + item_h * 4, "Rename", can_cut_copy ? COLOR_BLACK : COLOR_DKGRAY);
     }
 
-    // Desktop Rename Dialog
-    if (desktop_dialog_state == 8) {
+    // Desktop Dialogs
+    if (desktop_dialog_state != 0) {
         int dlg_w = 300; int dlg_h = 110;
         int dlg_x = (sw - dlg_w) / 2;
         int dlg_y = (sh - dlg_h) / 2;
@@ -834,13 +843,18 @@ void wm_paint(void) {
         draw_rect(dlg_x - 5, dlg_y - 5, dlg_w + 10, dlg_h + 10, COLOR_LTGRAY);
         draw_bevel_rect(dlg_x, dlg_y, dlg_w, dlg_h, true);
         
-        draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_BLACK);
+        const char *title = "Rename";
+        const char *btn_text = "Rename";
+        if (desktop_dialog_state == 1) { title = "Create New File"; btn_text = "Create"; }
+        else if (desktop_dialog_state == 2) { title = "Create New Folder"; btn_text = "Create"; }
+        
+        draw_string(dlg_x + 10, dlg_y + 10, title, COLOR_BLACK);
         draw_bevel_rect(dlg_x + 10, dlg_y + 35, 280, 20, false);
         draw_string(dlg_x + 15, dlg_y + 40, desktop_dialog_input, COLOR_BLACK);
         // Cursor
         draw_rect(dlg_x + 15 + desktop_dialog_cursor * 8, dlg_y + 39, 2, 12, COLOR_BLACK);
         
-        draw_button(dlg_x + 50, dlg_y + 65, 80, 25, "Rename", false);
+        draw_button(dlg_x + 50, dlg_y + 65, 80, 25, btn_text, false);
         draw_button(dlg_x + 170, dlg_y + 65, 80, 25, "Cancel", false);
     }
     
@@ -888,7 +902,7 @@ bool rect_contains(int x, int y, int w, int h, int px, int py) {
     return px >= x && px < x + w && py >= y && py < y + h;
 }
 
-static void wm_bring_to_front(Window *win) {
+void wm_bring_to_front(Window *win) {
     // Clear focus from all windows
     for (int i = 0; i < window_count; i++) {
         all_windows[i]->focused = false;
@@ -903,6 +917,12 @@ static void wm_bring_to_front(Window *win) {
     win->visible = true;
     win->focused = true;
     win->z_index = max_z + 1;
+}
+
+void wm_add_window(Window *win) {
+    if (window_count < 32) {
+        all_windows[window_count++] = win;
+    }
 }
 
 void wm_handle_click(int x, int y) {
@@ -924,7 +944,8 @@ void wm_handle_click(int x, int y) {
     // Handle Desktop Context Menu Click
     if (desktop_menu_visible) {
         int menu_w = 140;
-        int menu_h = 125;
+        int menu_h = (desktop_menu_target_icon != -1) ? 125 : 75;
+        
         if (rect_contains(desktop_menu_x, desktop_menu_y, menu_w, menu_h, x, y)) {
             int rel_y = y - desktop_menu_y;
             int item = rel_y / 25;
@@ -939,6 +960,14 @@ void wm_handle_click(int x, int y) {
                 char path[128] = "/Desktop/";
                 int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
                 explorer_clipboard_copy(path);
+            } else if (item == 0 && desktop_menu_target_icon == -1) { // New File
+                desktop_dialog_state = 1;
+                desktop_dialog_input[0] = 0;
+                desktop_dialog_cursor = 0;
+            } else if (item == 1 && desktop_menu_target_icon == -1) { // New Folder
+                desktop_dialog_state = 2;
+                desktop_dialog_input[0] = 0;
+                desktop_dialog_cursor = 0;
             } else if (item == 2) { // Paste
                 bool can_paste = explorer_clipboard_has_content();
                 if (desktop_menu_target_icon != -1) {
@@ -952,10 +981,10 @@ void wm_handle_click(int x, int y) {
                         char path[128] = "/Desktop/";
                         DesktopIcon *icon = &desktop_icons[desktop_menu_target_icon];
                         int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
-                        explorer_clipboard_paste(path);
+                        explorer_clipboard_paste(&win_explorer, path);
                     } else {
                         // Paste to desktop
-                        explorer_clipboard_paste("/Desktop");
+                        explorer_clipboard_paste(&win_explorer, "/Desktop");
                     }
                     refresh_desktop_icons();
                 }
@@ -984,15 +1013,35 @@ void wm_handle_click(int x, int y) {
     }
 
     // Handle Desktop Dialog Clicks
-    if (desktop_dialog_state == 8) {
+    if (desktop_dialog_state != 0) {
         int dlg_x = (sw - 300) / 2; int dlg_y = (sh - 110) / 2;
-        if (rect_contains(dlg_x + 50, dlg_y + 65, 80, 25, x, y)) { // Rename
-            char old_path[128] = "/Desktop/";
-            char new_path[128] = "/Desktop/";
-            int p=9; int n=0; while(desktop_icons[desktop_dialog_target].name[n]) old_path[p++] = desktop_icons[desktop_dialog_target].name[n++]; old_path[p]=0;
-            p=9; n=0; while(desktop_dialog_input[n]) new_path[p++] = desktop_dialog_input[n++]; new_path[p]=0;
-            
-            if (fat32_rename(old_path, new_path)) refresh_desktop_icons();
+        if (rect_contains(dlg_x + 50, dlg_y + 65, 80, 25, x, y)) { // Confirm
+            if (desktop_dialog_state == 8) { // Rename
+                char old_path[128] = "/Desktop/";
+                char new_path[128] = "/Desktop/";
+                int p=9; int n=0; while(desktop_icons[desktop_dialog_target].name[n]) old_path[p++] = desktop_icons[desktop_dialog_target].name[n++]; old_path[p]=0;
+                p=9; n=0; while(desktop_dialog_input[n]) new_path[p++] = desktop_dialog_input[n++]; new_path[p]=0;
+                
+                if (fat32_rename(old_path, new_path)) {
+                    refresh_desktop_icons();
+                    explorer_refresh_all();
+                }
+            } else if (desktop_dialog_state == 1 || desktop_dialog_state == 2) { // Create File/Folder
+                if (desktop_icon_count >= desktop_max_cols * desktop_max_rows_per_col) {
+                    wm_show_message("Error", "Desktop is full!");
+                } else if (desktop_dialog_input[0] != 0) {
+                    char path[128] = "/Desktop/";
+                    int p=9; int n=0; while(desktop_dialog_input[n]) path[p++] = desktop_dialog_input[n++]; path[p]=0;
+                    if (desktop_dialog_state == 1) {
+                        FAT32_FileHandle *fh = fat32_open(path, "w");
+                        if (fh) fat32_close(fh);
+                    } else {
+                        fat32_mkdir(path);
+                    }
+                    refresh_desktop_icons();
+                    explorer_refresh_all();
+                }
+            }
             desktop_dialog_state = 0;
             force_redraw = true;
             return;
@@ -1154,7 +1203,7 @@ void wm_handle_right_click(int x, int y) {
     static bool prev_right = false;
     bool left = buttons & 0x01;
     bool right = buttons & 0x02;
-    
+
     if (left && !prev_left) {
         // Mouse Down
         drag_start_x = mx;
@@ -1242,7 +1291,19 @@ void wm_handle_right_click(int x, int y) {
                 if (explorer_get_file_at(drag_start_x, drag_start_y, drag_file_path, &is_dir)) {
                     is_dragging_file = true;
                     drag_icon_type = is_dir ? 1 : 0;
-                    explorer_clear_click_state();
+                    drag_src_win = NULL;
+                    
+                    // Find which explorer window was clicked to clear its state
+                    for (int w = 0; w < window_count; w++) {
+                        Window *win = all_windows[w];
+                        if (win->visible && rect_contains(win->x, win->y, win->w, win->h, drag_start_x, drag_start_y)) {
+                            // This is a bit of a hack, but we check if it's an explorer window
+                            if (str_starts_with(win->title, "File Explorer")) {
+                                drag_src_win = win;
+                                explorer_clear_click_state(win);
+                            }
+                        }
+                    }
                 }
             }
             
@@ -1260,7 +1321,7 @@ void wm_handle_right_click(int x, int y) {
         if (start_menu_pending_app) {
             // Launch App
             if (str_starts_with(start_menu_pending_app, "Explorer")) {
-                explorer_reset(); wm_bring_to_front(&win_explorer);
+                explorer_open_directory("/");
             } else if (str_starts_with(start_menu_pending_app, "Notepad")) {
                 wm_bring_to_front(&win_notepad);
             } else if (str_starts_with(start_menu_pending_app, "Editor")) {
@@ -1308,9 +1369,9 @@ void wm_handle_right_click(int x, int y) {
                     } else if (str_ends_with(icon->name, "About.shortcut")) {
                         wm_bring_to_front(&win_about);
                     } else if (str_ends_with(icon->name, "Explorer.shortcut")) {
-                        explorer_reset(); wm_bring_to_front(&win_explorer);
+                        explorer_open_directory("/");
                     } else if (str_ends_with(icon->name, "Recycle Bin.shortcut")) {
-                        explorer_open_directory("/RecycleBin"); wm_bring_to_front(&win_explorer);
+                        explorer_open_directory("/RecycleBin");
                     } else if (str_ends_with(icon->name, "Paint.shortcut")) {
                         wm_bring_to_front(&win_paint);
                     }
@@ -1329,7 +1390,6 @@ void wm_handle_right_click(int x, int y) {
                                 buf[len] = 0;
                                 if (fat32_is_directory(buf)) {
                                     explorer_open_directory(buf);
-                                    wm_bring_to_front(&win_explorer);
                                 } else {
                                     editor_open_file(buf);
                                     wm_bring_to_front(&win_editor);
@@ -1343,7 +1403,6 @@ void wm_handle_right_click(int x, int y) {
                     char path[128] = "/Desktop/";
                     int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
                     explorer_open_directory(path);
-                    wm_bring_to_front(&win_explorer);
                 } else { // File
                     char path[128] = "/Desktop/";
                     int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
@@ -1366,25 +1425,31 @@ void wm_handle_right_click(int x, int y) {
         if (is_dragging_file) {
             // Drop logic
             
-            // Check drop target
-            if (win_explorer.visible && rect_contains(win_explorer.x, win_explorer.y, win_explorer.w, win_explorer.h, mx, my)) {
-                // Dropped on Explorer
-                // If source was desktop, we need to refresh desktop to remove the icon
-                bool from_desktop = str_starts_with(drag_file_path, "/Desktop/");
-                
-                if (drag_file_path[0] != ':') {
-                    char target_path[256];
-                    bool is_dir;
-                    // Check if dropped on a folder inside explorer
-                    if (explorer_get_file_at(mx, my, target_path, &is_dir) && is_dir) {
-                        explorer_import_file_to(drag_file_path, target_path);
-                    } else {
-                        // Dropped in current dir
-                        explorer_import_file(drag_file_path);
+            // Check drop target - iterate through all windows to find if dropped on an Explorer
+            Window *drop_win = NULL;
+            int topmost_z = -1;
+            for (int w = 0; w < window_count; w++) {
+                Window *win = all_windows[w];
+                if (win->visible && rect_contains(win->x, win->y, win->w, win->h, mx, my)) {
+                    if (win->z_index > topmost_z && str_starts_with(win->title, "File Explorer")) {
+                        drop_win = win;
+                        topmost_z = win->z_index;
                     }
-                    
                 }
-                if (from_desktop) {
+            }
+
+            if (drop_win) {
+                char target_path[256];
+                bool is_dir;
+                // Check if dropped on a folder inside this explorer
+                if (explorer_get_file_at(mx, my, target_path, &is_dir) && is_dir) {
+                    explorer_import_file_to(drop_win, drag_file_path, target_path);
+                } else {
+                    // Dropped in current dir of this explorer
+                    explorer_import_file(drop_win, drag_file_path);
+                }
+
+                if (str_starts_with(drag_file_path, "/Desktop/")) {
                     refresh_desktop_icons();
                 }
             } else {
@@ -1396,13 +1461,41 @@ void wm_handle_right_click(int x, int y) {
                     // If source was NOT desktop, move to desktop
                     // Check if path starts with /Desktop/
                     bool from_desktop = (drag_file_path[0]=='/' && drag_file_path[1]=='D' && drag_file_path[2]=='e');
-                    if (!from_desktop) {
+                    bool dropped_on_target = false;
+                    for (int i = 0; i < desktop_icon_count; i++) {
+                        if (from_desktop) {
+                            char path[128] = "/Desktop/";
+                            int p=9; int n=0; while(desktop_icons[i].name[n]) path[p++] = desktop_icons[i].name[n++]; path[p]=0;
+                            if (str_eq(path, drag_file_path) == 0) continue;
+                        }
+
+                        if (rect_contains(desktop_icons[i].x + 20, desktop_icons[i].y, 40, 40, mx, my)) {
+                            if (desktop_icons[i].type == 1) {
+                                char target_path[256] = "/Desktop/";
+                                int p=9; int n=0; while(desktop_icons[i].name[n]) target_path[p++] = desktop_icons[i].name[n++]; target_path[p]=0;
+                                explorer_import_file_to(&win_explorer, drag_file_path, target_path);
+                                refresh_desktop_icons();
+                                dropped_on_target = true;
+                                break;
+                            } else if (desktop_icons[i].type == 2 && str_starts_with(desktop_icons[i].name, "Recycle Bin")) {
+                                explorer_import_file_to(&win_explorer, drag_file_path, "/RecycleBin");
+                                refresh_desktop_icons();
+                                dropped_on_target = true;
+                                break;
+                            } else {
+                                dropped_on_target = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!dropped_on_target && !from_desktop) {
                         // Dragged from Explorer to Desktop
                         // Check limit first
                         if (desktop_icon_count >= desktop_max_cols * desktop_max_rows_per_col) {
                             wm_show_message("Error", "Desktop is full!");
                         } else {
-                            explorer_import_file_to(drag_file_path, "/Desktop");
+                            explorer_import_file_to(&win_explorer, drag_file_path, "/Desktop");
                             refresh_desktop_icons();
                         }
                         
@@ -1442,7 +1535,7 @@ void wm_handle_right_click(int x, int y) {
                                 refresh_desktop_icons(); // Re-apply layout
                             }
                         }
-                    } else {
+                    } else if (!dropped_on_target) {
                         // Moved within desktop
                         // Find which icon was dragged
                         int dragged_idx = -1;
@@ -1456,32 +1549,7 @@ void wm_handle_right_click(int x, int y) {
                         }
                         
                         if (dragged_idx != -1) {
-                            // Check for drop on folder (Priority over placement)
-                            bool dropped_on_folder = false;
-                            for (int i = 0; i < desktop_icon_count; i++) {
-                                if (i == dragged_idx) continue;
-                                if (desktop_icons[i].type == 1) { // Folder
-                                    // Check if mouse is over this folder icon
-                                    if (rect_contains(desktop_icons[i].x + 20, desktop_icons[i].y, 40, 40, mx, my)) {
-                                        char target_path[256] = "/Desktop/";
-                                        int p=9; int n=0; while(desktop_icons[i].name[n]) target_path[p++] = desktop_icons[i].name[n++]; target_path[p]=0;
-                                        explorer_import_file_to(drag_file_path, target_path);
-                                        refresh_desktop_icons();
-                                        dropped_on_folder = true;
-                                        break;
-                                    }
-                                } else if (desktop_icons[i].type == 2 && str_starts_with(desktop_icons[i].name, "Recycle Bin")) {
-                                     if (rect_contains(desktop_icons[i].x + 20, desktop_icons[i].y, 40, 40, mx, my)) {
-                                        // Move to Recycle Bin
-                                        explorer_import_file_to(drag_file_path, "/RecycleBin");
-                                        refresh_desktop_icons();
-                                        dropped_on_folder = true;
-                                        break;
-                                     }
-                                }
-                            }
-
-                            if (!dropped_on_folder && desktop_auto_align) {
+                            if (desktop_auto_align) {
                                 int cell_h = 80;
                                 int rel_y = my - 20;
                                 if (rel_y < 0) rel_y = 0;
@@ -1509,7 +1577,7 @@ void wm_handle_right_click(int x, int y) {
                                 }
                                 desktop_icons[target_idx] = temp;
                                 refresh_desktop_icons(); // Re-applies layout
-                            } else if (!dropped_on_folder) {
+                            } else {
                                 desktop_icons[dragged_idx].x = mx - 20;
                                 desktop_icons[dragged_idx].y = my - 20;
                                 if (desktop_snap_to_grid) {
@@ -1571,14 +1639,34 @@ static volatile int key_head = 0;
 static volatile int key_tail = 0;
 
 static void wm_dispatch_key(char c) {
-    if (desktop_dialog_state == 8) {
+    if (desktop_dialog_state != 0) {
         int len = 0; while(desktop_dialog_input[len]) len++;
         if (c == '\n') {
-            char old_path[128] = "/Desktop/";
-            char new_path[128] = "/Desktop/";
-            int p=9; int n=0; while(desktop_icons[desktop_dialog_target].name[n]) old_path[p++] = desktop_icons[desktop_dialog_target].name[n++]; old_path[p]=0;
-            p=9; n=0; while(desktop_dialog_input[n]) new_path[p++] = desktop_dialog_input[n++]; new_path[p]=0;
-            if (fat32_rename(old_path, new_path)) refresh_desktop_icons();
+            if (desktop_dialog_state == 8) { // Rename
+                char old_path[128] = "/Desktop/";
+                char new_path[128] = "/Desktop/";
+                int p=9; int n=0; while(desktop_icons[desktop_dialog_target].name[n]) old_path[p++] = desktop_icons[desktop_dialog_target].name[n++]; old_path[p]=0;
+                p=9; n=0; while(desktop_dialog_input[n]) new_path[p++] = desktop_dialog_input[n++]; new_path[p]=0;
+                if (fat32_rename(old_path, new_path)) {
+                    refresh_desktop_icons();
+                    explorer_refresh_all();
+                }
+            } else if (desktop_dialog_state == 1 || desktop_dialog_state == 2) { // Create File/Folder
+                if (desktop_icon_count >= desktop_max_cols * desktop_max_rows_per_col) {
+                    wm_show_message("Error", "Desktop is full!");
+                } else if (desktop_dialog_input[0] != 0) {
+                    char path[128] = "/Desktop/";
+                    int p=9; int n=0; while(desktop_dialog_input[n]) path[p++] = desktop_dialog_input[n++]; path[p]=0;
+                    if (desktop_dialog_state == 1) {
+                        FAT32_FileHandle *fh = fat32_open(path, "w");
+                        if (fh) fat32_close(fh);
+                    } else {
+                        fat32_mkdir(path);
+                    }
+                    refresh_desktop_icons();
+                    explorer_refresh_all();
+                }
+            }
             desktop_dialog_state = 0;
         } else if (c == 27) {
             desktop_dialog_state = 0;
@@ -1601,13 +1689,12 @@ static void wm_dispatch_key(char c) {
     }
 
     Window *target = NULL;
-    if (win_notepad.focused && win_notepad.visible) target = &win_notepad;
-    else if (win_cmd.focused && win_cmd.visible) target = &win_cmd;
-    else if (win_calculator.focused && win_calculator.visible) target = &win_calculator;
-    else if (win_explorer.focused && win_explorer.visible) target = &win_explorer;
-    else if (win_editor.focused && win_editor.visible) target = &win_editor;
-    else if (win_markdown.focused && win_markdown.visible) target = &win_markdown;
-    else if (win_control_panel.focused && win_control_panel.visible) target = &win_control_panel;
+    for (int i = 0; i < window_count; i++) {
+        if (all_windows[i]->focused && all_windows[i]->visible) {
+            target = all_windows[i];
+            break;
+        }
+    }
     
     if (!target) return;
     
@@ -1717,6 +1804,7 @@ void wm_timer_tick(void) {
         desktop_refresh_timer++;
         if (desktop_refresh_timer >= 60) {
             refresh_desktop_icons();
+            explorer_refresh_all();
             desktop_refresh_timer = 0;
             force_redraw = true;
         }

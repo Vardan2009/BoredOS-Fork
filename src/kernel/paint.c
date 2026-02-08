@@ -21,9 +21,6 @@ static void paint_strcpy(char *dest, const char *src) {
 }
 
 static void paint_paint(Window *win) {
-    // Background
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_LTGRAY);
-    
     // Toolbar area
     draw_rect(win->x + 10, win->y + 30, 40, win->h - 40, COLOR_GRAY);
     draw_bevel_rect(win->x + 10, win->y + 30, 40, win->h - 40, true);

@@ -265,7 +265,7 @@ static void editor_paint(Window *win) {
     }
     
     // Fill editor background
-    draw_rect(offset_x, offset_y + 30, content_width, content_height - 55, COLOR_WHITE);
+    draw_rect(win->x + 4, win->y + 54, win->w - 8, win->h - 58, COLOR_WHITE);
     
     // Calculate available width for text (accounting for line numbers)
     int text_start_x = offset_x + 40;

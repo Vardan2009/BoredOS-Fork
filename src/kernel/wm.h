@@ -33,6 +33,7 @@ struct Window {
     int cursor_pos;
     bool focused;
     int z_index;  // Layering depth (higher = on top)
+    void *data;   // Per-window private data
     
     // Callbacks
     void (*paint)(Window *win);
@@ -47,6 +48,8 @@ void wm_handle_key(char c);
 void wm_handle_click(int x, int y);
 void wm_handle_right_click(int x, int y);
 void wm_process_input(void);
+void wm_add_window(Window *win);
+void wm_bring_to_front(Window *win);
 
 // Redraw system
 void wm_mark_dirty(int x, int y, int w, int h);

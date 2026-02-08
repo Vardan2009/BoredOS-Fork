@@ -1,4 +1,4 @@
-# Brew OS 1.42 Beta
+# Brew OS 1.43 Beta
 BrewOS is now in a Beta stage as i have brought over all apps from brewkernel and have made the DE a lot more usable and stable.
 
 ## Brewkernel is now BrewOS!

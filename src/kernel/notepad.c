@@ -24,6 +24,9 @@ static void notepad_ensure_cursor_visible(Window *win) {
 }
 
 static void notepad_paint(Window *win) {
+    // Explicitly draw white background for text
+    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_WHITE);
+
     int visual_line = 0; 
     int current_x = win->x + 8;
     int current_y = win->y + 30;

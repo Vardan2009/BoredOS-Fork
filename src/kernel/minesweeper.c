@@ -146,7 +146,7 @@ static void minesweeper_right_click(Window *win, int x, int y) {
         int cell_y = (y - grid_start_y) / CELL_SIZE;
         
         flag_cell(cell_x, cell_y);
-        wm_paint();
+        wm_mark_dirty(win->x, win->y, win->w, win->h);
     }
 }
 
@@ -211,7 +211,7 @@ static void minesweeper_click(Window *win, int x, int y) {
     if (x >= grid_start_x && x < grid_start_x + 90 &&
         y >= btn_y && y < btn_y + 24) {
         init_game();
-        wm_paint();
+        wm_mark_dirty(win->x, win->y, win->w, win->h);
         return;
     }
     
@@ -226,7 +226,7 @@ static void minesweeper_click(Window *win, int x, int y) {
         
         reveal_cell(cell_x, cell_y);
         
-        wm_paint();
+        wm_mark_dirty(win->x, win->y, win->w, win->h);
     }
 }
 

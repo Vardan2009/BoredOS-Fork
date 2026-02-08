@@ -247,7 +247,7 @@ static void calculator_click(Window *win, int x, int y) {
             }
             
             update_display(win);
-            wm_paint(); // Request repaint
+            wm_mark_dirty(win->x, win->y, win->w, win->h);
             return;
         }
     }

@@ -14,9 +14,6 @@ Window win_about;
 #define COLOR_CYAN_LOGO     0xFF368DF7
 
 static void about_paint(Window *win) {
-    // Background
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_LTGRAY);
-    
     int offset_x = win->x + 15;
     int offset_y = win->y + 35;
     
@@ -35,7 +32,7 @@ static void about_paint(Window *win) {
     
     // Version info
     draw_string(offset_x, offset_y + 105, "BrewOS", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 120, "BrewOS Version 1.42", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 120, "BrewOS Version 1.43", COLOR_BLACK);
     draw_string(offset_x, offset_y + 135, "Kernel Version 2.3.1", COLOR_BLACK);
     
     // Copyright
