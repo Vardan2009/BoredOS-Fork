@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 // Minimal 8x8 font for ASCII 32-127
-// Derived from standard VGA font
 static const uint8_t font8x8_basic[128][8] = {
     // 0-31 Control chars (empty)
     {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0},
