@@ -1,9 +1,9 @@
 # Brew OS 1.45 Beta
 BrewOS is now in a Beta stage as i have brought over all apps from brewkernel and have made the DE a lot more usable and stable.
 
-## Brewkernel is now BrewOS!
-Brewkernel will from now on be deprecated as it's core became too messy. I have built a less bloated kernel and wrote a DE above it, which is why it is now an OS instead of a kernel (in my opinion).
 
+![Screenshot 2026-02-10 at 18 59 10](https://github.com/user-attachments/assets/d8602e1a-dc76-4997-a91f-999b23ba3fc3)
+*this screenshot might be outdated*
 
 <img src="asciiart.png" width="200" /> </br>
 Brew Kernel is a simple x86_64 hobbyist operating system. 
@@ -125,6 +125,11 @@ qemu-system-x86_64 -m 2G -serial stdio -cdrom brewos.iso -boot d
 
 ###
 
+
+## This project was previously labeled as "BrewKernel"
+Brewkernel was a text only very simple (and messy) project i started 3 years ago. It was my first work in OSDev and i absolutely loved it. It sadly just got too messy and i myself couldn't understand my own code anymore. About a year ago i started work on BrewOS, and pushed a *"working"* version of it a few days ago as of writing this *(Feb. 10 2026)* 
+Brewkernel has already been deprecated and will not be accepting any pull requests or fix any issues as it is now a public archive.
+Thanks to everyone who helped me with Brewkernel, even if it were just ideas, and intend to keep working on this for the forseeable future!
 
 ## License
 
