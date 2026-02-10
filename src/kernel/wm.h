@@ -85,4 +85,7 @@ extern bool desktop_auto_align;
 extern int desktop_max_rows_per_col;
 extern int desktop_max_cols;
 
+// Mouse Settings
+extern int mouse_speed;
+
 #endif

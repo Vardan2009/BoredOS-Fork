@@ -91,6 +91,11 @@ bool desktop_auto_align = true;
 int desktop_max_rows_per_col = 13;
 int desktop_max_cols = 23;
 
+// Mouse Settings
+int mouse_speed = 10; // Default 1.0x (range 1-50)
+static int mouse_accum_x = 0;
+static int mouse_accum_y = 0;
+
 // Helper to check if string ends with suffix
 static bool str_ends_with(const char *str, const char *suffix) {
     int str_len = 0; while(str[str_len]) str_len++;
@@ -366,36 +371,6 @@ void draw_button(int x, int y, int w, int h, const char *text, bool pressed) {
     int ty = y + (h - 8) / 2;
     if (pressed) { tx++; ty++; }
     draw_string(tx, ty, text, COLOR_BLACK);
-}
-
-void draw_coffee_cup(int x, int y, int size) {
-    int cup_w = size;
-    int cup_h = size - 2;
-    
-    draw_rect(x + 1, y + 2, cup_w - 2, cup_h - 3, COLOR_LTGRAY);
-    
-    // Cup outline
-    draw_rect(x + 1, y + 2, cup_w - 2, 1, COLOR_BLACK);  // Top
-    draw_rect(x + 1, y + 2, 1, cup_h - 3, COLOR_BLACK);  // Left
-    draw_rect(x + cup_w - 2, y + 2, 1, cup_h - 3, COLOR_BLACK);  // Right
-    draw_rect(x + 1, y + cup_h - 1, cup_w - 2, 1, COLOR_BLACK);  // Bottom
-    
-    draw_rect(x + 1, y + cup_h - 1, 1, 1, COLOR_LTGRAY);
-    draw_rect(x + cup_w - 2, y + cup_h - 1, 1, 1, COLOR_LTGRAY);
-    
-    draw_rect(x + cup_w, y + 3, 2, 8, COLOR_BLACK);
-    draw_rect(x + cup_w - 2, y + 3, 2, 1, COLOR_BLACK);
-    draw_rect(x + cup_w - 2, y + 10, 2, 1, COLOR_BLACK);
-    
-
-    int stripe_height = (cup_h - 5) / 6;
-    int coffee_y = y + 4;
-    draw_rect(x + 2, coffee_y, cup_w - 4, stripe_height, COLOR_APPLE_BLUE);
-    draw_rect(x + 2, coffee_y + stripe_height, cup_w - 4, stripe_height, COLOR_APPLE_GREEN);
-    draw_rect(x + 2, coffee_y + stripe_height * 2, cup_w - 4, stripe_height, COLOR_APPLE_YELLOW);
-    draw_rect(x + 2, coffee_y + stripe_height * 3, cup_w - 4, stripe_height, COLOR_APPLE_RED);
-    draw_rect(x + 2, coffee_y + stripe_height * 4, cup_w - 4, stripe_height, COLOR_APPLE_VIOLET);
-    draw_rect(x + 2, coffee_y + stripe_height * 5, cup_w - 4, stripe_height, COLOR_APPLE_BLUE);
 }
 
 void draw_icon(int x, int y, const char *label) {
@@ -773,7 +748,9 @@ void wm_paint(void) {
     for (int i = 0; i < window_count; i++) {
         Window *win = sorted_windows[i];
         if (!win->visible) continue;
-        if (dirty.active) {
+
+
+        if (dirty.active && !win->focused) {
             if (win->x + win->w <= dirty.x || win->x >= dirty.x + dirty.w ||
                 win->y + win->h <= dirty.y || win->y >= dirty.y + dirty.h) {
                 continue;
@@ -788,10 +765,10 @@ void wm_paint(void) {
     
     // 5. Start Button
     draw_bevel_rect(2, sh - 26, 90, 24, start_menu_open);
-    // Draw BrewOS logo
-    draw_coffee_cup(5, sh - 24, 20);
-    // Draw BrewOS text
-    draw_string(35, sh - 18, "BrewOS", COLOR_BLACK);
+    // Draw Boredos logo
+    draw_boredos_logo(6, sh - 22, 1);
+    // Draw BoredOS text
+    draw_string(35, sh - 18, "BoredOS", COLOR_BLACK);
     
     // Clock
     draw_clock(sw - 80, sh - 20);
@@ -811,7 +788,7 @@ void wm_paint(void) {
         draw_string(8, menu_y + 108, "Minesweeper", COLOR_BLACK);
         draw_string(8, menu_y + 128, "Control Panel", COLOR_BLACK);
         draw_string(8, menu_y + 148, "Paint", COLOR_BLACK);
-        draw_string(8, menu_y + 168, "About BrewOS", COLOR_BLACK);
+        draw_string(8, menu_y + 168, "About BoredOS", COLOR_BLACK);
         
         // Separator line
         draw_rect(5, menu_y + 185, 110, 1, COLOR_BLACK);
@@ -1220,8 +1197,17 @@ void wm_handle_right_click(int x, int y) {
     prev_mx = mx;
     prev_my = my;
     
-    mx += dx;
-    my += dy;
+    mouse_accum_x += dx * mouse_speed;
+    mouse_accum_y += dy * mouse_speed;
+    
+    int move_x = mouse_accum_x / 10;
+    int move_y = mouse_accum_y / 10;
+    
+    mouse_accum_x -= move_x * 10;
+    mouse_accum_y -= move_y * 10;
+    
+    mx += move_x;
+    my += move_y;
     
     if (mx < 0) mx = 0;
     if (my < 0) my = 0;

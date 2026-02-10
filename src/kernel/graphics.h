@@ -20,6 +20,9 @@ void draw_desktop_background(void);
 void graphics_set_bg_color(uint32_t color);
 void graphics_set_bg_pattern(const uint32_t *pattern);  // 128x128 pattern
 
+
+void draw_boredos_logo(int x, int y, int scale);
+
 // Get screen dimensions
 int get_screen_width(void);
 int get_screen_height(void);

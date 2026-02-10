@@ -5,9 +5,9 @@
 #include <stdbool.h>
 
 // Simple Stack-Based VM
-// Header: "BREWEXE" (7 bytes) + Version (1 byte)
+// Header: "BORDEXE" (7 bytes) + Version (1 byte)
 
-#define VM_MAGIC "BREWEXE"
+#define VM_MAGIC "BORDEXE"
 #define VM_STACK_SIZE 256
 #define VM_MEMORY_SIZE (64 * 1024) // 64KB
 

@@ -146,6 +146,7 @@ static void paint_click(Window *win, int x, int y) {
     if (x >= 12 && x < 48) {
         if (y >= win->h - 65 && y < win->h - 45) {
             paint_reset();
+            wm_mark_dirty(win->x, win->y, win->w, win->h);
             return;
         }
         if (y >= win->h - 40 && y < win->h - 20) {
@@ -161,11 +162,21 @@ static void paint_click(Window *win, int x, int y) {
             if (y >= cy && y < cy + 20) {
                 uint32_t colors[] = {COLOR_BLACK, COLOR_RED, COLOR_APPLE_GREEN, COLOR_APPLE_BLUE, COLOR_APPLE_YELLOW, COLOR_WHITE};
                 current_color = colors[i];
+                wm_mark_dirty(win->x, win->y, win->w, win->h);
                 return;
             }
         }
     }
     paint_handle_mouse(x, y);
+}
+
+static void paint_mouse_move(Window *win, int x, int y, uint8_t buttons) {
+    if (buttons & 0x01) { // Left button down
+        paint_handle_mouse(x, y);
+        wm_mark_dirty(win->x, win->y, win->w, win->h);
+    } else {
+        paint_reset_last_pos();
+    }
 }
 
 void paint_init(void) {

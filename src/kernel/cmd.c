@@ -380,14 +380,12 @@ static const CommandEntry commands[] = {
     {"date", cli_cmd_date},
     {"CLEAR", cli_cmd_clear},
     {"clear", cli_cmd_clear},
-    {"BREWVER", cli_cmd_brewver},
-    {"brewver", cli_cmd_brewver},
+    {"BOREDVER", cli_cmd_boredver},
+    {"boredver", cli_cmd_boredver},
     {"MATH", cli_cmd_math},
     {"math", cli_cmd_math},
     {"MAN", cli_cmd_man},
     {"man", cli_cmd_man},
-    {"LICENSE", cli_cmd_license},
-    {"license", cli_cmd_license},
     {"TXTEDIT", cli_cmd_txtedit},
     {"txtedit", cli_cmd_txtedit},
     {"UPTIME", cli_cmd_uptime},
@@ -924,7 +922,7 @@ static void cmd_key(Window *target, char c) {
 void cmd_reset(void) {
     // Reset terminal to fresh state
     cmd_screen_clear();
-    cmd_write("BrewOS Command Prompt\n");
+    cmd_write("BoredOS Command Prompt\n");
     if (msg_count > 0) {
         cmd_write("You have ");
         cmd_write_int(msg_count);
@@ -957,14 +955,14 @@ static void create_test_files(void) {
     fh = fat32_open("README.md", "w");
     if (fh) {
         const char *content = 
-            "# Brew OS 1.44 Beta\n\n"
-            "BrewOS is now in a Beta stage as i have brought over all apps from brewkernel and have made the DE a lot more usable and stable.\n"
-            "## Brewkernel is now BrewOS!\n"
-            "Brewkernel will from now on be deprecated as it's core became too messy. I have built a less bloated kernel and wrote a DE above it, which is why it is now an OS instead of a kernel (in my opinion).\n\n"
-            "Brew Kernel is a simple x86_64 hobbyist operating system.\n"
+            "# Bored OS 1.50\n\n"
+            "BoredOS is now in a Beta stage as i have brought over all apps from boredkernel and have made the DE a lot more usable and stable.\n"
+            "## Boredkernel is now BoredOS!\n"
+            "Boredkernel will from now on be deprecated as it's core became too messy. I have built a less bloated kernel and wrote a DE above it, which is why it is now an OS instead of a kernel (in my opinion).\n\n"
+            "Bored Kernel is a simple x86_64 hobbyist operating system.\n"
             "It features a DE (and WM), a FAT32 filesystem, customizable UI and much much more!\n\n"
             "## Features\n"
-            "- Brew WM\n"
+            "- Bored WM\n"
             "- Fat 32 FS\n"
             "- 64-bit long mode support\n"
             "- Multiboot2 compliant\n"
@@ -973,7 +971,7 @@ static void create_test_files(void) {
             "- Ability to run on actual x86_64 hardware\n"
             "- CLI\n\n"
             "## Prerequisites\n\n"
-            "To build BrewOS, you'll need the following tools installed:\n\n"
+            "To build BoredOS, you'll need the following tools installed:\n\n"
             "- **x86_64 ELF Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`\n"
             "- **NASM**: Netwide Assembler for compiling assembly code\n"
             "- **xorriso**: For creating bootable ISO images\n"
@@ -990,11 +988,11 @@ static void create_test_files(void) {
             "This will:\n"
             "1. Compile all kernel C sources and assembly files\n"
             "2. Link the kernel ELF binary\n"
-            "3. Generate a bootable ISO image (`brewos.iso`)\n\n"
+            "3. Generate a bootable ISO image (`boredos.iso`)\n\n"
             "The build output is organized as follows:\n"
             "- Compiled object files: `build/`\n"
             "- ISO root filesystem: `iso_root/`\n"
-            "- Final ISO image: `brewos.iso`\n\n"
+            "- Final ISO image: `boredos.iso`\n\n"
             "## Running\n\n"
             "### QEMU Emulation\n\n"
             "Run the kernel in QEMU:\n\n"
@@ -1003,11 +1001,11 @@ static void create_test_files(void) {
             "```\n\n"
             "Or manually:\n"
             "```sh\n"
-            "qemu-system-x86_64 -m 2G -serial stdio -cdrom brewos.iso -boot d\n"
+            "qemu-system-x86_64 -m 2G -serial stdio -cdrom boredos.iso -boot d\n"
             "```\n\n"
             "### Running on Real Hardware\n\n"
             "*Warning: This is at YOUR OWN RISK. This software comes with ZERO warranty and may break your system.*\n\n"
-            "1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `brewos.iso` to a USB drive\n\n"
+            "1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `boredos.iso` to a USB drive\n\n"
             "2. **Prepare the system**:\n"
             "   - Enable legacy (BIOS) boot in your system BIOS/UEFI settings\n"
             "   - Disable Secure Boot if needed\n\n"
@@ -1033,7 +1031,7 @@ static void create_test_files(void) {
             "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\n"
             "NOTICE\n"
             "------\n\n"
-            "This product includes software developed by Chris (\"boreddevnl\") as part of the BrewKernel project.\n\n"
+            "This product includes software developed by Chris (\"boreddevnl\") as part of the BoredOS project.\n\n"
             "Copyright (C) 2024–2026 Chris / boreddevnl (previously boreddevhq)\n\n"
             "All source files in this repository contain copyright and license\n"
             "headers that must be preserved in redistributions and derivative works.\n\n"

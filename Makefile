@@ -1,4 +1,4 @@
-# BrewOS Makefile
+# BoredOS Makefile
 # Target Architecture: x86_64
 # Host: macOS
 
@@ -11,8 +11,8 @@ SRC_DIR = src/kernel
 BUILD_DIR = build
 ISO_DIR = iso_root
 
-KERNEL_ELF = $(BUILD_DIR)/brewos.elf
-ISO_IMAGE = brewos.iso
+KERNEL_ELF = $(BUILD_DIR)/boredos.elf
+ISO_IMAGE = boredos.iso
 
 C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
 CLI_APP_SOURCES = $(wildcard $(SRC_DIR)/cli_apps/*.c)

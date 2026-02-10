@@ -1,18 +1,18 @@
-# Brew OS 1.45 Beta
-BrewOS is now in a Beta stage as i have brought over all apps from brewkernel and have made the DE a lot more usable and stable.
+# BoredOS 1.50 Beta
+BoredOS is now in a Beta stage as i have brought over all apps from brewkernel and have made the DE a lot more usable and stable.
 
-<img src="asciiart.png" width="200" /> </br>
-Brew Kernel is a simple x86_64 hobbyist operating system. 
+<img src="bored.svg" width="200" /> </br>
+BoredOS is a simple x86_64 hobbyist operating system. 
 It features a DE (and WM), a FAT32 filesystem, customizable UI and much much more!
 
-![Screenshot 2026-02-10 at 18 59 10](https://github.com/user-attachments/assets/d8602e1a-dc76-4997-a91f-999b23ba3fc3)
+![Screenshot](screenshot.jpg)
 *this screenshot might be outdated*
 
 ## Features
 - Drag and drop mouse centered UI
 - Customizable UI
 - Basic Networking Stack
-- Brew WM
+- Bored WM
 - Fat 32 FS
 - 64-bit long mode support
 - Multiboot2 compliant
@@ -29,7 +29,7 @@ It features a DE (and WM), a FAT32 filesystem, customizable UI and much much mor
 
 ## Prerequisites
 
-To build BrewOS, you'll need the following tools installed:
+To build BoredOS, you'll need the following tools installed:
 
 - **x86_64 ELF Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`
 - **NASM**: Netwide Assembler for compiling assembly code
@@ -52,12 +52,12 @@ make
 This will:
 1. Compile all kernel C sources and assembly files
 2. Link the kernel ELF binary
-3. Generate a bootable ISO image (`brewos.iso`)
+3. Generate a bootable ISO image (`boredos.iso`)
 
 The build output is organized as follows:
 - Compiled object files: `build/`
 - ISO root filesystem: `iso_root/`
-- Final ISO image: `brewos.iso`
+- Final ISO image: `boredos.iso`
 
 ## Running
 
@@ -71,14 +71,14 @@ make run
 
 Or manually:
 ```sh
-qemu-system-x86_64 -m 2G -serial stdio -cdrom brewos.iso -boot d
+qemu-system-x86_64 -m 2G -serial stdio -cdrom boredos.iso -boot d
 ```
 
 ### Running on Real Hardware
 
 *Warning: This is at YOUR OWN RISK. This software comes with ZERO warranty and may break your system.*
 
-1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `brewos.iso` to a USB drive
+1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `boredos.iso` to a USB drive
 
 2. **Prepare the system**:
    - Enable legacy (BIOS) boot in your system BIOS/UEFI settings
@@ -130,7 +130,7 @@ qemu-system-x86_64 -m 2G -serial stdio -cdrom brewos.iso -boot d
 
 
 ## This project was previously labeled as "BrewKernel"
-Brewkernel was a text only very simple (and messy) project i started 3 years ago. It was my first work in OSDev and i absolutely loved it. It sadly just got too messy and i myself couldn't understand my own code anymore. About a year ago i started work on BrewOS, and pushed a *"working"* version of it a few days ago as of writing this *(Feb. 10 2026)* 
+Brewkernel was a text only very simple (and messy) project i started 3 years ago. It was my first work in OSDev and i absolutely loved it. It sadly just got too messy and i myself couldn't understand my own code anymore. About a year ago i started work on BoredOS, and pushed a *"working"* version of it a few days ago as of writing this *(Feb. 10 2026)* 
 Brewkernel has already been deprecated and will not be accepting any pull requests or fix any issues as it is now a public archive.
 Thanks to everyone who helped me with Brewkernel, even if it were just ideas, and intend to keep working on this for the forseeable future!
 
@@ -143,7 +143,7 @@ This program is free software: you can redistribute it and/or modify it under th
 NOTICE
 ------
 
-This product includes software developed by Chris ("boreddevnl") as part of the BrewKernel project.
+This product includes software developed by Chris ("boreddevnl") as part of the BoredOS (Previously Brewkernel/BrewOS) project.
 
 Copyright (C) 2024–2026 Chris / boreddevnl (previously boreddevhq)
 

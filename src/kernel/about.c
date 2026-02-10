@@ -5,35 +5,17 @@
 
 Window win_about;
 
-// Color definitions
-#define COLOR_BLUE_LOGO     0xFF1E8AF5
-#define COLOR_GREEN_LOGO    0xFF6DD651
-#define COLOR_YELLOW_LOGO   0xFFF5BE34
-#define COLOR_RED_LOGO      0xFFF05456
-#define COLOR_PURPLE_LOGO   0xFFA65DC2
-#define COLOR_CYAN_LOGO     0xFF368DF7
-
 static void about_paint(Window *win) {
     int offset_x = win->x + 15;
     int offset_y = win->y + 35;
     
-    // Draw brewkernel ASCII logo
-    draw_string(offset_x, offset_y, "( (", COLOR_BLUE_LOGO);
-    
-    draw_string(offset_x, offset_y + 15, "    ) )", COLOR_GREEN_LOGO);
-    
-    draw_string(offset_x, offset_y + 30, "  ........", COLOR_YELLOW_LOGO);
-    
-    draw_string(offset_x, offset_y + 45, "  |      |]", COLOR_RED_LOGO);
-    
-    draw_string(offset_x, offset_y + 60, "  \\      /", COLOR_PURPLE_LOGO);
-    
-    draw_string(offset_x, offset_y + 75, "   `----'", COLOR_CYAN_LOGO);
+
+    draw_boredos_logo(win->x + 60, offset_y, 4);
     
     // Version info
-    draw_string(offset_x, offset_y + 105, "BrewOS", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 120, "BrewOS Version 1.45", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 135, "Kernel Version 2.3.1", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 105, "BoredOS", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 120, "BoredOS Version 1.50", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 135, "Kernel Version 2.4.0", COLOR_BLACK);
     
     // Copyright
     draw_string(offset_x, offset_y + 150, "(C) 2026 boreddevnl.", COLOR_BLACK);
@@ -48,7 +30,7 @@ static void about_click(Window *win, int x, int y) {
 }
 
 void about_init(void) {
-    win_about.title = "About BrewOS";
+    win_about.title = "About BoredOS";
     win_about.x = 250;
     win_about.y = 180;
     win_about.w = 185;

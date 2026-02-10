@@ -6,7 +6,7 @@ void cli_cmd_help(char *args) {
     cli_write("  HELP     - Display this help message\n");
     cli_write("  DATE     - Display current date and time\n");
     cli_write("  CLEAR    - Clear the screen\n");
-    cli_write("  BREWVER  - Gives version info\n");
+    cli_write("  BOREDVER  - Gives version info\n");
     cli_write("  MATH     - math <op> <a> <b> (e.g. math + 1 2)\n");
     cli_write("  MAN      - Show user manual (interactive)\n");
     cli_write("  LICENSE  - Show license (interactive)\n");
@@ -16,4 +16,5 @@ void cli_cmd_help(char *args) {
     cli_write("  REBOOT   - Reboot system\n");
     cli_write("  SHUTDOWN - Shutdown system\n");
     cli_write("  MEMINFO  - Gives memory info\n");
+    cli_write("  CC       - C compiler\n");
 }

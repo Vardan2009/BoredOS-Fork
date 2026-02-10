@@ -1,5 +1,4 @@
-; brew-os/src/kernel/boot.asm
-; 64-bit Entry Point for BrewOS
+; 64-bit Entry Point for BoredOS
 
 section .text
 global _start

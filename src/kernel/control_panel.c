@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "wm.h"
 #include "network.h"
+#include "cli_apps/cli_utils.h"
 
 Window win_control_panel;
 
@@ -12,12 +13,14 @@ Window win_control_panel;
 #define COLOR_BLUE_BG   0xFF000080
 #define COLOR_PURPLE    0xFF800080
 #define COLOR_GREY      0xFF454545
+#define MOUSE_BEIGE     0xFFD6D2C4
 
 // Control panel state
 #define VIEW_MAIN 0
 #define VIEW_WALLPAPER 1
 #define VIEW_NETWORK 2
 #define VIEW_DESKTOP 3
+#define VIEW_MOUSE 4
 
 static int current_view = VIEW_MAIN;
 static char rgb_r[4] = "";
@@ -208,6 +211,22 @@ static void control_panel_paint_main(Window *win) {
     draw_rect(offset_x + 5, desk_offset_y + 6, 24, 1, COLOR_BLACK);
     draw_rect(offset_x + 5, desk_offset_y + 6, 1, 14, COLOR_BLACK);
     draw_string(offset_x + 40, desk_offset_y + 8, "Desktop", 0xFF000000);
+
+    // Draw Mouse Icon
+    int mouse_offset_y = desk_offset_y + 35;
+    // Mouse body
+    draw_rect(offset_x + 17, mouse_offset_y, 1, 2, COLOR_BLACK);
+    draw_rect(offset_x + 16, mouse_offset_y - 2, 1, 2, COLOR_BLACK);
+    draw_rect(offset_x + 10, mouse_offset_y + 2, 15, 20, MOUSE_BEIGE);
+    draw_rect(offset_x + 10, mouse_offset_y + 2, 15, 1, COLOR_BLACK);
+    draw_rect(offset_x + 10, mouse_offset_y + 2, 1, 20, COLOR_BLACK);
+    draw_rect(offset_x + 24, mouse_offset_y + 2, 1, 20, COLOR_BLACK);
+    draw_rect(offset_x + 10, mouse_offset_y + 21, 15, 1, COLOR_BLACK);
+    // Buttons separator
+    draw_rect(offset_x + 10, mouse_offset_y + 8, 15, 1, COLOR_BLACK);
+    draw_rect(offset_x + 17, mouse_offset_y + 2, 1, 6, COLOR_BLACK);
+    
+    draw_string(offset_x + 40, mouse_offset_y + 8, "Mouse", 0xFF000000);
 }
 
 static void control_panel_paint_wallpaper(Window *win) {
@@ -468,6 +487,30 @@ static void control_panel_paint_desktop(Window *win) {
     draw_button(offset_x + 180, section_y, 20, 20, "+", false);
 }
 
+static void control_panel_paint_mouse(Window *win) {
+    int offset_x = win->x + 8;
+    int offset_y = win->y + 30;
+    
+    // Back button
+    draw_string(offset_x, offset_y, "< Back", 0xFF000080);
+    draw_string(offset_x, offset_y + 25, "Mouse Settings:", 0xFF000000);
+    
+    int section_y = offset_y + 60;
+    draw_string(offset_x, section_y, "Speed:", COLOR_BLACK);
+    
+    // Slider track
+    draw_rect(offset_x + 60, section_y + 8, 200, 2, COLOR_DKGRAY);
+    
+    // Slider knob (range 1-50, default 10)
+    int knob_x = offset_x + 60 + (mouse_speed - 1) * 190 / 49;
+    draw_button(knob_x, section_y, 10, 18, "", false);
+    
+    draw_string(offset_x + 270, section_y + 4, "x", COLOR_BLACK);
+    char speed_str[4];
+    cli_itoa(mouse_speed, speed_str);
+    draw_string(offset_x + 280, section_y + 4, speed_str, COLOR_BLACK);
+}
+
 static void control_panel_paint(Window *win) {
     if (current_view == VIEW_MAIN) {
         control_panel_paint_main(win);
@@ -477,6 +520,8 @@ static void control_panel_paint(Window *win) {
         control_panel_paint_network(win);
     } else if (current_view == VIEW_DESKTOP) {
         control_panel_paint_desktop(win);
+    } else if (current_view == VIEW_MOUSE) {
+        control_panel_paint_mouse(win);
     }
 }
 
@@ -507,6 +552,13 @@ static void control_panel_handle_click(Window *win, int x, int y) {
         if (x >= offset_x + 5 && x < offset_x + 120 &&
             y >= desk_offset_y && y < desk_offset_y + 25) {
             current_view = VIEW_DESKTOP;
+        }
+
+        // Check mouse button
+        int mouse_offset_y = desk_offset_y + 35;
+        if (x >= offset_x + 5 && x < offset_x + 120 &&
+            y >= mouse_offset_y && y < mouse_offset_y + 25) {
+            current_view = VIEW_MOUSE;
         }
     } else if (current_view == VIEW_WALLPAPER) {
         int offset_x = 8;
@@ -861,6 +913,25 @@ static void control_panel_handle_click(Window *win, int x, int y) {
         if (x >= offset_x + 180 && x < offset_x + 200 && y >= section_y && y < section_y + 20) {
             desktop_max_cols++;
             wm_refresh_desktop();
+        }
+    } else if (current_view == VIEW_MOUSE) {
+        int offset_x = 8;
+        int offset_y = 30;
+        
+        // Back button
+        if (x >= offset_x && x < offset_x + 40 && y >= offset_y && y < offset_y + 15) {
+            current_view = VIEW_MAIN;
+            return;
+        }
+        
+        int section_y = offset_y + 60;
+        // Slider interaction
+        if (x >= offset_x + 60 && x <= offset_x + 260 && y >= section_y && y <= section_y + 20) {
+            int new_speed = 1 + (x - (offset_x + 60)) * 49 / 200;
+            if (new_speed < 1) new_speed = 1;
+            if (new_speed > 50) new_speed = 50;
+            mouse_speed = new_speed;
+            return;
         }
     }
 }

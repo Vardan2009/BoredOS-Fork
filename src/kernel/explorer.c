@@ -626,13 +626,16 @@ static int explorer_build_context_menu(Window *win, ExplorerContextItem *items_o
         if (is_dir) {
             items_out[count++] = (ExplorerContextItem){"New File", 101, true, COLOR_BLACK};
             items_out[count++] = (ExplorerContextItem){"New Folder", 102, true, COLOR_BLACK};
-            // Separator logic handled in paint
-            items_out[count++] = (ExplorerContextItem){"---", 0, false, 0}; // Marker
-            items_out[count++] = (ExplorerContextItem){"Blue", 200, true, COLOR_APPLE_BLUE};
-            items_out[count++] = (ExplorerContextItem){"Red", 201, true, COLOR_RED};
-            items_out[count++] = (ExplorerContextItem){"Yellow", 202, true, COLOR_APPLE_YELLOW};
-            items_out[count++] = (ExplorerContextItem){"Green", 203, true, COLOR_APPLE_GREEN};
-            items_out[count++] = (ExplorerContextItem){"Black", 204, true, COLOR_BLACK};
+            
+            // Only show color options if it's NOT the Recycle Bin folder (i love hardcoding stuff cause it's lowk easier (cry about it))
+            if (explorer_strcmp(state->items[state->file_context_menu_item].name, "RecycleBin") != 0) {
+                items_out[count++] = (ExplorerContextItem){"---", 0, false, 0}; // Marker
+                items_out[count++] = (ExplorerContextItem){"Blue", 200, true, COLOR_APPLE_BLUE};
+                items_out[count++] = (ExplorerContextItem){"Red", 201, true, COLOR_RED};
+                items_out[count++] = (ExplorerContextItem){"Yellow", 202, true, COLOR_APPLE_YELLOW};
+                items_out[count++] = (ExplorerContextItem){"Green", 203, true, COLOR_APPLE_GREEN};
+                items_out[count++] = (ExplorerContextItem){"Black", 204, true, COLOR_BLACK};
+            }
         }
     }
     return count;
@@ -938,6 +941,7 @@ static void explorer_paint(Window *win) {
     ExplorerState *state = (ExplorerState*)win->data;
     int offset_x = win->x + 4;
     int offset_y = win->y + 24;
+    DirtyRect dirty = graphics_get_dirty_rect();
     
     // Fill background
     draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_LTGRAY);
@@ -992,7 +996,13 @@ static void explorer_paint(Window *win) {
         explorer_draw_icon_label(item_x, item_y, display_name, (i == state->selected_item) ? COLOR_WHITE : COLOR_BLACK);
     }
     
-    graphics_clear_clipping();
+    // Restore dirty-rect clipping instead of clearing it entirely.
+    // This ensures the context menu respects the dirty region.
+    if (dirty.active) {
+        graphics_set_clipping(dirty.x, dirty.y, dirty.w, dirty.h);
+    } else {
+        graphics_clear_clipping();
+    }
     
     // Draw dropdown menu if visible
     if (state->dropdown_menu_visible) {

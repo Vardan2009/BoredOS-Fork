@@ -11,11 +11,10 @@ void cli_cmd_reboot(char *args);
 void cli_cmd_shutdown(char *args);
 void cli_cmd_uptime(char *args);
 void cli_cmd_man(char *args);
-void cli_cmd_license(char *args);
 void cli_cmd_txtedit(char *args);
 void cli_cmd_blind(char *args);
 void cli_cmd_readtheman(char *args);
-void cli_cmd_brewver(char *args);
+void cli_cmd_boredver(char *args);
 void cli_cmd_clear(char *args);
 void cli_cmd_exit(char *args);
 

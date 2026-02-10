@@ -238,6 +238,39 @@ void graphics_set_bg_pattern(const uint32_t *pattern) {
     g_use_pattern = true;
 }
 
+void draw_boredos_logo(int x, int y, int scale) {
+
+    static const uint8_t brewos_bmp[] = {
+        0,0,1,1,1,0,0,0,0,0,0,1,1,1,0,0, // 0: Ears
+        0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,0, // 1: Ears
+        1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1, // 2: Ears (Separated)
+        1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1, // 3: Forehead / Ears
+        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1, // 4: Face
+        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, // 5: Eyes start
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 6: Eyes
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 7: Eyes
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 8: Eyes
+        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, // 9: Under eyes
+        1,1,2,2,2,2,2,1,1,2,2,2,2,2,1,1, // 10: Nose
+        1,1,2,2,2,2,2,2,2,2,2,2,2,2,1,1, // 11: Cheeks
+        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1, // 12: Jaw
+        0,1,1,1,2,2,2,2,2,2,2,2,1,1,1,0, // 13: Chin
+        0,0,1,1,1,2,2,2,2,2,2,1,1,1,0,0, // 14: Chin outline
+        0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0  // 15: Bottom
+    };
+
+    for (int r = 0; r < 16; r++) {
+        for (int c = 0; c < 16; c++) {
+            uint8_t p = brewos_bmp[r * 16 + c];
+            if (p == 1) {
+                draw_rect(x + c * scale, y + r * scale, scale, scale, 0xFF1A1A1A); // rgb(26,26,26)
+            } else if (p == 2) {
+                draw_rect(x + c * scale, y + r * scale, scale, scale, 0xFFFEFEFE); // rgb(254,254,254)
+            }
+        }
+    }
+}
+
 // Double buffering functions
 void graphics_clear_back_buffer(uint32_t color) {
     if (!g_fb) return;

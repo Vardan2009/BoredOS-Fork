@@ -1,7 +1,7 @@
 #include "cli_utils.h"
 
 void cli_cmd_cowsay(char *args) {
-    if (!args || !*args) args = (char*)"Brew!";
+    if (!args || !*args) args = (char*)"Bored!";
     size_t len = cli_strlen(args);
     
     cli_write(" ");
