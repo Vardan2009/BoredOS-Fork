@@ -288,16 +288,18 @@ static void md_paint(Window *win) {
     int content_width = win->w - 8;
     int content_height = win->h - 28;
     
-    // Draw filename bar below title
-    draw_rect(offset_x, offset_y, content_width, 20, COLOR_GRAY);
-    draw_string(offset_x + 4, offset_y + 4, "File", COLOR_BLACK);
-    draw_string(offset_x + 50, offset_y + 4, open_filename, COLOR_BLACK);
+    // Draw filename bar below title (dark mode)
+    draw_rounded_rect_filled(offset_x, offset_y, content_width, 20, 6, COLOR_DARK_PANEL);
+    draw_string(offset_x + 4, offset_y + 4, "File", COLOR_DARK_TEXT);
+    draw_string(offset_x + 50, offset_y + 4, open_filename, COLOR_DARK_TEXT);
     
-    // Draw scroll buttons on top right
+    // Draw scroll buttons on top right with rounded style
     int btn_x_up = offset_x + content_width - 50;
     int btn_y = offset_y + 2;
-    draw_button(btn_x_up, btn_y, 20, 16, "^", false);
-    draw_button(btn_x_up + 24, btn_y, 20, 16, "v", false);
+    draw_rounded_rect_filled(btn_x_up, btn_y, 20, 16, 4, COLOR_DARK_TITLEBAR);
+    draw_string(btn_x_up + 6, btn_y, "^", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(btn_x_up + 24, btn_y, 20, 16, 4, COLOR_DARK_TITLEBAR);
+    draw_string(btn_x_up + 30, btn_y, "v", COLOR_DARK_TEXT);
     
     // Content area - starts below filename bar
     int content_start_y = offset_y + 24;
@@ -306,8 +308,8 @@ static void md_paint(Window *win) {
     int usable_content_height = content_height - 28;
     int max_display_lines = usable_content_height / MD_LINE_HEIGHT;
     
-    // Draw content background
-    draw_rect(win->x + 4, content_start_y, win->w - 24, usable_content_height, COLOR_WHITE);
+    // Draw content background (dark mode)
+    draw_rounded_rect_filled(win->x + 4, content_start_y, win->w - 24, usable_content_height, 6, COLOR_DARK_BG);
     
 
     
@@ -317,38 +319,38 @@ static void md_paint(Window *win) {
     while (i < line_count && display_line < max_display_lines) {
         MDLine *line = &lines[i];
         
-        // Determine spacing and text properties based on heading level
+        // Determine spacing and text properties based on heading level (dark mode colors)
         int line_height = MD_LINE_HEIGHT;
         int extra_spacing = 0;
-        uint32_t text_color = COLOR_BLACK;
+        uint32_t text_color = COLOR_DARK_TEXT;
         bool use_bold = false;
         
         switch (line->type) {
             case MD_LINE_HEADING1:
                 line_height = MD_LINE_HEIGHT * 2;  // Double height
-                text_color = 0xFF004080;  // Dark blue
+                text_color = 0xFF87CEEB;  // Light blue
                 use_bold = true;
                 extra_spacing = 4;
                 break;
             case MD_LINE_HEADING2:
                 line_height = MD_LINE_HEIGHT + 6;  // 1.5x height
-                text_color = 0xFF1060A0;  // Medium blue
+                text_color = 0xFF4A90E2;  // Medium blue
                 use_bold = true;
                 extra_spacing = 2;
                 break;
             case MD_LINE_HEADING3:
                 line_height = MD_LINE_HEIGHT + 2;  // Slightly larger
-                text_color = 0xFF2080C0;  // Light blue
+                text_color = 0xFF87CEEB;  // Light blue
                 use_bold = false;
                 break;
             case MD_LINE_BLOCKQUOTE:
-                text_color = 0xFF808080;  // Gray
+                text_color = 0xFFA0A0A0;  // Light gray
                 break;
             case MD_LINE_CODE:
-                text_color = COLOR_WHITE;
+                text_color = 0xFF90EE90;  // Light green for code
                 break;
             default:
-                text_color = COLOR_BLACK;
+                text_color = COLOR_DARK_TEXT;
                 break;
         }
         

@@ -100,17 +100,16 @@ static void update_display(Window *win) {
 
 static void calculator_paint(Window *win) {
     // Background
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_LTGRAY);
+    draw_rect(win->x + 4, win->y + 30, win->w - 8, win->h - 34, COLOR_DARK_BG);
     
-    // Display Area
-    draw_bevel_rect(win->x + 10, win->y + 30, win->w - 20, 25, true);
+    // Display Area with dark mode styling
+    draw_rounded_rect_filled(win->x + 10, win->y + 36, win->w - 20, 25, 6, COLOR_DARK_PANEL);
     // Right align text
     int text_w = win->buf_len * 8;
     int text_x = win->x + win->w - 15 - text_w;
-    draw_string(text_x, win->y + 38, win->buffer, COLOR_BLACK);
+    draw_string(text_x, win->y + 44, win->buffer, COLOR_DARK_TEXT);
     
-    // Buttons
-    // Layout 4 columns x 5 rows
+    // Buttons - macOS style squircle buttons
     const char *labels[] = {
         "C", "sqr", "rt", "/",
         "7", "8", "9", "*",
@@ -123,14 +122,18 @@ static void calculator_paint(Window *win) {
     int bh = 25;
     int gap = 5;
     int start_x = win->x + 10;
-    int start_y = win->y + 65;
+    int start_y = win->y + 70;
     
     for (int i = 0; i < 20; i++) {
         int r = i / 4;
         int c = i % 4;
         
-        // Special drawing for some buttons?
-        draw_button(start_x + c*(bw+gap), start_y + r*(bh+gap), bw, bh, labels[i], false);
+        // Draw rounded button backgrounds
+        draw_rounded_rect_filled(start_x + c*(bw+gap), start_y + r*(bh+gap), bw, bh, 4, COLOR_DARK_BORDER);
+        // Draw button text
+        int label_x = start_x + c*(bw+gap) + 5;
+        int label_y = start_y + r*(bh+gap) + 9;
+        draw_string(label_x, label_y, labels[i], COLOR_DARK_TEXT);
     }
 }
 

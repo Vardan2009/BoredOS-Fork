@@ -252,8 +252,8 @@ static void editor_paint(Window *win) {
     
     // Draw filename and save button area at top of content
     draw_rect(offset_x, offset_y, content_width, 25, COLOR_GRAY);
-    draw_string(offset_x + 10, offset_y + 5, "File", COLOR_BLACK);
-    draw_string(offset_x + 55, offset_y + 5, open_filename, COLOR_BLACK);
+    draw_string(offset_x + 10, offset_y + 5, "File", COLOR_DARK_TEXT);
+    draw_string(offset_x + 55, offset_y + 5, open_filename, COLOR_DARK_TEXT);
     
     // Draw save button
     draw_button(offset_x + content_width - 80, offset_y + 3, 70, 20, "Save", false);
@@ -263,8 +263,8 @@ static void editor_paint(Window *win) {
         draw_string(offset_x + content_width - 200, offset_y + 5, "[Modified]", COLOR_RED);
     }
     
-    // Fill editor background
-    draw_rect(win->x + 4, win->y + 54, win->w - 8, win->h - 58, COLOR_WHITE);
+    // Fill editor background - dark mode
+    draw_rect(win->x + 4, win->y + 54, win->w - 8, win->h - 58, COLOR_DARK_BG);
     
     // Calculate available width for text (accounting for line numbers)
     int text_start_x = offset_x + 40;
@@ -350,7 +350,7 @@ static void editor_paint(Window *win) {
             
             // Draw the text segment
             if (segment_len > 0) {
-                draw_string(text_start_x, current_display_y, segment, COLOR_BLACK);
+                draw_string(text_start_x, current_display_y, segment, COLOR_DARK_TEXT);
             }
             
             // Draw cursor if on this line and wrapped segment
@@ -379,7 +379,7 @@ static void editor_paint(Window *win) {
     
     // Draw status bar at bottom
     draw_rect(offset_x, offset_y + content_height - 20, content_width, 20, COLOR_GRAY);
-    draw_string(offset_x + 10, offset_y + content_height - 15, "Line: ", COLOR_WHITE);
+    draw_string(offset_x + 10, offset_y + content_height - 15, "Line: ", COLOR_DARK_TEXT);
     
     char line_str[32];
     int temp = cursor_line + 1;
@@ -395,8 +395,8 @@ static void editor_paint(Window *win) {
     }
     line_str[idx] = 0;
     
-    draw_string(offset_x + 60, offset_y + content_height - 15, line_str, COLOR_WHITE);
-    draw_string(offset_x + 100, offset_y + content_height - 15, "  Col: ", COLOR_WHITE);
+    draw_string(offset_x + 60, offset_y + content_height - 15, line_str, COLOR_DARK_TEXT);
+    draw_string(offset_x + 100, offset_y + content_height - 15, "  Col: ", COLOR_DARK_TEXT);
     
     char col_str[32];
     temp = cursor_col + 1;
@@ -412,7 +412,7 @@ static void editor_paint(Window *win) {
     }
     col_str[idx] = 0;
     
-    draw_string(offset_x + 170, offset_y + content_height - 15, col_str, COLOR_WHITE);
+    draw_string(offset_x + 170, offset_y + content_height - 15, col_str, COLOR_DARK_TEXT);
 }
 
 // === Key Handler ===

@@ -52,7 +52,7 @@ Window win_cmd;
 static CharCell screen_buffer[CMD_ROWS][CMD_COLS];
 static int cursor_row = 0;
 static int cursor_col = 0;
-static uint32_t current_color = COLOR_LTGRAY;
+static uint32_t current_color = COLOR_DARK_TEXT;
 static CmdState *cmd_state = NULL;  // Will be set in cmd_init
 
 // Pager State
@@ -272,7 +272,7 @@ void cmd_screen_clear() {
     for(int r=0; r<CMD_ROWS; r++) {
         for(int c=0; c<CMD_COLS; c++) {
             screen_buffer[r][c].c = ' ';
-            screen_buffer[r][c].color = COLOR_LTGRAY;
+            screen_buffer[r][c].color = COLOR_DARK_TEXT;
         }
     }
     cursor_row = 0;
@@ -1297,8 +1297,8 @@ static void cmd_paint(Window *win) {
     int offset_x = win->x + 4;
     int offset_y = win->y + 24;
     
-    // Fill background
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_BLACK);
+    // Fill background - dark mode terminal
+    draw_rect(win->x + 4, win->y + 30, win->w - 8, win->h - 34, COLOR_DARK_BG);
     
     int start_y = offset_y + 4;
     int start_x = offset_x + 4;
@@ -1306,11 +1306,11 @@ static void cmd_paint(Window *win) {
     if (current_mode == MODE_PAGER) {
         // Draw Pager Content (Wrapped)
         for (int i = 0; i < CMD_ROWS && (pager_top_line + i) < pager_total_lines; i++) {
-            draw_string(start_x, start_y + (i * LINE_HEIGHT), pager_wrapped_lines[pager_top_line + i], COLOR_LTGRAY);
+            draw_string(start_x, start_y + (i * LINE_HEIGHT), pager_wrapped_lines[pager_top_line + i], COLOR_DARK_TEXT);
         }
         
         // Status Bar
-        draw_string(start_x, start_y + (CMD_ROWS * LINE_HEIGHT), "-- Press Q to quit --", COLOR_WHITE);
+        draw_string(start_x, start_y + (CMD_ROWS * LINE_HEIGHT), "-- Press Q to quit --", COLOR_DARK_TEXT);
         
     } else {
         // Draw Shell Buffer

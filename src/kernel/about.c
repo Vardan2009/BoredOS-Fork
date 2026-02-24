@@ -13,13 +13,13 @@ static void about_paint(Window *win) {
     draw_boredos_logo(win->x + 60, offset_y, 4);
     
     // Version info
-    draw_string(offset_x, offset_y + 105, "BoredOS 'Panda'", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 120, "BoredOS Version 1.51", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 135, "Kernel Version 2.5.0", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 105, "BoredOS 'Panda'", COLOR_WHITE);
+    draw_string(offset_x, offset_y + 120, "BoredOS Version 1.51", COLOR_WHITE);
+    draw_string(offset_x, offset_y + 135, "Kernel Version 2.5.0", COLOR_WHITE);
     
     // Copyright
-    draw_string(offset_x, offset_y + 150, "(C) 2026 boreddevnl.", COLOR_BLACK);
-    draw_string(offset_x, offset_y + 165, "All rights reserved.", COLOR_BLACK);
+    draw_string(offset_x, offset_y + 150, "(C) 2026 boreddevnl.", COLOR_WHITE);
+    draw_string(offset_x, offset_y + 165, "All rights reserved.", COLOR_WHITE);
 }
 
 static void about_click(Window *win, int x, int y) {

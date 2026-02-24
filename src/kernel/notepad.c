@@ -24,12 +24,12 @@ static void notepad_ensure_cursor_visible(Window *win) {
 }
 
 static void notepad_paint(Window *win) {
-    // Explicitly draw white background for text
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_WHITE);
+    // Dark mode background for text
+    draw_rect(win->x + 4, win->y + 30, win->w - 8, win->h - 34, COLOR_DARK_BG);
 
     int visual_line = 0; 
     int current_x = win->x + 8;
-    int current_y = win->y + 30;
+    int current_y = win->y + 36;
     int window_right = win->x + win->w - 16;  
     
     for (int i = 0; i < win->buf_len; i++) {
@@ -37,7 +37,7 @@ static void notepad_paint(Window *win) {
             if (win->buffer[i] == '\n') {
                 visual_line++;
                 current_x = win->x + 8;
-                current_y = win->y + 30;
+                current_y = win->y + 36;
             } else {
                 if (current_x >= window_right) {
                     visual_line++;
@@ -69,7 +69,7 @@ static void notepad_paint(Window *win) {
             }
             
             char ch[2] = {win->buffer[i], 0};
-            draw_string(current_x, current_y, ch, COLOR_BLACK);
+            draw_string(current_x, current_y, ch, COLOR_DARK_TEXT);
             current_x += 8;
         }
     }
@@ -77,7 +77,7 @@ static void notepad_paint(Window *win) {
     // Cursor
     if (win->focused) {
         int cx = win->x + 8;
-        int cy = win->y + 30;
+        int cy = win->y + 36;
         int visual_line = 0;
         int window_right = win->x + win->w - 16;  // Right boundary with padding
         
@@ -98,7 +98,7 @@ static void notepad_paint(Window *win) {
         
         if (visual_line >= notepad_scroll_line && 
             visual_line < notepad_scroll_line + (win->h - 40) / 10) {
-            draw_rect(cx, cy, 2, 8, COLOR_BLACK);
+            draw_rect(cx, cy, 2, 8, COLOR_DARK_TEXT);
         }
     }
 }

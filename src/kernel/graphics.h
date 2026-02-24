@@ -14,6 +14,8 @@ typedef struct {
 void graphics_init(struct limine_framebuffer *fb);
 void put_pixel(int x, int y, uint32_t color);
 void draw_rect(int x, int y, int w, int h, uint32_t color);
+void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color);
+void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t color);
 void draw_char(int x, int y, char c, uint32_t color);
 void draw_string(int x, int y, const char *s, uint32_t color);
 void draw_desktop_background(void);

@@ -21,35 +21,32 @@ static void paint_strcpy(char *dest, const char *src) {
 }
 
 static void paint_paint(Window *win) {
-    // Toolbar area
-    draw_rect(win->x + 10, win->y + 30, 40, win->h - 40, COLOR_GRAY);
-    draw_bevel_rect(win->x + 10, win->y + 30, 40, win->h - 40, true);
+    // Toolbar area - dark mode
+    draw_rounded_rect_filled(win->x + 10, win->y + 30, 40, win->h - 40, 6, COLOR_DARK_PANEL);
     
-    // Color Palette
+    // Color Palette with rounded corners
     uint32_t colors[] = {COLOR_BLACK, COLOR_RED, COLOR_APPLE_GREEN, COLOR_APPLE_BLUE, COLOR_APPLE_YELLOW, COLOR_WHITE};
     for (int i = 0; i < 6; i++) {
         int cy = win->y + 40 + (i * 25);
-        draw_rect(win->x + 15, cy, 30, 20, colors[i]);
-        draw_rect(win->x + 15, cy, 30, 1, COLOR_BLACK);
-        draw_rect(win->x + 15, cy, 1, 20, COLOR_BLACK);
-        draw_rect(win->x + 44, cy, 1, 20, COLOR_BLACK);
-        draw_rect(win->x + 15, cy + 19, 30, 1, COLOR_BLACK);
+        draw_rounded_rect_filled(win->x + 15, cy, 30, 20, 3, colors[i]);
         
-        // Highlight selected color
+        // Highlight selected color with border
         if (current_color == colors[i]) {
-            draw_rect(win->x + 13, cy - 2, 34, 2, COLOR_WHITE);
-            draw_rect(win->x + 13, cy + 20, 34, 2, COLOR_WHITE);
+            draw_rounded_rect(win->x + 13, cy - 2, 34, 24, 4, COLOR_DARK_TEXT);
         }
     }
 
-    // Toolbar Buttons
-    draw_button(win->x + 12, win->y + win->h - 65, 36, 20, "CLR", false);
-    draw_button(win->x + 12, win->y + win->h - 40, 36, 20, "SAV", false);
+    // Toolbar Buttons - dark mode with rounded corners
+    draw_rounded_rect_filled(win->x + 12, win->y + win->h - 65, 36, 20, 4, COLOR_DARK_BORDER);
+    draw_string(win->x + 18, win->y + win->h - 58, "CLR", COLOR_DARK_TEXT);
+    
+    draw_rounded_rect_filled(win->x + 12, win->y + win->h - 40, 36, 20, 4, COLOR_DARK_BORDER);
+    draw_string(win->x + 18, win->y + win->h - 33, "SAV", COLOR_DARK_TEXT);
 
-    // Canvas Area
+    // Canvas Area with dark background and rounded corners
     int canvas_x = win->x + 60;
     int canvas_y = win->y + 30;
-    draw_bevel_rect(canvas_x - 2, canvas_y - 2, CANVAS_W + 4, CANVAS_H + 4, true);
+    draw_rounded_rect_filled(canvas_x - 2, canvas_y - 2, CANVAS_W + 4, CANVAS_H + 4, 4, COLOR_DARK_BG);
     
     if (canvas_buffer) {
         for (int y = 0; y < CANVAS_H; y++) {

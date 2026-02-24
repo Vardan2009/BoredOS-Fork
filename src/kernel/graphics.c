@@ -161,6 +161,81 @@ void draw_rect(int x, int y, int w, int h, uint32_t color) {
     }
 }
 
+// Simple integer-based square root approximation
+static int isqrt(int n) {
+    if (n < 0) return 0;
+    if (n == 0) return 0;
+    int x = n;
+    int y = (x + 1) / 2;
+    while (y < x) {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    return x;
+}
+
+// Draw rounded rectangle outline
+void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color) {
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+    if (radius < 1) radius = 1;
+    
+    // Draw top and bottom edges
+    draw_rect(x + radius, y, w - 2*radius, 1, color);
+    draw_rect(x + radius, y + h - 1, w - 2*radius, 1, color);
+    
+    // Draw left and right edges
+    draw_rect(x, y + radius, 1, h - 2*radius, color);
+    draw_rect(x + w - 1, y + radius, 1, h - 2*radius, color);
+    
+    // Draw corner circles using integer approximation
+    for (int i = 0; i < radius; i++) {
+        int j = isqrt(radius*radius - i*i);
+        
+        // Top-left corner
+        put_pixel(x + radius - i - 1, y + radius - j, color);
+        // Top-right corner
+        put_pixel(x + w - radius + i, y + radius - j, color);
+        // Bottom-left corner
+        put_pixel(x + radius - i - 1, y + h - radius + j - 1, color);
+        // Bottom-right corner
+        put_pixel(x + w - radius + i, y + h - radius + j - 1, color);
+    }
+}
+
+// Draw filled rounded rectangle
+void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t color) {
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+    if (radius < 1) radius = 1;
+    
+    // Draw main rectangle body (center part without corners)
+    draw_rect(x + radius, y, w - 2*radius, h, color);
+    draw_rect(x, y + radius, radius, h - 2*radius, color);
+    draw_rect(x + w - radius, y + radius, radius, h - 2*radius, color);
+    
+    // Draw rounded corners using scanline approach (fills gaps properly)
+    for (int dy = 0; dy < radius; dy++) {
+        // For top corners: distance formula inverted (narrow at top, wide at junction)
+        int dx_top = isqrt(radius*radius - (radius - dy) * (radius - dy));
+        
+        // For bottom corners: distance formula normal (wide at junction, narrow at bottom)
+        int dx_bottom = isqrt(radius*radius - dy*dy);
+        
+        // Top-left corner - horizontal scanline
+        draw_rect(x + radius - dx_top, y + dy, dx_top, 1, color);
+        
+        // Top-right corner - horizontal scanline
+        draw_rect(x + w - radius, y + dy, dx_top, 1, color);
+        
+        // Bottom-left corner - horizontal scanline
+        draw_rect(x + radius - dx_bottom, y + h - radius + dy, dx_bottom, 1, color);
+        
+        // Bottom-right corner - horizontal scanline
+        draw_rect(x + w - radius, y + h - radius + dy, dx_bottom, 1, color);
+    }
+}
+
 void draw_char(int x, int y, char c, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return;

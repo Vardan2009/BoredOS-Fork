@@ -215,8 +215,8 @@ static bool check_desktop_limit_explorer(Window *win) {
     ExplorerState *state = (ExplorerState*)win->data;
     if (explorer_str_starts_with(state->current_path, "/Desktop")) {
         // Check if root desktop
-        if (explorer_strcmp(state->current_path, "/Desktop") == 0 || explorer_strcmp(state->current_path, "/Desktop/") == 0) {
-             if (state->item_count >= desktop_max_cols * desktop_max_rows_per_col) {
+        if (explorer_strcmp(state->current_path, "/Desktop") == 0 || explorer_strcmp(state->current_path, "/Desktop/") == 0) { // Check if root desktop
+             if (state->item_count >= desktop_max_cols * (desktop_max_rows_per_col > 1 ? desktop_max_rows_per_col - 1 : 0)) {
                  state->dialog_state = DIALOG_ERROR;
                  explorer_strcpy(state->dialog_input, "Desktop is full!");
                  return false;
@@ -951,10 +951,10 @@ static void explorer_paint(Window *win) {
     int offset_y = win->y + 24;
     DirtyRect dirty = graphics_get_dirty_rect();
     
-    // Fill background
-    draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_LTGRAY);
+    // Fill background with dark mode
+    draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_DARK_BG);
     
-    // Draw Drive Button
+    // Draw Drive Button (modern rounded style)
     char drive_label[8];
     // Extract drive from the window's current_path instead of using global current_drive
     char current_drv = 'A';
@@ -973,28 +973,32 @@ static void explorer_paint(Window *win) {
     drive_label[6] = ' ';
     drive_label[7] = ']';
     
-    // Button at x+4, y+4, w=60
-    draw_button(win->x + 4, offset_y + 4, 60, 30, "", false);
-    draw_string(win->x + 12, offset_y + 12, drive_label, COLOR_BLACK);
+    // Button at x+4, y+4, w=60 (rounded)
+    draw_rounded_rect_filled(win->x + 4, offset_y + 4, 60, 30, 6, COLOR_DARK_PANEL);
+    draw_string(win->x + 12, offset_y + 12, drive_label, COLOR_DARK_TEXT);
 
-    // Draw path bar (shifted right)
+    // Draw path bar (shifted right, rounded, dark mode)
     int path_height = 30;
     int path_x = offset_x + 64;
     int path_w = win->w - 16 - 64;
-    draw_bevel_rect(path_x, offset_y + 4, path_w, path_height, true);
-    draw_string(path_x + 6, offset_y + 10, "Path", COLOR_BLACK);
-    draw_string(path_x + 46, offset_y + 10, state->current_path, COLOR_BLACK);
+    draw_rounded_rect_filled(path_x, offset_y + 4, path_w, path_height, 6, COLOR_DARK_PANEL);
+    draw_string(path_x + 6, offset_y + 10, "Path", COLOR_DARK_TEXT);
+    draw_string(path_x + 46, offset_y + 10, state->current_path, COLOR_DARK_TEXT);
     
-    // Draw dropdown menu button (right-aligned, before back button)
+    // Draw dropdown menu button (right-aligned, before back button, rounded)
     int dropdown_btn_x = win->x + win->w - 90;
-    draw_button(dropdown_btn_x, offset_y + 4, 35, 30, "...", false);
+    draw_rounded_rect_filled(dropdown_btn_x, offset_y + 4, 35, 30, 6, COLOR_DARK_PANEL);
+    draw_string(dropdown_btn_x + 10, offset_y + 10, "...", COLOR_DARK_TEXT);
     
-    // Draw back button (right-aligned)
-    draw_button(win->x + win->w - 40, offset_y + 4, 30, 30, "<", false);
+    // Draw back button (right-aligned, rounded)
+    draw_rounded_rect_filled(win->x + win->w - 40, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 32, offset_y + 10, "<", COLOR_DARK_TEXT);
     
-    // Draw scroll buttons (left of dropdown)
-    draw_button(win->x + win->w - 160, offset_y + 4, 30, 30, "^", false);
-    draw_button(win->x + win->w - 125, offset_y + 4, 30, 30, "v", false);
+    // Draw scroll buttons (left of dropdown, rounded)
+    draw_rounded_rect_filled(win->x + win->w - 160, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 150, offset_y + 10, "^", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(win->x + win->w - 125, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 115, offset_y + 10, "v", COLOR_DARK_TEXT);
     
     // Draw file list
     int content_start_y = offset_y + 40;
@@ -1013,10 +1017,10 @@ static void explorer_paint(Window *win) {
         int item_x = offset_x + 10 + (col * (EXPLORER_ITEM_WIDTH + EXPLORER_PADDING));
         int item_y = content_start_y + ((row - state->explorer_scroll_row) * (EXPLORER_ITEM_HEIGHT + EXPLORER_PADDING));
         
-        // Draw item background
-        uint32_t bg_color = (i == state->selected_item) ? COLOR_BLUE : COLOR_WHITE;
-        draw_bevel_rect(item_x, item_y, EXPLORER_ITEM_WIDTH, EXPLORER_ITEM_HEIGHT, false);
-        draw_rect(item_x + 2, item_y + 2, EXPLORER_ITEM_WIDTH - 4, EXPLORER_ITEM_HEIGHT - 4, bg_color);
+        // Draw item background (dark mode with rounded corners)
+        uint32_t bg_color = (i == state->selected_item) ? 0xFF4A90E2 : COLOR_DARK_PANEL;
+        uint32_t text_color = (i == state->selected_item) ? COLOR_WHITE : COLOR_DARK_TEXT;
+        draw_rounded_rect_filled(item_x, item_y, EXPLORER_ITEM_WIDTH, EXPLORER_ITEM_HEIGHT, 6, bg_color);
         
         // Draw icon (larger area)
         explorer_draw_file_icon(item_x + 5, item_y + 5, state->items[i].is_directory, state->items[i].color, state->items[i].name);
@@ -1026,7 +1030,7 @@ static void explorer_paint(Window *win) {
         if (explorer_strcmp(state->items[i].name, "RecycleBin") == 0) {
             display_name = "Recycle Bin";
         }
-        explorer_draw_icon_label(item_x, item_y, display_name, (i == state->selected_item) ? COLOR_WHITE : COLOR_BLACK);
+        explorer_draw_icon_label(item_x, item_y, display_name, text_color);
     }
     
     // Restore dirty-rect clipping instead of clearing it entirely.
@@ -1037,7 +1041,7 @@ static void explorer_paint(Window *win) {
         graphics_clear_clipping();
     }
     
-    // Draw Drive Menu if visible
+    // Draw Drive Menu if visible (dark mode)
     if (state->drive_menu_visible) {
         int menu_x = win->x + 4;
         int menu_y = offset_y + 34;
@@ -1045,8 +1049,7 @@ static void explorer_paint(Window *win) {
         int count = disk_get_count();
         int menu_h = count * 25;
         
-        draw_rect(menu_x, menu_y, menu_w, menu_h, COLOR_LTGRAY);
-        draw_bevel_rect(menu_x, menu_y, menu_w, menu_h, true);
+        draw_rounded_rect_filled(menu_x, menu_y, menu_w, menu_h, 6, COLOR_DARK_PANEL);
         
         for (int i = 0; i < count; i++) {
             Disk *d = disk_get_by_index(i);
@@ -1059,9 +1062,9 @@ static void explorer_paint(Window *win) {
                 int n = 0; while(d->name[n] && n < 10) { buf[3+n] = d->name[n]; n++; }
                 buf[3+n] = 0;
                 
-                // Highlight current
+                // Highlight current (dark blue)
                 if (d->letter == current_drv) {
-                    draw_rect(menu_x + 2, menu_y + i*25 + 2, menu_w - 4, 21, COLOR_BLUE);
+                    draw_rounded_rect_filled(menu_x + 2, menu_y + i*25 + 2, menu_w - 4, 21, 4, 0xFF4A90E2);
                     draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_WHITE);
                 } else {
                     draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_BLACK);
@@ -1981,7 +1984,7 @@ Window* explorer_create_window(const char *path) {
     Window *win = (Window*)kmalloc(sizeof(Window));
     ExplorerState *state = (ExplorerState*)kmalloc(sizeof(ExplorerState));
     
-    win->title = "File Explorer";
+    win->title = "Files";
     win->x = 300 + (explorer_win_count * 30);
     win->y = 100 + (explorer_win_count * 30);
     win->w = 600;
@@ -2014,7 +2017,7 @@ Window* explorer_create_window(const char *path) {
 
 void explorer_init(void) {
     ExplorerState *state = (ExplorerState*)kmalloc(sizeof(ExplorerState));
-    win_explorer.title = "File Explorer";
+    win_explorer.title = "Files";
     win_explorer.x = 300;
     win_explorer.y = 100;
     win_explorer.w = 600;

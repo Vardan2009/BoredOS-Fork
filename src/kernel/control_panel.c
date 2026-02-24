@@ -152,81 +152,54 @@ static void control_panel_paint_main(Window *win) {
     int offset_x = win->x + 8;
     int offset_y = win->y + 30;
     
-    // Draw wallpaper painting icon
-    // Frame
-    draw_rect(offset_x + 5, offset_y + 2, 28, 20, 0xFF8B4513); // Brown frame
-    draw_rect(offset_x + 6, offset_y + 3, 26, 18, 0xFFFFFFFF); // White canvas
+    // Background
+    draw_rect(win->x, win->y + 30, win->w, win->h - 30, COLOR_DARK_BG);
     
-    // Paint strokes (simple landscape)
-    draw_rect(offset_x + 8, offset_y + 5, 22, 7, 0xFF87CEEB); // Sky blue
-    draw_rect(offset_x + 8, offset_y + 12, 22, 5, 0xFF90EE90); // Light green grass
-    draw_rect(offset_x + 15, offset_y + 8, 3, 4, 0xFF8B4513); // Tree trunk
-    draw_rect(offset_x + 13, offset_y + 5, 7, 4, 0xFF228B22); // Tree leaves
-    draw_rect(offset_x + 24, offset_y + 6, 4, 3, 0xFFFFFF00); // Sun
+    // Draw settings items with rounded boxes
+    int item_y = 30 + 15;
+    int item_h = 60;
+    int item_spacing = 10;
     
-    draw_string(offset_x + 40, offset_y + 8, "Wallpaper", 0xFF000000);
+    // Wallpaper Settings
+    draw_rounded_rect_filled(offset_x, offset_y + item_y, win->w - 16, item_h, 8, COLOR_DARK_PANEL);
+    // Wallpaper icon: landscape
+    draw_rect(offset_x + 12, offset_y + item_y + 8, 40, 40, 0xFF87CEEB);  // Sky
+    draw_rect(offset_x + 12, offset_y + item_y + 28, 40, 20, 0xFF90EE90);  // Grass
+    draw_rect(offset_x + 24, offset_y + item_y + 22, 3, 6, 0xFF654321);  // Tree trunk
+    draw_rect(offset_x + 21, offset_y + item_y + 18, 9, 8, 0xFF228B22);  // Tree leaves
+    draw_string(offset_x + 60, offset_y + item_y + 15, "Wallpaper", COLOR_DARK_TEXT);
+    draw_string(offset_x + 60, offset_y + item_y + 35, "Choose background design", COLOR_DKGRAY);
     
-    // Draw network globe icon
-    int net_offset_y = offset_y + 35;
+    // Network Settings
+    item_y += item_h + item_spacing;
+    draw_rounded_rect_filled(offset_x, offset_y + item_y, win->w - 16, item_h, 8, COLOR_DARK_PANEL);
+    // Network icon
+    draw_rect(offset_x + 18, offset_y + item_y + 12, 24, 24, 0xFF4169E1);
+    draw_rect(offset_x + 22, offset_y + item_y + 16, 16, 16, 0xFF87CEEB);
+    draw_string(offset_x + 60, offset_y + item_y + 15, "Network", COLOR_DARK_TEXT);
+    draw_string(offset_x + 60, offset_y + item_y + 35, "Internet and connectivity", COLOR_DKGRAY);
     
-    // Globe circle (approximate with rectangles for filled circle)
-    uint32_t globe_color = 0xFF4169E1; // Royal blue
+    // Desktop Settings
+    item_y += item_h + item_spacing;
+    if (offset_y + item_y + item_h < win->y + win->h) {
+        draw_rounded_rect_filled(offset_x, offset_y + item_y, win->w - 16, item_h, 8, COLOR_DARK_PANEL);
+        // Desktop icon: folder
+        draw_rect(offset_x + 12, offset_y + item_y + 10, 36, 8, 0xFFE0C060);
+        draw_rect(offset_x + 12, offset_y + item_y + 18, 36, 22, 0xFFD4A574);
+        draw_string(offset_x + 60, offset_y + item_y + 15, "Desktop", COLOR_DARK_TEXT);
+        draw_string(offset_x + 60, offset_y + item_y + 35, "Desktop appearance&icons", COLOR_DKGRAY);
+    }
     
-    // Draw filled circle using rectangles (simplified)
-    draw_rect(offset_x + 11, net_offset_y + 3, 12, 1, globe_color);
-    draw_rect(offset_x + 9, net_offset_y + 4, 16, 1, globe_color);
-    draw_rect(offset_x + 8, net_offset_y + 5, 18, 1, globe_color);
-    draw_rect(offset_x + 7, net_offset_y + 6, 20, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 7, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 8, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 9, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 10, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 11, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 12, 22, 1, globe_color);
-    draw_rect(offset_x + 6, net_offset_y + 13, 22, 1, globe_color);
-    draw_rect(offset_x + 7, net_offset_y + 14, 20, 1, globe_color);
-    draw_rect(offset_x + 8, net_offset_y + 15, 18, 1, globe_color);
-    draw_rect(offset_x + 9, net_offset_y + 16, 16, 1, globe_color);
-    draw_rect(offset_x + 11, net_offset_y + 17, 12, 1, globe_color);
-    
-    // Latitude lines (white)
-    draw_rect(offset_x + 7, net_offset_y + 8, 20, 1, 0xFFFFFFFF);
-    draw_rect(offset_x + 7, net_offset_y + 12, 20, 1, 0xFFFFFFFF);
-    
-    // Longitude line (vertical, white)
-    draw_rect(offset_x + 17, net_offset_y + 6, 1, 9, 0xFFFFFFFF);
-    
-    // Curved longitude lines
-    draw_rect(offset_x + 11, net_offset_y + 5, 1, 11, 0xFFFFFFFF);
-    draw_rect(offset_x + 23, net_offset_y + 5, 1, 11, 0xFFFFFFFF);
-    
-    draw_string(offset_x + 40, net_offset_y + 8, "Network", 0xFF000000);
-    
-    // Draw Desktop Settings Icon
-    int desk_offset_y = net_offset_y + 35;
-    // Folder icon style
-    draw_rect(offset_x + 5, desk_offset_y + 2, 12, 4, COLOR_LTGRAY);
-    draw_rect(offset_x + 5, desk_offset_y + 2, 12, 1, COLOR_BLACK);
-    draw_rect(offset_x + 5, desk_offset_y + 6, 24, 14, 0xFFE0C060); // Tan folder
-    draw_rect(offset_x + 5, desk_offset_y + 6, 24, 1, COLOR_BLACK);
-    draw_rect(offset_x + 5, desk_offset_y + 6, 1, 14, COLOR_BLACK);
-    draw_string(offset_x + 40, desk_offset_y + 8, "Desktop", 0xFF000000);
-
-    // Draw Mouse Icon
-    int mouse_offset_y = desk_offset_y + 35;
-    // Mouse body
-    draw_rect(offset_x + 17, mouse_offset_y, 1, 2, COLOR_BLACK);
-    draw_rect(offset_x + 16, mouse_offset_y - 2, 1, 2, COLOR_BLACK);
-    draw_rect(offset_x + 10, mouse_offset_y + 2, 15, 20, MOUSE_BEIGE);
-    draw_rect(offset_x + 10, mouse_offset_y + 2, 15, 1, COLOR_BLACK);
-    draw_rect(offset_x + 10, mouse_offset_y + 2, 1, 20, COLOR_BLACK);
-    draw_rect(offset_x + 24, mouse_offset_y + 2, 1, 20, COLOR_BLACK);
-    draw_rect(offset_x + 10, mouse_offset_y + 21, 15, 1, COLOR_BLACK);
-    // Buttons separator
-    draw_rect(offset_x + 10, mouse_offset_y + 8, 15, 1, COLOR_BLACK);
-    draw_rect(offset_x + 17, mouse_offset_y + 2, 1, 6, COLOR_BLACK);
-    
-    draw_string(offset_x + 40, mouse_offset_y + 8, "Mouse", 0xFF000000);
+    // Mouse Settings
+    item_y += item_h + item_spacing;
+    if (offset_y + item_y + item_h < win->y + win->h) {
+        draw_rounded_rect_filled(offset_x, offset_y + item_y, win->w - 16, item_h, 8, COLOR_DARK_PANEL);
+        // Mouse icon
+        draw_rect(offset_x + 18, offset_y + item_y + 8, 20, 28, 0xFFD3D3D3);
+        draw_rect(offset_x + 20, offset_y + item_y + 10, 16, 10, 0xFFB0B0B0);
+        draw_string(offset_x + 60, offset_y + item_y + 15, "Mouse", COLOR_DARK_TEXT);
+        draw_string(offset_x + 60, offset_y + item_y + 35, "Pointer and trackpad", COLOR_DKGRAY);
+    }
 }
 
 static void control_panel_paint_wallpaper(Window *win) {
@@ -532,32 +505,37 @@ static void control_panel_handle_click(Window *win, int x, int y) {
         int offset_x = 8;
         int offset_y = 30;
         
-        // Check wallpaper button click (icon + text)
-        if (x >= offset_x + 5 && x < offset_x + 120 &&
-            y >= offset_y && y < offset_y + 25) {
+        // Settings items layout: each item is 60px tall with 10px spacing
+        int item_h = 60;
+        int item_spacing = 10;
+        
+        // Check wallpaper button click (entire card area)
+        int item_y = offset_y + 15;
+        if (x >= offset_x && x < win->w - 8 &&
+            y >= item_y && y < item_y + item_h) {
             current_view = VIEW_WALLPAPER;
             focused_field = -1;
         }
         
-        // Check network button click (icon + text)
-        int net_offset_y = offset_y + 35;
-        if (x >= offset_x + 5 && x < offset_x + 120 &&
-            y >= net_offset_y && y < net_offset_y + 25) {
+        // Check network button click
+        item_y += item_h + item_spacing;
+        if (x >= offset_x && x < win->w - 8 &&
+            y >= item_y && y < item_y + item_h) {
             current_view = VIEW_NETWORK;
             focused_field = -1;
         }
         
         // Check desktop button
-        int desk_offset_y = net_offset_y + 35;
-        if (x >= offset_x + 5 && x < offset_x + 120 &&
-            y >= desk_offset_y && y < desk_offset_y + 25) {
+        item_y += item_h + item_spacing;
+        if (x >= offset_x && x < win->w - 8 &&
+            y >= item_y && y < item_y + item_h) {
             current_view = VIEW_DESKTOP;
         }
 
         // Check mouse button
-        int mouse_offset_y = desk_offset_y + 35;
-        if (x >= offset_x + 5 && x < offset_x + 120 &&
-            y >= mouse_offset_y && y < mouse_offset_y + 25) {
+        item_y += item_h + item_spacing;
+        if (x >= offset_x && x < win->w - 8 &&
+            y >= item_y && y < item_y + item_h) {
             current_view = VIEW_MOUSE;
         }
     } else if (current_view == VIEW_WALLPAPER) {
@@ -1027,7 +1005,7 @@ static void control_panel_handle_key(Window *win, char c) {
 }
 
 void control_panel_init(void) {
-    win_control_panel.title = "Control Panel";
+    win_control_panel.title = "Settings";
     win_control_panel.x = 200;
     win_control_panel.y = 150;
     win_control_panel.w = 350;

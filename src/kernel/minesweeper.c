@@ -151,21 +151,21 @@ static void minesweeper_right_click(Window *win, int x, int y) {
 }
 
 static void minesweeper_paint(Window *win) {
-    // Background
-    draw_rect(win->x + 4, win->y + 24, win->w - 8, win->h - 28, COLOR_LTGRAY);
+    // Background - dark mode
+    draw_rect(win->x + 4, win->y + 30, win->w - 8, win->h - 34, COLOR_DARK_BG);
     
     // Game status
     if (game_over) {
-        draw_string(win->x + 10, win->y + 30, "Game Over!", COLOR_RED);
+        draw_string(win->x + 10, win->y + 36, "Game Over!", COLOR_TRAFFIC_RED);
     } else if (game_won) {
-        draw_string(win->x + 10, win->y + 30, "You Won!", COLOR_BLUE);
+        draw_string(win->x + 10, win->y + 36, "You Won!", 0xFF00FF00);  // Bright green
     } else {
-        draw_string(win->x + 10, win->y + 30, "", COLOR_BLACK);
+        draw_string(win->x + 10, win->y + 36, "", COLOR_DARK_TEXT);
     }
     
     // Draw grid
     int grid_start_x = win->x + 10;
-    int grid_start_y = win->y + 50;
+    int grid_start_y = win->y + 56;
     
     for (int y = 0; y < GRID_HEIGHT; y++) {
         for (int x = 0; x < GRID_WIDTH; x++) {
@@ -173,32 +173,33 @@ static void minesweeper_paint(Window *win) {
             int py = grid_start_y + y * CELL_SIZE;
             
             if (revealed[y][x]) {
-                // Revealed cell - sunken
-                draw_bevel_rect(px, py, CELL_SIZE, CELL_SIZE, true);
+                // Revealed cell - dark mode
+                draw_rounded_rect_filled(px, py, CELL_SIZE, CELL_SIZE, 2, COLOR_DARK_PANEL);
                 
                 if (grid[y][x] == -1) {
                     // Mine
-                    draw_string(px + 8, py + 6, "*", COLOR_RED);
+                    draw_string(px + 8, py + 6, "*", COLOR_TRAFFIC_RED);
                 } else if (grid[y][x] > 0) {
                     // Number
                     char num[2] = { '0' + grid[y][x], 0 };
-                    draw_string(px + 8, py + 6, num, COLOR_BLACK);
+                    draw_string(px + 8, py + 6, num, COLOR_DARK_TEXT);
                 }
                 // 0 = empty, nothing to draw
             } else {
-                // Unrevealed cell - raised
-                draw_bevel_rect(px, py, CELL_SIZE, CELL_SIZE, false);
+                // Unrevealed cell - raised/button look
+                draw_rounded_rect_filled(px, py, CELL_SIZE, CELL_SIZE, 2, COLOR_DARK_BORDER);
                 
                 if (flagged[y][x]) {
-                    draw_string(px + 7, py + 6, "F", COLOR_RED);
+                    draw_string(px + 7, py + 6, "F", COLOR_TRAFFIC_RED);
                 }
             }
         }
     }
     
-    // Draw new game button
+    // Draw new game button (narrower, less dead space)
     int btn_y = grid_start_y + GRID_HEIGHT * CELL_SIZE + 10;
-    draw_button(grid_start_x, btn_y, 90, 24, "New Game", false);
+    draw_rounded_rect_filled(grid_start_x, btn_y, 70, 24, 4, COLOR_DARK_BORDER);
+    draw_string(grid_start_x + 6, btn_y + 8, "New Game", COLOR_DARK_TEXT);
 }
 
 static void minesweeper_click(Window *win, int x, int y) {

@@ -1,4 +1,4 @@
-# BoredOS 1.50
+# BoredOS 1.51
 BoredOS has now exited Beta stage and is "stable enough" to be put out as a "stable" product.
 
 <img src="bored.svg" width="200" /> </br>
@@ -9,6 +9,7 @@ It features a DE (and WM), a FAT32 filesystem, customizable UI and much much mor
 *this screenshot might be outdated*
 
 ## Features
+- Disk manager
 - Drag and drop mouse centered UI
 - Customizable UI
 - Basic Networking Stack
