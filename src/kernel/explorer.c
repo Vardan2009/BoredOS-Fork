@@ -10,6 +10,7 @@
 #include "notepad.h"
 #include "calculator.h"
 #include "minesweeper.h"
+#include "viewer.h"
 #include "control_panel.h"
 #include "about.h"
 #include "paint.h"
@@ -815,6 +816,8 @@ static void explorer_open_target(const char *path) {
         } else if (explorer_str_ends_with(path, ".pnt")) {
             paint_load(path);
             wm_bring_to_front(&win_paint);
+        } else if (explorer_str_ends_with(path, ".jpg") || explorer_str_ends_with(path, ".JPG")) {
+            viewer_open_file(path);
         } else {
             wm_bring_to_front(&win_editor);
             editor_open_file(path);
@@ -842,7 +845,7 @@ static void explorer_open_item(Window *win, int index) {
     if (explorer_str_ends_with(state->items[index].name, ".shortcut")) {
         Window *target = NULL;
         if (explorer_strcmp(state->items[index].name, "Notepad.shortcut") == 0) {
-            target = &win_notepad; notepad_reset();
+            target = &win_notepad;
         } else if (explorer_strcmp(state->items[index].name, "Calculator.shortcut") == 0) {
             target = &win_calculator;
         } else if (explorer_strcmp(state->items[index].name, "Terminal.shortcut") == 0) {
@@ -922,6 +925,15 @@ static void explorer_draw_file_icon(int x, int y, bool is_dir, uint32_t color, c
         else draw_icon(x + 5, y + 5, "");
     } else if (explorer_str_ends_with(filename, ".pnt")) {
         draw_paint_icon(x - 15, y + 10, "");
+    } else if (explorer_str_ends_with(filename, ".jpg") || explorer_str_ends_with(filename, ".JPG")) {
+        // Photo/image icon
+        draw_rect(x + 10, y + 10, 25, 20, 0xFF87CEEB);  // Sky blue bg
+        draw_rect(x + 10, y + 22, 25, 8, 0xFF90EE90);   // Green bottom (landscape)
+        draw_rect(x + 18, y + 16, 8, 6, 0xFFFFFF00);    // Sun
+        draw_rect(x + 10, y + 10, 25, 1, 0xFF333333);   // Border
+        draw_rect(x + 10, y + 10, 1, 20, 0xFF333333);
+        draw_rect(x + 34, y + 10, 1, 20, 0xFF333333);
+        draw_rect(x + 10, y + 29, 25, 1, 0xFF333333);
     } else {
         // Document icon - larger
         draw_rect(x + 12, y + 10, 20, 25, COLOR_WHITE);
@@ -973,38 +985,38 @@ static void explorer_paint(Window *win) {
     drive_label[6] = ' ';
     drive_label[7] = ']';
     
-    // Button at x+4, y+4, w=60 (rounded)
-    draw_rounded_rect_filled(win->x + 4, offset_y + 4, 60, 30, 6, COLOR_DARK_PANEL);
-    draw_string(win->x + 12, offset_y + 12, drive_label, COLOR_DARK_TEXT);
+    // Button at x+4, y+3, w=60 (rounded)
+    draw_rounded_rect_filled(win->x + 4, offset_y + 3, 60, 22, 5, COLOR_DARK_PANEL);
+    draw_string(win->x + 12, offset_y + 8, drive_label, COLOR_DARK_TEXT);
 
     // Draw path bar (shifted right, rounded, dark mode)
-    int path_height = 30;
+    int path_height = 22;
     int path_x = offset_x + 64;
     int path_w = win->w - 16 - 64;
-    draw_rounded_rect_filled(path_x, offset_y + 4, path_w, path_height, 6, COLOR_DARK_PANEL);
-    draw_string(path_x + 6, offset_y + 10, "Path", COLOR_DARK_TEXT);
-    draw_string(path_x + 46, offset_y + 10, state->current_path, COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(path_x, offset_y + 3, path_w, path_height, 5, COLOR_DARK_PANEL);
+    draw_string(path_x + 6, offset_y + 8, "Path", COLOR_DARK_TEXT);
+    draw_string(path_x + 46, offset_y + 8, state->current_path, COLOR_DARK_TEXT);
     
     // Draw dropdown menu button (right-aligned, before back button, rounded)
     int dropdown_btn_x = win->x + win->w - 90;
-    draw_rounded_rect_filled(dropdown_btn_x, offset_y + 4, 35, 30, 6, COLOR_DARK_PANEL);
-    draw_string(dropdown_btn_x + 10, offset_y + 10, "...", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(dropdown_btn_x, offset_y + 3, 35, 22, 5, COLOR_DARK_PANEL);
+    draw_string(dropdown_btn_x + 10, offset_y + 8, "...", COLOR_DARK_TEXT);
     
     // Draw back button (right-aligned, rounded)
-    draw_rounded_rect_filled(win->x + win->w - 40, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 32, offset_y + 10, "<", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(win->x + win->w - 40, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 32, offset_y + 8, "<", COLOR_DARK_TEXT);
     
     // Draw scroll buttons (left of dropdown, rounded)
-    draw_rounded_rect_filled(win->x + win->w - 160, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 150, offset_y + 10, "^", COLOR_DARK_TEXT);
-    draw_rounded_rect_filled(win->x + win->w - 125, offset_y + 4, 30, 30, 6, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 115, offset_y + 10, "v", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(win->x + win->w - 160, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 150, offset_y + 8, "^", COLOR_DARK_TEXT);
+    draw_rounded_rect_filled(win->x + win->w - 125, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
+    draw_string(win->x + win->w - 115, offset_y + 8, "v", COLOR_DARK_TEXT);
     
     // Draw file list
-    int content_start_y = offset_y + 40;
+    int content_start_y = offset_y + 30;
     
     // Clip content to window area (excluding borders and top bar)
-    graphics_set_clipping(win->x + 4, content_start_y, win->w - 8, win->h - 64 - 4);
+    graphics_set_clipping(win->x + 4, content_start_y, win->w - 8, win->h - 54 - 4);
     
     for (int i = 0; i < state->item_count; i++) {
         int row = i / EXPLORER_COLS;
@@ -1044,7 +1056,7 @@ static void explorer_paint(Window *win) {
     // Draw Drive Menu if visible (dark mode)
     if (state->drive_menu_visible) {
         int menu_x = win->x + 4;
-        int menu_y = offset_y + 34;
+        int menu_y = offset_y + 26;
         int menu_w = 80;
         int count = disk_get_count();
         int menu_h = count * 25;
@@ -1067,7 +1079,7 @@ static void explorer_paint(Window *win) {
                     draw_rounded_rect_filled(menu_x + 2, menu_y + i*25 + 2, menu_w - 4, 21, 4, 0xFF4A90E2);
                     draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_WHITE);
                 } else {
-                    draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_BLACK);
+                    draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_DARK_TEXT);
                 }
             }
         }
@@ -1076,7 +1088,7 @@ static void explorer_paint(Window *win) {
     // Draw dropdown menu if visible
     if (state->dropdown_menu_visible) {
         int menu_x = dropdown_btn_x;
-        int menu_y = offset_y + 34;
+        int menu_y = offset_y + 26;
         
         // Draw menu background
         draw_rounded_rect_filled(menu_x, menu_y, DROPDOWN_MENU_WIDTH, dropdown_menu_item_height * DROPDOWN_MENU_ITEMS, 6, COLOR_DARK_PANEL);
@@ -1221,7 +1233,6 @@ static void explorer_paint(Window *win) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
         
-        draw_rect(dlg_x - 5, dlg_y - 5, 310, 120, COLOR_LTGRAY);
         // Rename dialog (modern)
         draw_rounded_rect_filled(dlg_x, dlg_y, 300, 110, 8, COLOR_DARK_PANEL);
         draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_WHITE);
@@ -1396,7 +1407,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
     // Handle Drive Menu Selection
     if (state->drive_menu_visible) {
         int menu_x = 4; // Window relative
-        int menu_y = 58; // 24+34
+        int menu_y = 50; // 24+26
         int menu_w = 80;
         int count = disk_get_count();
         int menu_h = count * 25;
@@ -1425,7 +1436,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
     // Handle dropdown menu clicks
     if (state->dropdown_menu_visible) {
         int dropdown_btn_x = win->w - 90;  // Window-relative
-        int menu_y = 58;  // Window-relative (offset_y + 34, where offset_y = 24)
+        int menu_y = 50;  // Window-relative (offset_y + 26, where offset_y = 24)
         
         // New File
         if (x >= dropdown_btn_x && x < dropdown_btn_x + DROPDOWN_MENU_WIDTH &&
@@ -1463,8 +1474,8 @@ static void explorer_handle_click(Window *win, int x, int y) {
     // x, y are already relative to window (0,0 is top-left of window content area)
     
     // Check Drive Button
-    int button_y = 28;
-    if (x >= 4 && x < 64 && y >= button_y && y < button_y + 30) {
+    int button_y = 27;
+    if (x >= 4 && x < 64 && y >= button_y && y < button_y + 22) {
         state->drive_menu_visible = !state->drive_menu_visible;
         state->dropdown_menu_visible = false; // Close other menu
         return;
@@ -1472,7 +1483,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
     
     // Check dropdown menu button
     if (x >= win->w - 90 && x < win->w - 55 &&
-        y >= button_y && y < button_y + 30) {
+        y >= button_y && y < button_y + 22) {
         // Dropdown menu button clicked
         dropdown_menu_toggle(win);
         state->drive_menu_visible = false; // Close other menu
@@ -1481,7 +1492,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
     
     // Check back button (right-aligned)
     if (x >= win->w - 40 && x < win->w - 10 &&
-        y >= button_y && y < button_y + 30) {
+        y >= button_y && y < button_y + 22) {
         // Back button clicked
         explorer_navigate_to(win, "..");
         return;
@@ -1490,14 +1501,14 @@ static void explorer_handle_click(Window *win, int x, int y) {
     // Check scroll buttons
     // Up: w-160
     if (x >= win->w - 160 && x < win->w - 130 &&
-        y >= button_y && y < button_y + 30) {
+        y >= button_y && y < button_y + 22) {
         if (state->explorer_scroll_row > 0) state->explorer_scroll_row--;
         return;
     }
     
     // Down: w-125
     if (x >= win->w - 125 && x < win->w - 95 &&
-        y >= button_y && y < button_y + 30) {
+        y >= button_y && y < button_y + 22) {
         int total_rows = (state->item_count + EXPLORER_COLS - 1) / EXPLORER_COLS;
         if (total_rows == 0) total_rows = 1;
         if (state->explorer_scroll_row < total_rows - (EXPLORER_ROWS - 1)) state->explorer_scroll_row++;
@@ -1505,7 +1516,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
     }
     
     // File items start at y=64 relative to window
-    int content_start_y = 64;
+    int content_start_y = 54;
     int offset_x = 4;
     
     for (int i = 0; i < state->item_count; i++) {
@@ -1676,7 +1687,7 @@ static void explorer_handle_key(Window *win, char c) {
 static void explorer_handle_right_click(Window *win, int x, int y) {
     ExplorerState *state = (ExplorerState*)win->data;
     // File items start at y=64 relative to window
-    int content_start_y = 64;
+    int content_start_y = 54;
     int offset_x = 4;
     
     for (int i = 0; i < state->item_count; i++) {
@@ -1840,9 +1851,9 @@ bool explorer_get_file_at(int screen_x, int screen_y, char *out_path, bool *is_d
         int rel_x = screen_x - win->x;
         int rel_y = screen_y - win->y;
         
-        if (rel_x < 4 || rel_x > win->w - 4 || rel_y < 64 || rel_y > win->h - 4) continue;
+        if (rel_x < 4 || rel_x > win->w - 4 || rel_y < 54 || rel_y > win->h - 4) continue;
         
-        int content_start_y = 64;
+        int content_start_y = 54;
         int offset_x = 4;
         
         for (int i = 0; i < state->item_count; i++) {

@@ -4,6 +4,7 @@
 #include "wm.h"
 #include "network.h"
 #include "cli_apps/cli_utils.h"
+#include "wallpaper.h"
 
 Window win_control_panel;
 
@@ -313,6 +314,41 @@ static void control_panel_paint_wallpaper(Window *win) {
     // Apply button (rounded)
     draw_rounded_rect_filled(button_x, button_y + 25, 70, 25, 6, COLOR_DARK_PANEL);
     draw_string(button_x + 18, button_y + 33, "Apply", COLOR_DARK_TEXT);
+    
+    // Wallpaper Images section
+    button_y += 60;
+    draw_string(offset_x, button_y, "Wallpapers:", COLOR_DARK_TEXT);
+    
+    button_y += 20;
+    
+    // Draw Moon thumbnail (pre-generated at init time)
+    uint32_t *moon_thumb = wallpaper_get_thumb(0);
+    draw_rounded_rect_filled(button_x, button_y, WALLPAPER_THUMB_W + 8, WALLPAPER_THUMB_H + 24, 6, COLOR_DARK_PANEL);
+    if (moon_thumb && wallpaper_thumb_valid(0)) {
+        for (int ty = 0; ty < WALLPAPER_THUMB_H; ty++) {
+            for (int tx = 0; tx < WALLPAPER_THUMB_W; tx++) {
+                put_pixel(button_x + 4 + tx, button_y + 4 + ty, moon_thumb[ty * WALLPAPER_THUMB_W + tx]);
+            }
+        }
+    } else {
+        draw_string(button_x + 20, button_y + 30, "Error", 0xFFFF4444);
+    }
+    draw_string(button_x + 30, button_y + WALLPAPER_THUMB_H + 8, "Moon", COLOR_DARK_TEXT);
+    
+    // Draw Mountain thumbnail
+    uint32_t *mtn_thumb = wallpaper_get_thumb(1);
+    int thumb2_x = button_x + WALLPAPER_THUMB_W + 20;
+    draw_rounded_rect_filled(thumb2_x, button_y, WALLPAPER_THUMB_W + 8, WALLPAPER_THUMB_H + 24, 6, COLOR_DARK_PANEL);
+    if (mtn_thumb && wallpaper_thumb_valid(1)) {
+        for (int ty = 0; ty < WALLPAPER_THUMB_H; ty++) {
+            for (int tx = 0; tx < WALLPAPER_THUMB_W; tx++) {
+                put_pixel(thumb2_x + 4 + tx, button_y + 4 + ty, mtn_thumb[ty * WALLPAPER_THUMB_W + tx]);
+            }
+        }
+    } else {
+        draw_string(thumb2_x + 20, button_y + 30, "Error", 0xFFFF4444);
+    }
+    draw_string(thumb2_x + 16, button_y + WALLPAPER_THUMB_H + 8, "Mountain", COLOR_DARK_TEXT);
 }
 
 static void draw_input_box(int x, int y, int width, const char *text, bool focused, int cursor_pos) {
@@ -673,6 +709,23 @@ static void control_panel_handle_click(Window *win, int x, int y) {
         if (x >= button_x && x < button_x + 70 && y >= button_y + 25 && y < button_y + 50) {
             graphics_set_bg_color(parse_rgb_separate(rgb_r, rgb_g, rgb_b));
             wm_refresh();
+            return;
+        }
+        
+        // Wallpaper image thumbnails section
+        button_y += 60;
+        button_y += 20;
+        
+        // Check Moon thumbnail click
+        if (x >= button_x && x < button_x + WALLPAPER_THUMB_W + 8 && y >= button_y && y < button_y + WALLPAPER_THUMB_H + 24) {
+            wallpaper_request_set(0);
+            return;
+        }
+        
+        // Check Mountain thumbnail click
+        int thumb2_x = button_x + WALLPAPER_THUMB_W + 20;
+        if (x >= thumb2_x && x < thumb2_x + WALLPAPER_THUMB_W + 8 && y >= button_y && y < button_y + WALLPAPER_THUMB_H + 24) {
+            wallpaper_request_set(1);
             return;
         }
     } else if (current_view == VIEW_NETWORK) {
@@ -1041,7 +1094,7 @@ void control_panel_init(void) {
     win_control_panel.x = 200;
     win_control_panel.y = 150;
     win_control_panel.w = 350;
-    win_control_panel.h = 320;
+    win_control_panel.h = 500;
     win_control_panel.visible = false;
     win_control_panel.focused = false;
     win_control_panel.z_index = 0;

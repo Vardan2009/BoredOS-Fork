@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "notepad.h"
+#include "viewer.h"
+#include "wallpaper.h"
 #include "control_panel.h"
 #include "about.h"
 #include "minesweeper.h"
@@ -933,6 +935,10 @@ void wm_paint(void) {
                 draw_document_icon(icon->x, icon->y, icon->name);
                 draw_string(icon->x + 31, icon->y + 2, "C", COLOR_APPLE_BLUE);
             }
+            else if (str_ends_with(icon->name, ".jpg") || str_ends_with(icon->name, ".JPG")) {
+                draw_document_icon(icon->x, icon->y, icon->name);
+                draw_string(icon->x + 27, icon->y + 2, "JPG", 0xFF44BB44);
+            }
             else draw_document_icon(icon->x, icon->y, icon->name);
         }
     }
@@ -1330,8 +1336,6 @@ void wm_handle_click(int x, int y) {
             // Reset window state on close
             if (topmost == &win_explorer) {
                 explorer_reset();
-            } else if (topmost == &win_notepad) {
-                notepad_reset();
             } else if (topmost == &win_control_panel) {
                 control_panel_reset();
             } else if (topmost == &win_paint) {
@@ -1572,7 +1576,6 @@ void wm_handle_right_click(int x, int y) {
             if (str_starts_with(start_menu_pending_app, "Files")) {
                 explorer_open_directory("/");
             } else if (str_starts_with(start_menu_pending_app, "Notepad")) {
-                notepad_reset();
                 wm_bring_to_front(&win_notepad);
             } else if (str_starts_with(start_menu_pending_app, "Editor")) {
                 wm_bring_to_front(&win_editor);
@@ -1607,7 +1610,7 @@ void wm_handle_right_click(int x, int y) {
                 if (icon->type == 2) { // App Shortcut
                     // Check name to launch app
                     if (str_ends_with(icon->name, "Notepad.shortcut")) {
-                        notepad_reset(); wm_bring_to_front(&win_notepad); handled = true;
+                        wm_bring_to_front(&win_notepad); handled = true;
                     } else if (str_ends_with(icon->name, "Calculator.shortcut")) {
                         wm_bring_to_front(&win_calculator); handled = true;
                     } else if (str_ends_with(icon->name, "Minesweeper.shortcut")) {
@@ -1666,6 +1669,8 @@ void wm_handle_right_click(int x, int y) {
                     } else if (str_ends_with(icon->name, ".md")) {
                         markdown_open_file(path);
                         wm_bring_to_front(&win_markdown);
+                    } else if (str_ends_with(icon->name, ".jpg") || str_ends_with(icon->name, ".JPG")) {
+                        viewer_open_file(path);
                     } else {
                         editor_open_file(path);
                         wm_bring_to_front(&win_editor);
@@ -2009,6 +2014,8 @@ void wm_init(void) {
     about_init();
     minesweeper_init();
     paint_init();
+    viewer_init();
+    wallpaper_init();
     
     refresh_desktop_icons();
     
@@ -2024,7 +2031,6 @@ void wm_init(void) {
     win_minesweeper.z_index = 8;
     win_paint.z_index = 9;
     
-    // Register windows in array
     all_windows[0] = &win_notepad;
     all_windows[1] = &win_cmd;
     all_windows[2] = &win_calculator;
@@ -2035,7 +2041,8 @@ void wm_init(void) {
     all_windows[7] = &win_about;
     all_windows[8] = &win_minesweeper;
     all_windows[9] = &win_paint;
-    window_count = 10;
+    all_windows[10] = &win_viewer;
+    window_count = 11;
     
     // Only show Explorer and Notepad on desktop (Explorer on top)
     win_explorer.visible = false;

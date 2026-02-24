@@ -11,6 +11,12 @@ static uint32_t g_bg_color = 0xFF696969;  // Dark gray background
 static uint32_t g_bg_pattern[PATTERN_SIZE * PATTERN_SIZE];
 static bool g_use_pattern = false;
 
+// Wallpaper image support
+static uint32_t *g_bg_image = NULL;
+static int g_bg_image_w = 0;
+static int g_bg_image_h = 0;
+static bool g_use_image = false;
+
 // Dirty rectangle tracking
 static DirtyRect g_dirty = {0, 0, 0, 0, false};
 
@@ -277,7 +283,24 @@ void draw_string(int x, int y, const char *s, uint32_t color) {
 void draw_desktop_background(void) {
     if (!g_fb) return;
     
-    if (g_use_pattern) {
+    if (g_use_image && g_bg_image) {
+        // Draw wallpaper image (stretch/scale to screen)
+        int x1 = 0, y1 = 0, x2 = g_fb->width, y2 = g_fb->height;
+        if (g_clip_enabled) {
+            x1 = g_clip_x; y1 = g_clip_y;
+            x2 = g_clip_x + g_clip_w; y2 = g_clip_y + g_clip_h;
+        }
+        for (int y = y1; y < y2; y++) {
+            int src_y = y * g_bg_image_h / (int)g_fb->height;
+            if (src_y >= g_bg_image_h) src_y = g_bg_image_h - 1;
+            uint32_t *row = &g_back_buffer[y * g_fb->width + x1];
+            for (int x = x1; x < x2; x++) {
+                int src_x = x * g_bg_image_w / (int)g_fb->width;
+                if (src_x >= g_bg_image_w) src_x = g_bg_image_w - 1;
+                *row++ = g_bg_image[src_y * g_bg_image_w + src_x];
+            }
+        }
+    } else if (g_use_pattern) {
         // Optimized tiled pattern: only draw within the clipping/dirty rect
         int x1 = 0, y1 = 0, x2 = g_fb->width, y2 = g_fb->height;
         if (g_clip_enabled) {
@@ -301,6 +324,7 @@ void draw_desktop_background(void) {
 void graphics_set_bg_color(uint32_t color) {
     g_bg_color = color;
     g_use_pattern = false;
+    g_use_image = false;
 }
 
 void graphics_set_bg_pattern(const uint32_t *pattern) {
@@ -311,6 +335,15 @@ void graphics_set_bg_pattern(const uint32_t *pattern) {
         g_bg_pattern[i] = pattern[i];
     }
     g_use_pattern = true;
+    g_use_image = false;
+}
+
+void graphics_set_bg_image(uint32_t *pixels, int w, int h) {
+    g_bg_image = pixels;
+    g_bg_image_w = w;
+    g_bg_image_h = h;
+    g_use_image = true;
+    g_use_pattern = false;
 }
 
 void draw_boredos_logo(int x, int y, int scale) {
