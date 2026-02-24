@@ -563,7 +563,6 @@ void draw_paint_icon(int x, int y, const char *label) {
     draw_icon_label(x, y, label);
 }
 
-// New macOS-style drawing functions
 static void draw_filled_circle(int cx, int cy, int r, uint32_t color);
 
 // Draw traffic light (close button - red)
@@ -579,14 +578,13 @@ void draw_squircle_icon(int x, int y, const char *label, uint32_t bg_color) {
     draw_icon_label(x, y + 60, label);
 }
 
-// macOS Files icon (folder style)
+//  Files icon 
 void draw_files_icon(int x, int y, const char *label) {
-    // Blue folder icon with macOS styling
     draw_rounded_rect_filled(x + 27, y + 6, 25, 15, 3, 0xFF4A90E2);  // Blue color
     draw_squircle_icon(x, y, label, 0xFF4A90E2);
 }
 
-// macOS Settings/Gear icon
+//  Settings/Gear icon
 void draw_settings_icon(int x, int y, const char *label) {
     // Gear icon with dark background
     draw_squircle_icon(x, y, label, 0xFF666666);
@@ -1027,16 +1025,16 @@ void wm_paint(void) {
         
         if (desktop_menu_target_icon != -1) {
             bool can_paste = explorer_clipboard_has_content();
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "Cut", COLOR_DARK_TEXT);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "Copy", COLOR_DARK_TEXT);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_DARK_TEXT : COLOR_DKGRAY);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "Cut", COLOR_WHITE);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "Copy", COLOR_WHITE);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_WHITE : COLOR_DKGRAY);
             draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 3, "Delete", COLOR_TRAFFIC_RED);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 4, "Rename", COLOR_DARK_TEXT);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 4, "Rename", COLOR_WHITE);
         } else {
             bool can_paste = explorer_clipboard_has_content();
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "New File", COLOR_DARK_TEXT);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "New Folder", COLOR_DARK_TEXT);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_DARK_TEXT : COLOR_DKGRAY);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "New File", COLOR_WHITE);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "New Folder", COLOR_WHITE);
+            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_WHITE : COLOR_DKGRAY);
         }
     }
 
@@ -1053,17 +1051,17 @@ void wm_paint(void) {
         if (desktop_dialog_state == 1) { title = "Create New File"; btn_text = "Create"; }
         else if (desktop_dialog_state == 2) { title = "Create New Folder"; btn_text = "Create"; }
         
-        draw_string(dlg_x + 10, dlg_y + 10, title, COLOR_DARK_TEXT);
+        draw_string(dlg_x + 10, dlg_y + 10, title, COLOR_WHITE);
         draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
-        draw_string(dlg_x + 15, dlg_y + 40, desktop_dialog_input, COLOR_DARK_TEXT);
+        draw_string(dlg_x + 15, dlg_y + 40, desktop_dialog_input, COLOR_WHITE);
         // Cursor
-        draw_rect(dlg_x + 15 + desktop_dialog_cursor * 8, dlg_y + 39, 2, 12, COLOR_DARK_TEXT);
+        draw_rect(dlg_x + 15 + desktop_dialog_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
         
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 4, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 70, dlg_y + 72, btn_text, COLOR_DARK_TEXT);
+        draw_string(dlg_x + 70, dlg_y + 72, btn_text, COLOR_WHITE);
         
         draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 4, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_DARK_TEXT);
+        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
     }
     
     // Message Box (dark mode)

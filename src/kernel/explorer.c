@@ -599,9 +599,9 @@ static int explorer_build_context_menu(Window *win, ExplorerContextItem *items_o
             return 0;
         }
         // Dead space
-        items_out[count++] = (ExplorerContextItem){"New File", 101, true, COLOR_BLACK};
-        items_out[count++] = (ExplorerContextItem){"New Folder", 102, true, COLOR_BLACK};
-        items_out[count++] = (ExplorerContextItem){"Paste", 103, explorer_clipboard_has_content(), explorer_clipboard_has_content() ? COLOR_BLACK : COLOR_DKGRAY};
+        items_out[count++] = (ExplorerContextItem){"New File", 101, true, COLOR_WHITE};
+        items_out[count++] = (ExplorerContextItem){"New Folder", 102, true, COLOR_WHITE};
+        items_out[count++] = (ExplorerContextItem){"Paste", 103, explorer_clipboard_has_content(), explorer_clipboard_has_content() ? COLOR_WHITE : COLOR_DKGRAY};
     } else {
         if (explorer_str_starts_with(state->current_path, "/RecycleBin")) {
             items_out[count++] = (ExplorerContextItem){"Restore", ACTION_RESTORE, true, COLOR_BLACK};
@@ -612,28 +612,28 @@ static int explorer_build_context_menu(Window *win, ExplorerContextItem *items_o
         bool is_dir = state->items[state->file_context_menu_item].is_directory;
         
         if (!is_dir) {
-             items_out[count++] = (ExplorerContextItem){"Open", 100, true, COLOR_BLACK};
-             items_out[count++] = (ExplorerContextItem){"Open w/ textedit", 110, true, COLOR_BLACK};
+             items_out[count++] = (ExplorerContextItem){"Open", 100, true, COLOR_WHITE};
+             items_out[count++] = (ExplorerContextItem){"Open w/ textedit", 110, true, COLOR_WHITE};
              if (explorer_is_markdown_file(state->items[state->file_context_menu_item].name)) {
-                 items_out[count++] = (ExplorerContextItem){"Open w/ Markdown", 109, true, COLOR_BLACK};
+        items_out[count++] = (ExplorerContextItem){"Open w/ Markdown", 109, true, COLOR_WHITE};
              }
         }
         
-        items_out[count++] = (ExplorerContextItem){"Cut", 104, true, COLOR_BLACK};
-        items_out[count++] = (ExplorerContextItem){"Copy", 105, true, COLOR_BLACK};
+        items_out[count++] = (ExplorerContextItem){"Cut", 104, true, COLOR_WHITE};
+        items_out[count++] = (ExplorerContextItem){"Copy", 105, true, COLOR_WHITE};
         
         if (is_dir) {
-            items_out[count++] = (ExplorerContextItem){"Paste", 103, explorer_clipboard_has_content(), explorer_clipboard_has_content() ? COLOR_BLACK : COLOR_DKGRAY};
-            items_out[count++] = (ExplorerContextItem){"Open in new window", 112, true, COLOR_BLACK};
+            items_out[count++] = (ExplorerContextItem){"Paste", 103, explorer_clipboard_has_content(), explorer_clipboard_has_content() ? COLOR_WHITE : COLOR_DKGRAY};
+            items_out[count++] = (ExplorerContextItem){"Open in new window", 112, true, COLOR_WHITE};
         }
         
         items_out[count++] = (ExplorerContextItem){"Delete", 106, true, COLOR_RED};
-        items_out[count++] = (ExplorerContextItem){"Rename", 111, true, COLOR_BLACK};
-        items_out[count++] = (ExplorerContextItem){"Create Shortcut", ACTION_CREATE_SHORTCUT, true, COLOR_BLACK};
+        items_out[count++] = (ExplorerContextItem){"Rename", 111, true, COLOR_WHITE};
+        items_out[count++] = (ExplorerContextItem){"Create Shortcut", ACTION_CREATE_SHORTCUT, true, COLOR_WHITE};
         
         if (is_dir) {
-            items_out[count++] = (ExplorerContextItem){"New File", 101, true, COLOR_BLACK};
-            items_out[count++] = (ExplorerContextItem){"New Folder", 102, true, COLOR_BLACK};
+            items_out[count++] = (ExplorerContextItem){"New File", 101, true, COLOR_WHITE};
+            items_out[count++] = (ExplorerContextItem){"New Folder", 102, true, COLOR_WHITE};
             
             // Only show color options if it's NOT the Recycle Bin folder (i love hardcoding stuff cause it's lowk easier (cry about it))
             if (explorer_strcmp(state->items[state->file_context_menu_item].name, "RecycleBin") != 0) {
@@ -1079,12 +1079,11 @@ static void explorer_paint(Window *win) {
         int menu_y = offset_y + 34;
         
         // Draw menu background
-        draw_rect(menu_x, menu_y, DROPDOWN_MENU_WIDTH, dropdown_menu_item_height * DROPDOWN_MENU_ITEMS, COLOR_LTGRAY);
-        draw_bevel_rect(menu_x, menu_y, DROPDOWN_MENU_WIDTH, dropdown_menu_item_height * DROPDOWN_MENU_ITEMS, true);
+        draw_rounded_rect_filled(menu_x, menu_y, DROPDOWN_MENU_WIDTH, dropdown_menu_item_height * DROPDOWN_MENU_ITEMS, 6, COLOR_DARK_PANEL);
         
         // Draw menu items
-        draw_string(menu_x + 8, menu_y + 5, "New File", COLOR_BLACK);
-        draw_string(menu_x + 8, menu_y + dropdown_menu_item_height + 5, "New Folder", COLOR_BLACK);
+        draw_string(menu_x + 8, menu_y + 5, "New File", COLOR_WHITE);
+        draw_string(menu_x + 8, menu_y + dropdown_menu_item_height + 5, "New Folder", COLOR_WHITE);
         draw_string(menu_x + 8, menu_y + dropdown_menu_item_height * 2 + 5, "Delete", COLOR_RED);
     }
 
@@ -1093,40 +1092,42 @@ static void explorer_paint(Window *win) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
         
-        // Dialog background
-        draw_rect(dlg_x - 5, dlg_y - 5, 310, 120, COLOR_LTGRAY);
-        draw_bevel_rect(dlg_x, dlg_y, 300, 110, true);
+        // Dialog background (modern dark, rounded)
+        draw_rounded_rect_filled(dlg_x, dlg_y, 300, 110, 8, COLOR_DARK_PANEL);
         
         // Title
-        draw_string(dlg_x + 10, dlg_y + 10, "Create New File", COLOR_BLACK);
+        draw_string(dlg_x + 10, dlg_y + 10, "Create New File", COLOR_WHITE);
         
-        // Input field
-        draw_bevel_rect(dlg_x + 10, dlg_y + 35, 280, 20, false);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_BLACK);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_BLACK);
+        // Input field (rounded dark)
+        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
+        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
+        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
         
-        // Buttons
-        draw_button(dlg_x + 50, dlg_y + 65, 80, 25, "Create", false);
-        draw_button(dlg_x + 170, dlg_y + 65, 80, 25, "Cancel", false);
+        // Buttons (rounded)
+        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 70, dlg_y + 72, "Create", COLOR_WHITE);
+        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
     } else if (state->dialog_state == DIALOG_CREATE_FOLDER) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
         
-        // Dialog background
-        draw_rect(dlg_x - 5, dlg_y - 5, 310, 120, COLOR_LTGRAY);
-        draw_bevel_rect(dlg_x, dlg_y, 300, 110, true);
+        // Dialog background (modern dark, rounded)
+        draw_rounded_rect_filled(dlg_x, dlg_y, 300, 110, 8, COLOR_DARK_PANEL);
         
         // Title
-        draw_string(dlg_x + 10, dlg_y + 10, "Create New Folder", COLOR_BLACK);
+        draw_string(dlg_x + 10, dlg_y + 10, "Create New Folder", COLOR_WHITE);
         
-        // Input field
-        draw_bevel_rect(dlg_x + 10, dlg_y + 35, 280, 20, false);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_BLACK);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_BLACK);
+        // Input field (rounded dark)
+        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
+        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
+        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
         
-        // Buttons
-        draw_button(dlg_x + 50, dlg_y + 65, 80, 25, "Create", false);
-        draw_button(dlg_x + 170, dlg_y + 65, 80, 25, "Cancel", false);
+        // Buttons (rounded)
+        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 70, dlg_y + 72, "Create", COLOR_WHITE);
+        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
     } else if (state->dialog_state == DIALOG_DELETE_CONFIRM) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1221,16 +1222,16 @@ static void explorer_paint(Window *win) {
         int dlg_y = win->y + win->h / 2 - 60;
         
         draw_rect(dlg_x - 5, dlg_y - 5, 310, 120, COLOR_LTGRAY);
-        draw_bevel_rect(dlg_x, dlg_y, 300, 110, true);
-        
-        draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_BLACK);
-        
-        draw_bevel_rect(dlg_x + 10, dlg_y + 35, 280, 20, false);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_BLACK);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_BLACK);
-        
-        draw_button(dlg_x + 50, dlg_y + 65, 80, 25, "Rename", false);
-        draw_button(dlg_x + 170, dlg_y + 65, 80, 25, "Cancel", false);
+        // Rename dialog (modern)
+        draw_rounded_rect_filled(dlg_x, dlg_y, 300, 110, 8, COLOR_DARK_PANEL);
+        draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_WHITE);
+        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
+        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
+        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
+        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 68, dlg_y + 72, "Rename", COLOR_WHITE);
+        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
+        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
     }
     
     // Draw context menu if visible
@@ -1248,17 +1249,17 @@ static void explorer_paint(Window *win) {
             else menu_height += CONTEXT_MENU_ITEM_HEIGHT;
         }
         
-        // Draw menu background
-        draw_rect(menu_screen_x, menu_screen_y, FILE_CONTEXT_MENU_WIDTH, menu_height, COLOR_LTGRAY);
-        draw_bevel_rect(menu_screen_x, menu_screen_y, FILE_CONTEXT_MENU_WIDTH, menu_height, true);
+        // Draw menu background (modern dark, rounded)
+        draw_rounded_rect_filled(menu_screen_x, menu_screen_y, FILE_CONTEXT_MENU_WIDTH, menu_height, 8, COLOR_DARK_PANEL);
         
         int y_offset = 0;
         for (int i = 0; i < count; i++) {
             if (menu_items[i].action_id == 0) {
-                draw_rect(menu_screen_x + 2, menu_screen_y + y_offset + 2, FILE_CONTEXT_MENU_WIDTH - 4, 1, COLOR_DKGRAY);
+                // Separator (subtle)
+                draw_rect(menu_screen_x + 8, menu_screen_y + y_offset + 3, FILE_CONTEXT_MENU_WIDTH - 16, 1, COLOR_DARK_BORDER);
                 y_offset += 5;
             } else {
-                draw_string(menu_screen_x + 5, menu_screen_y + y_offset + 5, menu_items[i].label, menu_items[i].color);
+                draw_string(menu_screen_x + 10, menu_screen_y + y_offset + 6, menu_items[i].label, menu_items[i].color);
                 y_offset += CONTEXT_MENU_ITEM_HEIGHT;
             }
         }
