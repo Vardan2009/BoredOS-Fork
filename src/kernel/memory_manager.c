@@ -44,11 +44,22 @@ static uint32_t get_timestamp(void) {
     return tick++;
 }
 
-// Find free space in memory pool
-static void* find_free_space(size_t size) {
+// Find free space in memory pool with alignment
+static void* find_free_space_aligned(size_t size, size_t alignment) {
     size_t offset = 0;
     
+    // Ensure 8-byte minimum alignment for regular malloc if 0 is passed
+    if (alignment == 0) alignment = 8;
+    
     while (offset + size <= memory_pool_size) {
+        // Align offset
+        if ((uint64_t)((uint8_t*)memory_pool + offset) % alignment != 0) {
+            size_t diff = alignment - ((uint64_t)((uint8_t*)memory_pool + offset) % alignment);
+            offset += diff;
+        }
+        
+        if (offset + size > memory_pool_size) break;
+        
         bool space_free = true;
         
         // Check if this range is free
@@ -63,12 +74,8 @@ static void* find_free_space(size_t size) {
             // Check for overlap
             if (check_start < block_end && check_end > block_start) {
                 space_free = false;
-                
-                // Skip past this block
-                size_t block_offset = (uintptr_t)block_end - (uintptr_t)memory_pool;
-                if (block_offset > offset) {
-                    offset = block_offset;
-                }
+                // Move offset past this block
+                offset = (size_t)((uint8_t *)block_end - (uint8_t *)memory_pool);
                 break;
             }
         }
@@ -79,6 +86,10 @@ static void* find_free_space(size_t size) {
     }
     
     return NULL;
+}
+
+static void* find_free_space(size_t size) {
+    return find_free_space_aligned(size, 8);
 }
 
 // Calculate fragmentation
@@ -143,7 +154,7 @@ void memory_manager_init(void) {
     memory_manager_init_with_size(DEFAULT_POOL_SIZE);
 }
 
-void* kmalloc(size_t size) {
+void* kmalloc_aligned(size_t size, size_t alignment) {
     if (!initialized) {
         memory_manager_init();
     }
@@ -162,8 +173,8 @@ void* kmalloc(size_t size) {
         return NULL;
     }
     
-    // Find free space
-    void *ptr = find_free_space(size);
+    // Find free space with alignment
+    void *ptr = find_free_space_aligned(size, alignment);
     if (ptr == NULL) {
         asm volatile("push %0; popfq" : : "r"(rflags));
         return NULL;
@@ -194,6 +205,10 @@ void* kmalloc(size_t size) {
     
     asm volatile("push %0; popfq" : : "r"(rflags));
     return ptr;
+}
+
+void* kmalloc(size_t size) {
+    return kmalloc_aligned(size, 8);
 }
 
 void kfree(void *ptr) {

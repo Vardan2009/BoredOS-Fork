@@ -33,9 +33,6 @@ void rtc_get_datetime(int *year, int *month, int *day, int *hour, int *minute, i
     *month = get_rtc_register(0x08);
     *year = get_rtc_register(0x09);
     
-    // Note: Century register is not standard, but often 0x32 if ACPI table says so.
-    // For now, assume 20xx
-    
     do {
         last_second = *second;
         last_minute = *minute;

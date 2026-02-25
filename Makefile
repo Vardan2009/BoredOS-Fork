@@ -70,6 +70,16 @@ $(BUILD_DIR)/cli_apps/%.o: $(SRC_DIR)/cli_apps/%.c | $(BUILD_DIR) limine-setup
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.asm | $(BUILD_DIR)
 	$(NASM) $(NASMFLAGS) $< -o $@
 
+# Assemble test files specifically if they get missed
+$(BUILD_DIR)/test_syscall.o: $(SRC_DIR)/test_syscall.asm | $(BUILD_DIR)
+	$(NASM) $(NASMFLAGS) $< -o $@
+
+$(BUILD_DIR)/user_test.o: $(SRC_DIR)/user_test.asm | $(BUILD_DIR)
+	$(NASM) $(NASMFLAGS) $< -o $@
+
+$(BUILD_DIR)/process_asm.o: $(SRC_DIR)/process_asm.asm | $(BUILD_DIR)
+	$(NASM) $(NASMFLAGS) $< -o $@
+
 # Link Kernel
 $(KERNEL_ELF): $(OBJ_FILES)
 	$(LD) $(LDFLAGS) -o $@ $(OBJ_FILES)
@@ -116,8 +126,9 @@ clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_IMAGE)
 
 run: $(ISO_IMAGE)
-	qemu-system-x86_64 -m 2G -serial stdio -cdrom $(ISO_IMAGE) -boot d \
+	qemu-system-x86_64 -m 2G -serial stdio -cdrom $< -boot d \
 		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
 		-netdev user,id=net0,hostfwd=udp::12345-:12345 -device e1000,netdev=net0 \
 		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
-		-drive file=disk.img,format=raw
+		-drive file=disk.img,format=raw \
+		-no-reboot -d int -D qemu-debug.log

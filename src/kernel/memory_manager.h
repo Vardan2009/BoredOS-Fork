@@ -38,6 +38,7 @@ void memory_manager_init_with_size(size_t pool_size);
 
 // Allocation/Deallocation
 void* kmalloc(size_t size);
+void* kmalloc_aligned(size_t size, size_t alignment);
 void kfree(void *ptr);
 void* krealloc(void *ptr, size_t new_size);
 

@@ -1,6 +1,34 @@
 #include "idt.h"
 #include "io.h"
 
+extern void serial_write(const char *str);
+
+// Simple hex printer for debugging exceptions
+static void print_hex(uint64_t val) {
+    const char* digits = "0123456789ABCDEF";
+    char buf[17];
+    buf[16] = '\0';
+    for (int i = 15; i >= 0; i--) {
+        buf[i] = digits[val & 0xF];
+        val >>= 4;
+    }
+    serial_write("0x");
+    serial_write(buf);
+}
+
+void exception_handler_c(uint64_t vector, uint64_t err_code, uint64_t rip, uint64_t cr2) {
+    serial_write("\n*** EXCEPTION ***\nVector: ");
+    print_hex(vector);
+    serial_write("\nError Code: ");
+    print_hex(err_code);
+    serial_write("\nRIP: ");
+    print_hex(rip);
+    serial_write("\nCR2: ");
+    print_hex(cr2);
+    serial_write("\nCPU HALTED.\n");
+    while(1) { asm volatile("cli; hlt"); }
+}
+
 #define IDT_ENTRIES 256
 
 struct idt_entry {
@@ -89,11 +117,18 @@ void idt_register_interrupts(void) {
     idt_set_gate(32, isr0_wrapper, cs, 0x8E);  // Timer (IRQ 0)
     idt_set_gate(33, isr1_wrapper, cs, 0x8E);  // Keyboard (IRQ 1)
     idt_set_gate(44, isr12_wrapper, cs, 0x8E); // Mouse (IRQ 12)
+
+    // Exceptions
+    extern void isr8_wrapper(void);
+    extern void isr14_wrapper(void);
+    idt_set_gate(8, isr8_wrapper, cs, 0x8E);  // Double Fault
+    idt_set_gate(14, isr14_wrapper, cs, 0x8E); // Page Fault
 }
 
 void idt_load(void) {
     idtr.base = (uint64_t)&idt;
     idtr.limit = sizeof(struct idt_entry) * IDT_ENTRIES - 1;
     asm volatile ("lidt %0" : : "m"(idtr));
-    asm volatile ("sti"); 
+    // Do not sti here! The OS must decide when to enable interrupts
+    // after all subsystems (WM, PS/2) are initialized!
 }
