@@ -4,13 +4,13 @@
 #include "io.h"
 #include "rtc.h"
 #include "notepad.h"
-#include "calculator.h"
 #include "fat32.h"
 #include "disk.h"
 #include "cli_apps/cli_apps.h"
 #include "licensewr.h"
 #include <stddef.h>
 #include "memory_manager.h"
+#include "process.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -60,6 +60,9 @@ static CmdMode current_mode = MODE_SHELL;
 static char pager_wrapped_lines[2000][CMD_COLS + 1]; 
 static int pager_total_lines = 0;
 static int pager_top_line = 0;
+
+// Process Execution State
+bool cmd_is_waiting_for_process = false;
 
 // Boot time for uptime
 int boot_time_init = 0;
@@ -147,6 +150,13 @@ static void cmd_history_add(const char *cmd) {
 }
 
 static void cmd_print_prompt(void) {
+    // Clear the current line to prevent old output from corrupting the new command buffer
+    for (int i = 0; i < CMD_COLS; i++) {
+        screen_buffer[cursor_row][i].c = 0;
+        screen_buffer[cursor_row][i].color = current_color;
+    }
+    cursor_col = 0;
+
     char buf[5];
     buf[0] = cmd_state ? cmd_state->current_drive : 'A';
     buf[1] = ':';
@@ -235,6 +245,10 @@ void cmd_putchar(char c) {
         cmd_scroll_up();
         cursor_row = CMD_ROWS - 1;
     }
+    
+    // Trigger repaint so output from syscalls is immediately visible
+    wm_mark_dirty(win_cmd.x, win_cmd.y, win_cmd.w, win_cmd.h);
+    wm_refresh();
 }
 
 // Public for CLI apps to use
@@ -263,6 +277,23 @@ void cmd_write_int(int n) {
     char buf[32];
     itoa(n, buf);
     cmd_write(buf);
+}
+
+void cmd_write_hex(uint64_t n) {
+    const char* digits = "0123456789ABCDEF";
+    char buf[19];
+    buf[0] = '0';
+    buf[1] = 'x';
+    buf[18] = '\0';
+    for (int i = 17; i >= 2; i--) {
+        buf[i] = digits[n & 0xF];
+        n >>= 4;
+    }
+    cmd_write(buf);
+}
+
+int cmd_get_cursor_col(void) {
+    return cursor_col;
 }
 
 // --- Pager Logic ---
@@ -524,7 +555,6 @@ static void internal_cmd_txtedit(char *args) {
     extern Window win_explorer;
     extern Window win_cmd;
     extern Window win_notepad;
-    extern Window win_calculator;
     
     win_editor.visible = true;
     win_editor.focused = true;
@@ -534,7 +564,6 @@ static void internal_cmd_txtedit(char *args) {
     if (win_explorer.z_index > max_z) max_z = win_explorer.z_index;
     if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
     if (win_notepad.z_index > max_z) max_z = win_notepad.z_index;
-    if (win_calculator.z_index > max_z) max_z = win_calculator.z_index;
     win_editor.z_index = max_z + 1;
     
     cmd_write("Opening: ");
@@ -580,7 +609,59 @@ static void internal_cmd_ls(char *args) {
     kfree(files);
 }
 
-// --- Commands (now delegated to cli_apps/) ---
+
+void cmd_exec_elf(char *args) {
+    if (!args || args[0] == '\0') {
+        cmd_write("Usage: exec <filename>\n");
+        return;
+    }
+
+    char full_exec_path[512] = {0};
+    int i = 0;
+    
+    if (args[0] && args[1] != ':') {
+        if (cmd_state) {
+            full_exec_path[i++] = cmd_state->current_drive;
+            full_exec_path[i++] = ':';
+            const char *dir = cmd_state->current_dir;
+            while (*dir && i < 509) {
+                full_exec_path[i++] = *dir++;
+            }
+            if (i > 2 && full_exec_path[i-1] != '/') {
+                full_exec_path[i++] = '/';
+            }
+        }
+        const char *p = args;
+        while (*p && i < 509) {
+            full_exec_path[i++] = *p++;
+        }
+        full_exec_path[i] = 0;
+    } else {
+        // Just copy what they provided
+        const char *p = args;
+        while (*p && i < 511) {
+            full_exec_path[i++] = *p++;
+        }
+        full_exec_path[i] = 0;
+    }
+    
+    cmd_is_waiting_for_process = true;
+    process_create_elf(full_exec_path);
+}
+
+// Public API for syscall exit 
+void cmd_process_finished(void) {
+    if (cmd_is_waiting_for_process) {
+        cmd_is_waiting_for_process = false;
+
+        extern int cursor_col;
+        void cmd_putchar(char c);
+        if (cursor_col > 0) {
+            cmd_putchar('\n');
+        }
+        cmd_print_prompt();
+    }
+}
 
 // Command dispatch table
 typedef struct {
@@ -589,6 +670,8 @@ typedef struct {
 } CommandEntry;
 
 static const CommandEntry commands[] = {
+    {"EXEC", cmd_exec_elf},
+    {"exec", cmd_exec_elf},
     {"HELP", cli_cmd_help},
     {"help", cli_cmd_help},
     {"DATE", cli_cmd_date},
@@ -1060,44 +1143,66 @@ static void cmd_exec_single(char *cmd) {
         }
     }
 
-    // Check for executable in /Apps/
-    char app_path[256];
-    int app_idx = 0;
+    // Check for executable in Current Directory or A:/bin/
+    char search_path[512];
     
-    // Add drive letter if on different drive
-    if (cmd_state && cmd_state->current_drive != 'A') {
-        app_path[app_idx++] = cmd_state->current_drive;
-        app_path[app_idx++] = ':';
-    }
-    
-    const char *prefix = "/Apps/";
-    while (*prefix) app_path[app_idx++] = *prefix++;
-    char *c = cmd;
-    while (*c && app_idx < 255) app_path[app_idx++] = *c++;
-    app_path[app_idx] = 0;
-
-    FAT32_FileHandle *app_fh = fat32_open(app_path, "r");
-    if (app_fh) {
-        uint8_t *app_buffer = (uint8_t*)kmalloc(VM_MEMORY_SIZE);
-        if (app_buffer) {
-            int size = fat32_read(app_fh, app_buffer, VM_MEMORY_SIZE);
-            fat32_close(app_fh);
-            
-            if (size > 0) {
-                int res = vm_exec(app_buffer, size);
-                if (res != 0) {
-                     cmd_write("Execution failed (invalid format or runtime error).\n");
-                }
-            } else {
-                cmd_write("Error: Empty file.\n");
-            }
-            kfree(app_buffer);
-        } else {
-            fat32_close(app_fh);
-            cmd_write("Error: Out of memory.\n");
+    // Check if the command already ends in .elf (case insensitive)
+    bool has_elf_ext = false;
+    int cmd_len = cmd_strlen(cmd);
+    if (cmd_len > 4) {
+        const char *ext = cmd + cmd_len - 4;
+        if ((ext[0] == '.' && (ext[1] == 'e' || ext[1] == 'E') && 
+            (ext[2] == 'l' || ext[2] == 'L') && (ext[3] == 'f' || ext[3] == 'F'))) {
+            has_elf_ext = true;
         }
-        return;
     }
+    
+    // 1. Try Current Directory + .elf
+    if (cmd_state) {
+        int idx = 0;
+        search_path[idx++] = cmd_state->current_drive;
+        search_path[idx++] = ':';
+        const char *dir = cmd_state->current_dir;
+        while (*dir && idx < 500) search_path[idx++] = *dir++;
+        if (idx > 2 && search_path[idx-1] != '/') search_path[idx++] = '/';
+        const char *c = cmd;
+        while (*c && idx < 500) search_path[idx++] = *c++;
+        if (!has_elf_ext) {
+            search_path[idx++] = '.'; search_path[idx++] = 'e'; search_path[idx++] = 'l'; search_path[idx++] = 'f';
+        }
+        search_path[idx] = 0;
+        
+        FAT32_FileHandle *fh = fat32_open(search_path, "r");
+        if (fh) {
+            fat32_close(fh);
+            cmd_is_waiting_for_process = true;
+            process_create_elf(search_path);
+            return;
+        }
+    }
+    
+    // 2. Try A:/bin/ + .elf
+    {
+        int idx = 0;
+        const char *bin_prefix = "A:/bin/";
+        while (*bin_prefix) search_path[idx++] = *bin_prefix++;
+        const char *c = cmd;
+        while (*c && idx < 500) search_path[idx++] = *c++;
+        if (!has_elf_ext) {
+            search_path[idx++] = '.'; search_path[idx++] = 'e'; search_path[idx++] = 'l'; search_path[idx++] = 'f';
+        }
+        search_path[idx] = 0;
+        
+        FAT32_FileHandle *fh = fat32_open(search_path, "r");
+        if (fh) {
+            fat32_close(fh);
+            cmd_is_waiting_for_process = true;
+            process_create_elf(search_path);
+            return;
+        }
+    }
+
+
 
     cmd_write("Unknown command: ");
     cmd_write(cmd);
@@ -1402,7 +1507,9 @@ static void cmd_key(Window *target, char c) {
          
          cmd_exec(cmd_buf);
          
-         cmd_print_prompt();
+         if (!cmd_is_waiting_for_process) {
+             cmd_print_prompt();
+         }
     } else if (c == 17) { // UP
         if (history_len > 0) {
             if (history_pos == -1) {
@@ -1476,6 +1583,8 @@ static void create_test_files(void) {
     if (!fat32_exists("Apps")) fat32_mkdir("Apps");
     if (!fat32_exists("Desktop")) fat32_mkdir("Desktop");
     if (!fat32_exists("RecycleBin")) fat32_mkdir("RecycleBin");
+    if (!fat32_exists("bin")) fat32_mkdir("bin");
+
     
   
     // Always try to write README to ensure content exists
@@ -1676,7 +1785,6 @@ static void create_test_files(void) {
 
 
 void cmd_init(void) {
-    fat32_init(); // Init FAT32 filesystem
     create_test_files();
 
     win_cmd.title = "Command Prompt";

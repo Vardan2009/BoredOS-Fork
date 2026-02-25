@@ -2,7 +2,7 @@
 #include "graphics.h"
 #include "io.h"
 #include "cmd.h"
-#include "calculator.h"
+#include "process.h"
 #include "cli_apps/cli_utils.h"
 #include "explorer.h"
 #include "editor.h"
@@ -462,6 +462,40 @@ void draw_document_icon(int x, int y, const char *label) {
     draw_rect(14, 33, 14, 2, 0xFFBBBBBB);
     
     graphics_set_render_target(NULL, 0, 0);
+    int dx = x + 24, dy = y + 12;
+    for (int ty = 0; ty < 32; ty++) {
+        for (int tx = 0; tx < 32; tx++) {
+            int src_x = tx * 48 / 32;
+            int src_y = ty * 48 / 32;
+            uint32_t c1 = icon_buf[src_y * 48 + src_x];
+            if (c1 != 0xFFFF00FF) put_pixel(dx + tx, dy + ty, c1);
+        }
+    }
+    
+    draw_icon_label(x, y, label);
+}
+
+void draw_elf_icon(int x, int y, const char *label) {
+    uint32_t icon_buf[48 * 48];
+    for (int i = 0; i < 48 * 48; i++) icon_buf[i] = 0xFFFF00FF;
+    graphics_set_render_target(icon_buf, 48, 48);
+    
+    // Grey squircle (macOS detailed style)
+    draw_rounded_rect_filled(2, 2, 44, 44, 12, 0xFF353535); // Subtle shadow border
+    draw_rounded_rect_filled(4, 4, 40, 40, 10, 0xFF4A4A4A); // Main grey body
+    
+    // Glossy top highlight
+    draw_rect(10, 5, 28, 1, 0xFF5A5A5A);
+    
+    // Green "exec" text (fixed font 8x12)
+    draw_string(8, 12, "exec", 0xFF00FF00);
+    
+    // Minor details to look "premium"
+    draw_rect(10, 28, 28, 1, 0xFF3D3D3D);
+    draw_rect(10, 34, 20, 1, 0xFF3D3D3D);
+    
+    graphics_set_render_target(NULL, 0, 0);
+    
     int dx = x + 24, dy = y + 12;
     for (int ty = 0; ty < 32; ty++) {
         for (int tx = 0; tx < 32; tx++) {
@@ -967,6 +1001,12 @@ void draw_window(Window *win) {
     draw_rounded_rect_filled(win->x, win->y + 20, win->w, win->h - 20, 8, COLOR_DARK_BG);
     draw_rect(win->x, win->y + 20, win->w, 8, COLOR_DARK_BG);
     
+    if (win->comp_pixels) {
+        graphics_blit_buffer(win->comp_pixels, win->x, win->y, win->w, win->h);
+    } else if (win->pixels) {
+        graphics_blit_buffer(win->pixels, win->x, win->y, win->w, win->h);
+    }
+    
     if (win->paint) {
         win->paint(win);
     }
@@ -1101,7 +1141,8 @@ void wm_paint(void) {
             else if (str_starts_with(icon->name, "Paint")) draw_paint_icon(icon->x, icon->y, label);
             else draw_icon(icon->x, icon->y, label);
         } else {
-            if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
+            if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
+            else if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
             else if (str_ends_with(icon->name, ".jpg") || str_ends_with(icon->name, ".JPG")) {
                 draw_image_icon(icon->x, icon->y, icon->name);
                 draw_icon_label(icon->x, icon->y, icon->name);
@@ -1299,6 +1340,41 @@ void wm_bring_to_front(Window *win) {
 void wm_add_window(Window *win) {
     if (window_count < 32) {
         all_windows[window_count++] = win;
+        wm_bring_to_front(win); // Ensure newly added windows are on top
+    }
+}
+
+void wm_remove_window(Window *win) {
+    if (!win) return;
+    
+    int index = -1;
+    for (int i = 0; i < window_count; i++) {
+        if (all_windows[i] == win) {
+            index = i;
+            break;
+        }
+    }
+    
+    if (index != -1) {
+        // Shift remaining windows
+        for (int i = index; i < window_count - 1; i++) {
+            all_windows[i] = all_windows[i + 1];
+        }
+        window_count--;
+        
+        // Free resources
+        if (win->pixels) kfree(win->pixels);
+        if (win->comp_pixels) kfree(win->comp_pixels);
+        // If the title was allocated in syscall.c, we should free it, 
+        // but currently we don't know for sure if it was kmalloc'd or a literal.
+        // In syscall.c it is kmalloc'd. Let's assume we should free it if it's not a known literal.
+        // Safer to just free it since userland windows always have kmalloc'd titles.
+        if (win->title && win->handle_close) { // Heuristic: user windows have handle_close set in syscall.c
+            kfree(win->title);
+        }
+        
+        kfree(win);
+        force_redraw = true;
     }
 }
 
@@ -1499,7 +1575,12 @@ void wm_handle_click(int x, int y) {
         
         // Check traffic light close button (now at top-left)
         if (rect_contains(topmost->x + 8, topmost->y + 2, 12, 12, x, y)) {
-            topmost->visible = false;
+            if (topmost->handle_close) {
+                topmost->handle_close(topmost);
+            } else {
+                topmost->visible = false;
+            }
+            
             // Reset window state on close
             if (topmost == &win_explorer) {
                 explorer_reset();
@@ -1749,7 +1830,7 @@ void wm_handle_right_click(int x, int y) {
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
                 cmd_reset(); wm_bring_to_front(&win_cmd);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
-                wm_bring_to_front(&win_calculator);
+                process_create_elf("/bin/calculator.elf");
             } else if (str_starts_with(start_menu_pending_app, "Minesweeper")) {
                 wm_bring_to_front(&win_minesweeper);
             } else if (str_starts_with(start_menu_pending_app, "Settings")) {
@@ -1779,7 +1860,7 @@ void wm_handle_right_click(int x, int y) {
                     if (str_ends_with(icon->name, "Notepad.shortcut")) {
                         wm_bring_to_front(&win_notepad); handled = true;
                     } else if (str_ends_with(icon->name, "Calculator.shortcut")) {
-                        wm_bring_to_front(&win_calculator); handled = true;
+                        process_create_elf("/bin/calculator.elf"); handled = true;
                     } else if (str_ends_with(icon->name, "Minesweeper.shortcut")) {
                         wm_bring_to_front(&win_minesweeper); handled = true;
                     } else if (str_ends_with(icon->name, "Settings.shortcut")) {
@@ -1830,7 +1911,9 @@ void wm_handle_right_click(int x, int y) {
                     char path[128] = "/Desktop/";
                     int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
                     
-                    if (str_ends_with(icon->name, ".pnt")) {
+                    if (str_ends_with(icon->name, ".elf")) {
+                        process_create_elf(path);
+                    } else if (str_ends_with(icon->name, ".pnt")) {
                         paint_load(path);
                         wm_bring_to_front(&win_paint);
                     } else if (str_ends_with(icon->name, ".md")) {
@@ -2173,7 +2256,6 @@ void wm_init(void) {
 
     notepad_init();
     cmd_init();
-    calculator_init();
     explorer_init();
     editor_init();
     markdown_init();
@@ -2189,27 +2271,25 @@ void wm_init(void) {
     // Initialize z-indices
     win_notepad.z_index = 0;
     win_cmd.z_index = 1;
-    win_calculator.z_index = 2;
-    win_explorer.z_index = 3;
-    win_editor.z_index = 4;
-    win_markdown.z_index = 5;
-    win_control_panel.z_index = 6;
-    win_about.z_index = 7;
-    win_minesweeper.z_index = 8;
-    win_paint.z_index = 9;
+    win_explorer.z_index = 2;
+    win_editor.z_index = 3;
+    win_markdown.z_index = 4;
+    win_control_panel.z_index = 5;
+    win_about.z_index = 6;
+    win_minesweeper.z_index = 7;
+    win_paint.z_index = 8;
     
     all_windows[0] = &win_notepad;
     all_windows[1] = &win_cmd;
-    all_windows[2] = &win_calculator;
-    all_windows[3] = &win_explorer;
-    all_windows[4] = &win_editor;
-    all_windows[5] = &win_markdown;
-    all_windows[6] = &win_control_panel;
-    all_windows[7] = &win_about;
-    all_windows[8] = &win_minesweeper;
-    all_windows[9] = &win_paint;
-    all_windows[10] = &win_viewer;
-    window_count = 11;
+    all_windows[2] = &win_explorer;
+    all_windows[3] = &win_editor;
+    all_windows[4] = &win_markdown;
+    all_windows[5] = &win_control_panel;
+    all_windows[6] = &win_about;
+    all_windows[7] = &win_minesweeper;
+    all_windows[8] = &win_paint;
+    all_windows[9] = &win_viewer;
+    window_count = 10;
     
     // Only show Explorer and Notepad on desktop (Explorer on top)
     win_explorer.visible = false;
@@ -2222,7 +2302,6 @@ void wm_init(void) {
     
     // Rest are hidden initially
     win_cmd.visible = false;
-    win_calculator.visible = false;
     win_editor.visible = false;
     win_markdown.visible = false;
     win_control_panel.visible = false;

@@ -1301,9 +1301,17 @@ int fat32_seek(FAT32_FileHandle *handle, int offset, int whence) {
     
     handle->position = new_position;
     
-    // For RealFS, we might need to walk cluster chain to update handle->cluster
-    // if we seeked far.
-    if (handle->drive != 'A') {
+    // Both RealFS and RAMFS must accurately re-walk their cluster chains
+    if (handle->drive == 'A') {
+        handle->cluster = handle->start_cluster;
+        uint32_t pos = 0;
+        while (pos + FAT32_CLUSTER_SIZE <= handle->position) {
+             uint32_t next = fat_table[handle->cluster];
+             if (next >= 0xFFFFFFF8) break;
+             handle->cluster = next;
+             pos += FAT32_CLUSTER_SIZE;
+        }
+    } else {
         // Re-walk to find current cluster
         int vol_idx = handle->drive - 'A';
         FAT32_Volume *vol = &volumes[vol_idx];

@@ -55,4 +55,7 @@ size_t memory_get_peak_usage(void);
 void memory_reset_peak(void);
 bool memory_is_valid_ptr(void *ptr);
 
+void mem_memset(void *dest, int val, size_t len);
+void mem_memcpy(void *dest, const void *src, size_t len);
+
 #endif // MEMORY_MANAGER_H

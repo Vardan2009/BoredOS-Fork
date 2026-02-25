@@ -9,7 +9,6 @@ extern Window win_editor;
 extern Window win_explorer;
 extern Window win_cmd;
 extern Window win_notepad;
-extern Window win_calculator;
 
 void cli_cmd_txtedit(char *args) {
     // Parse the file path argument
@@ -52,7 +51,6 @@ void cli_cmd_txtedit(char *args) {
     if (win_explorer.z_index > max_z) max_z = win_explorer.z_index;
     if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
     if (win_notepad.z_index > max_z) max_z = win_notepad.z_index;
-    if (win_calculator.z_index > max_z) max_z = win_calculator.z_index;
     win_editor.z_index = max_z + 1;
     
     cli_write("Opening: ");

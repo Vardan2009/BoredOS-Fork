@@ -8,7 +8,7 @@
 #include "markdown.h"
 #include "cmd.h"
 #include "notepad.h"
-#include "calculator.h"
+#include "process.h"
 #include "minesweeper.h"
 #include "viewer.h"
 #include "control_panel.h"
@@ -816,7 +816,9 @@ static void explorer_open_target(const char *path) {
     if (fat32_is_directory(path)) {
         explorer_open_directory(path);
     } else {
-        if (explorer_is_markdown_file(path)) {
+        if (explorer_str_ends_with(path, ".elf")) {
+            process_create_elf(path);
+        } else if (explorer_is_markdown_file(path)) {
             wm_bring_to_front(&win_markdown);
             markdown_open_file(path);
         } else if (explorer_str_ends_with(path, ".pnt")) {
@@ -853,7 +855,7 @@ static void explorer_open_item(Window *win, int index) {
         if (explorer_strcmp(state->items[index].name, "Notepad.shortcut") == 0) {
             target = &win_notepad;
         } else if (explorer_strcmp(state->items[index].name, "Calculator.shortcut") == 0) {
-            target = &win_calculator;
+            process_create_elf("/bin/calculator.elf"); return;
         } else if (explorer_strcmp(state->items[index].name, "Terminal.shortcut") == 0) {
             target = &win_cmd; cmd_reset();
         } else if (explorer_strcmp(state->items[index].name, "Minesweeper.shortcut") == 0) {
@@ -916,6 +918,8 @@ static void explorer_draw_file_icon(int x, int y, bool is_dir, uint32_t color, c
         if (full_path[explorer_strlen(full_path) - 1] != '/') explorer_strcat(full_path, "/");
         explorer_strcat(full_path, filename);
         draw_image_icon(x + 5, y + 5, full_path);
+    } else if (explorer_str_ends_with(filename, ".elf")) {
+        draw_elf_icon(x + 5, y + 5, "");
     } else {
         draw_document_icon(x + 5, y + 5, "");
     }
@@ -1782,7 +1786,6 @@ static void explorer_handle_file_context_menu_click(Window *win, int x, int y) {
         for (int i = 0; i < explorer_win_count; i++) if (explorer_wins[i]->z_index > max_z) max_z = explorer_wins[i]->z_index;
         if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
         if (win_notepad.z_index > max_z) max_z = win_notepad.z_index;
-        if (win_calculator.z_index > max_z) max_z = win_calculator.z_index;
         if (win_editor.z_index > max_z) max_z = win_editor.z_index;
         if (win_markdown.z_index > max_z) max_z = win_markdown.z_index;
         if (win_control_panel.z_index > max_z) max_z = win_control_panel.z_index;

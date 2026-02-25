@@ -9,7 +9,6 @@ extern Window win_explorer;
 extern Window win_editor;
 extern Window win_cmd;
 extern Window win_notepad;
-extern Window win_calculator;
 extern Window win_markdown;
 
 #define EXPLORER_MAX_FILES 64

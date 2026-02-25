@@ -11,6 +11,7 @@
 #include "ps2.h"
 #include "wm.h"
 #include "io.h"
+#include "fat32.h"
 #include "memory_manager.h"
 #include "platform.h"
 #include "wallpaper.h"
@@ -32,10 +33,17 @@ static volatile struct limine_memmap_request memmap_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST,
+    .revision = 0
+};
+
 __attribute__((used, section(".requests_start")))
 static volatile struct limine_request *const requests_start_marker[] = {
     (struct limine_request *)&framebuffer_request,
     (struct limine_request *)&memmap_request,
+    (struct limine_request *)&module_request,
     NULL
 };
 
@@ -107,22 +115,7 @@ void kmain(void) {
     serial_write("[DEBUG] idt_init OK\n");
 
     process_init();
-    int ENABLE_USER_TEST = 1; // Set to 1 to test User Mode ring 3 jump
-    if (ENABLE_USER_TEST) {
-        // Create an isolated PML4 table for this "process"
-        uint64_t user_pml4_phys = paging_create_user_pml4_phys();
-        serial_write("[DEBUG] user_pml4 created OK\n");
-        if (user_pml4_phys) {
-            
-            // Debug verify we can allocate
-            void* code_page = kmalloc_aligned(4096, 4096);
-            if (code_page) {
-                extern void user_test_function(void);
-                process_create(user_test_function, true);
-                serial_write("[DEBUG] User Process 1 Created.\n");
-            }
-        }
-    }
+
 
     serial_write("[DEBUG] Skipping user mode test, proceeding with normal boot.\n");
     
@@ -131,6 +124,7 @@ void kmain(void) {
     if (memmap_request.response != NULL) {
         for (uint64_t i = 0; i < memmap_request.response->entry_count; i++) {
             struct limine_memmap_entry *entry = memmap_request.response->entries[i];
+            
             
             // Count usable memory regions
             if (entry->type == LIMINE_MEMMAP_USABLE) {
@@ -148,6 +142,30 @@ void kmain(void) {
     }
     
     memory_manager_init_with_size(pool_size);
+
+    // Initialize FAT32 RAMFS and mount Limine modules
+    fat32_init();
+    if (module_request.response != NULL) {
+        for (uint64_t i = 0; i < module_request.response->module_count; i++) {
+            struct limine_file *mod = module_request.response->modules[i];
+            
+            // mod->path typically starts with a '/' from Limine
+            FAT32_FileHandle *fh = fat32_open(mod->path, "w");
+            if (fh && fh->valid) {
+                fat32_write(fh, mod->address, mod->size);
+                fat32_close(fh);
+                serial_write("[DEBUG] Limine Module loaded into RAMFS: ");
+                serial_write(mod->path);
+                serial_write("\n");
+            }
+        }
+    }
+    
+    int ENABLE_USER_TEST = 1; // Set to 1 to test User Mode ring 3 jump
+    #ifdef ENABLE_USER_TEST
+        process_init();
+        // The desktop is PID 0
+    #endif
 
     // 3. PS/2 Init (Mouse/Keyboard)
     asm("cli");

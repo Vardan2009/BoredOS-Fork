@@ -8,14 +8,14 @@ extern void serial_print(const char *s);
 extern void serial_print_hex(uint64_t n);
 
 // --- Timer Handler ---
-uint64_t timer_handler(uint64_t rsp) {
+uint64_t timer_handler(registers_t *regs) {
     wm_timer_tick();
     network_process_frames();
     
     extern uint64_t process_schedule(uint64_t current_rsp);
     
     outb(0x20, 0x20); // EOI to Master PIC
-    rsp = process_schedule(rsp);
+    uint64_t rsp = process_schedule((uint64_t)regs);
 
     return rsp;
 }
@@ -41,13 +41,13 @@ static char scancode_map_shift[128] = {
     0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 };
 
-uint64_t keyboard_handler(uint64_t rsp) {
+uint64_t keyboard_handler(registers_t *regs) {
     uint8_t scancode = inb(0x60);
 
     if (scancode == 0xE0) {
         extended_scancode = true;
         outb(0x20, 0x20);
-        return rsp;
+        return (uint64_t)regs;
     }
 
     if (scancode == 0x2A || scancode == 0x36) { // Shift Down
@@ -77,7 +77,7 @@ uint64_t keyboard_handler(uint64_t rsp) {
     }
 
     outb(0x20, 0x20); // EOI
-    return rsp;
+    return (uint64_t)regs;
 }
 
 // --- Mouse ---
@@ -135,12 +135,12 @@ void mouse_init(void) {
     mouse_read();
 }
 
-uint64_t mouse_handler(uint64_t rsp) {
+uint64_t mouse_handler(registers_t *regs) {
     uint8_t status = inb(0x64);
     if (!(status & 0x20)) {
         outb(0x20, 0x20);
         outb(0xA0, 0x20);
-        return rsp; // Return rsp here as well
+        return (uint64_t)regs; 
     }
 
     uint8_t b = inb(0x60);
@@ -169,7 +169,7 @@ uint64_t mouse_handler(uint64_t rsp) {
 
     outb(0x20, 0x20);
     outb(0xA0, 0x20); // Slave EOI
-    return rsp;
+    return (uint64_t)regs;
 }
 
 void ps2_init(void) {

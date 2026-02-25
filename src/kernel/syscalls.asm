@@ -12,18 +12,13 @@ section .text
 ; R9  = arg5
 
 syscall_entry:
-    ; We arrived here from Ring 3 via `syscall`.
-    ; RAX = syscall_num
-    ; RDI, RSI, RDX, R10, R8, R9 = args
-    ; RCX = User RIP
-    ; R11 = User RFLAGS
-    ; Current RSP = User RSP
-    
-    ; 1. Save User RSP
+    ; 1. Switch to Kernel Stack
+    ; Use scratch temporarily to pivot (Risk: Task switch here is rare but possible)
     mov [rel user_rsp_scratch], rsp
-    
-    ; 2. Switch to Kernel Stack
     mov rsp, [rel kernel_syscall_stack]
+
+    ; 2. Save User RSP on per-process kernel stack
+    push qword [rel user_rsp_scratch]
 
     ; 3. Save preserved registers (System V ABI)
     push rbx
@@ -33,32 +28,18 @@ syscall_entry:
     push r14
     push r15
     
-    ; We also need to save RCX (RIP) and R11 (RFLAGS) because C functions might clobber them
+    ; 4. Save RCX (RIP) and R11 (RFLAGS)
     push rcx
     push r11
 
-    ; Syscall convention: argument 4 is passed in R10, but C expects it in RCX
-    mov rcx, r10
-
-    ; The syscall number is in RAX, let's put it in RDI (arg 0 for C)
-    ; But wait, the ABI expects arg1 in RDI!
-    ; Let's change our C handler signature or adapt here.
-    ; C handler: void syscall_handler_c(uint64_t syscall_num, uint64_t arg1, ...)
-    ; So:
-    ; syscall_num -> RDI
-    ; arg1 (was RDI) -> RSI
-    ; arg2 (was RSI) -> RDX
-    ; arg3 (was RDX) -> RCX
-    ; arg4 (was R10) -> R8
-    ; arg5 (was R8) -> R9
-    ; arg6 (was R9) -> stack (if needed, but we have 6 regs)
-    
-    ; This shuffling is messy. Let's just push everything and call a struct-based handler,
-    ; or carefully shuffle.
-    ; For now, let's just make sure RAX goes to RDI, RDI to RSI, RSI to RDX, RDX to RCX, R10 to R8.
-    
     ; Shuffling for SYS V C ABI:
-    ; R9 is arg6 -> no room in registers, need to push to stack (but our handler takes 6 args total)
+    ; arg5: R9 (remains R9 as 6th arg in C)
+    ; arg4: R8 (was R9)
+    ; arg3: RCX (was R10)
+    ; arg2: RDX (was RSI)
+    ; arg1: RSI (was RDI)
+    ; num: RDI (was RAX)
+    
     mov r9, r8   ; arg5
     mov r8, r10  ; arg4
     mov rcx, rdx ; arg3
@@ -66,14 +47,14 @@ syscall_entry:
     mov rsi, rdi ; arg1
     mov rdi, rax ; syscall_num
 
-    ; 4. Call C handler
+    ; 5. Call C handler
     call syscall_handler_c
 
-    ; 5. Restore RCX and R11
+    ; 6. Restore RCX and R11
     pop r11
     pop rcx
 
-    ; 6. Restore preserved registers
+    ; 7. Restore preserved registers
     pop r15
     pop r14
     pop r13
@@ -81,14 +62,11 @@ syscall_entry:
     pop rbp
     pop rbx
 
-    ; 7. Restore User RSP
-    mov rsp, [rel user_rsp_scratch]
+    ; 8. Restore User RSP from kernel stack
+    pop rsp
 
-    ; 8. Return to User Mode
-    ; NASM syntax for 64-bit sysret requires the o64 prefix
-    ; Force IF=1 (bit 9) in R11 (restored to RFLAGS) to ensure interrupts stay enabled!
-    or r11, 0x200
-    
+    ; 9. Return to User Mode (sysret)
+    or r11, 0x200 ; Force Interrupts enabled
     o64 sysret
 
 section .bss

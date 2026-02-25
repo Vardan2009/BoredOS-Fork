@@ -48,12 +48,15 @@ struct Window {
     bool focused;
     int z_index;  // Layering depth (higher = on top)
     void *data;   // Per-window private data
+    uint32_t *pixels; // Pointer to backing buffer for UI events (Back Buffer)
+    uint32_t *comp_pixels; // Pointer to composition buffer (Front Buffer)
     
     // Callbacks
     void (*paint)(Window *win);
     void (*handle_key)(Window *win, char c);
     void (*handle_click)(Window *win, int x, int y);
     void (*handle_right_click)(Window *win, int x, int y);
+    void (*handle_close)(Window *win);
 };
 
 void wm_init(void);
@@ -63,6 +66,7 @@ void wm_handle_click(int x, int y);
 void wm_handle_right_click(int x, int y);
 void wm_process_input(void);
 void wm_add_window(Window *win);
+void wm_remove_window(Window *win);
 void wm_bring_to_front(Window *win);
 
 // Redraw system
@@ -87,6 +91,7 @@ void draw_traffic_light(int x, int y);  // Red close button only
 void draw_icon(int x, int y, const char *label);
 void draw_folder_icon(int x, int y, const char *label);
 void draw_document_icon(int x, int y, const char *label);
+void draw_elf_icon(int x, int y, const char *label);
 void draw_image_icon(int x, int y, const char *label);
 void draw_notepad_icon(int x, int y, const char *label);
 void draw_calculator_icon(int x, int y, const char *label);

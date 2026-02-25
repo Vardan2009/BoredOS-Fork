@@ -16,17 +16,43 @@ static void print_hex(uint64_t val) {
     serial_write(buf);
 }
 
-void exception_handler_c(uint64_t vector, uint64_t err_code, uint64_t rip, uint64_t cr2) {
+#include "process.h"
+#include "cmd.h"
+
+uint64_t exception_handler_c(registers_t *regs) {
+    uint64_t vector = regs->int_no;
+    uint64_t rip = regs->rip;
+    uint64_t cr2;
+    asm volatile("mov %%cr2, %0" : "=r"(cr2));
+
     serial_write("\n*** EXCEPTION ***\nVector: ");
     print_hex(vector);
     serial_write("\nError Code: ");
-    print_hex(err_code);
+    print_hex(regs->err_code);
     serial_write("\nRIP: ");
     print_hex(rip);
     serial_write("\nCR2: ");
     print_hex(cr2);
-    serial_write("\nCPU HALTED.\n");
+
+    // Mirror to shell
+    if (cmd_get_cursor_col() != 0) cmd_write("\n");
+    cmd_write("*** EXCEPTION ***\nVector: "); cmd_write_hex(vector);
+    cmd_write("\nError Code: "); cmd_write_hex(regs->err_code);
+    cmd_write("\nRIP: "); cmd_write_hex(rip);
+    cmd_write("\nCR2: "); cmd_write_hex(cr2);
+    cmd_write("\n");
+
+    // Filter by CS selector to check if we are in user mode (RPL=3)
+    if ((regs->cs & 0x3) != 0) {
+        serial_write("\nUSER MODE EXCEPTION - Terminating process.\n");
+        cmd_write("USER MODE EXCEPTION - Terminating process.\n");
+        return process_terminate_current();
+    }
+
+    serial_write("\nKERNEL PANIC - CPU HALTED.\n");
+    cmd_write("KERNEL PANIC - CPU HALTED.\n");
     while(1) { asm volatile("cli; hlt"); }
+    return (uint64_t)regs; // Unreachable but for completeness
 }
 
 #define IDT_ENTRIES 256

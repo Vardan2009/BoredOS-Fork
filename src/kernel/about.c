@@ -14,8 +14,8 @@ static void about_paint(Window *win) {
     
     // Version info
     draw_string(offset_x, offset_y + 105, "BoredOS 'Panda'", COLOR_WHITE);
-    draw_string(offset_x, offset_y + 120, "BoredOS Version 1.63", COLOR_WHITE);
-    draw_string(offset_x, offset_y + 135, "Kernel Version 2.5.3", COLOR_WHITE);
+    draw_string(offset_x, offset_y + 120, "BoredOS Version 1.64", COLOR_WHITE);
+    draw_string(offset_x, offset_y + 135, "Kernel Version 3.0.0", COLOR_WHITE);
     
     // Copyright
     draw_string(offset_x, offset_y + 150, "(C) 2026 boreddevnl.", COLOR_WHITE);

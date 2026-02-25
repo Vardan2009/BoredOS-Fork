@@ -283,7 +283,7 @@ void draw_char(int x, int y, char c, uint32_t color) {
     if (uc > 127) return;
 
     // Fast rejection: if the character is entirely outside the clipping/dirty rect, skip it
-    if (g_clip_enabled) {
+    if (g_clip_enabled && !g_render_target) {
         if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
             y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
             return;
@@ -459,4 +459,27 @@ void graphics_set_clipping(int x, int y, int w, int h) {
 
 void graphics_clear_clipping(void) {
     g_clip_enabled = false;
+}
+void graphics_blit_buffer(uint32_t *src, int dst_x, int dst_y, int w, int h) {
+    if (!g_fb || !src) return;
+    int sw = get_screen_width();
+    int sh = get_screen_height();
+    
+    for (int y = 0; y < h; y++) {
+        int vy = dst_y + y;
+        if (vy < 0 || vy >= sh) continue;
+        
+        for (int x = 0; x < w; x++) {
+            int vx = dst_x + x;
+            if (vx < 0 || vx >= sw) continue;
+            
+            uint32_t pcol = src[y * w + x];
+            // Alpha blending support:
+            // If the alpha byte is 0, we treat it as transparent ONLY if the color is also 0.
+            // This handles common 0xRRGGBB as opaque.
+            if ((pcol & 0xFF000000) != 0 || (pcol & 0xFFFFFF) != 0) {
+                g_back_buffer[vy * sw + vx] = pcol;
+            }
+        }
+    }
 }

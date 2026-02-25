@@ -12,6 +12,8 @@ void cmd_reset(void);
 void cmd_write(const char *str);
 void cmd_putchar(char c);
 void cmd_write_int(int n);
+void cmd_write_hex(uint64_t n);
+int cmd_get_cursor_col(void);
 void cmd_screen_clear(void);
 
 void cmd_increment_msg_count(void);

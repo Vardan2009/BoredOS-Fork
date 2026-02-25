@@ -83,6 +83,7 @@ $(BUILD_DIR)/process_asm.o: $(SRC_DIR)/process_asm.asm | $(BUILD_DIR)
 # Link Kernel
 $(KERNEL_ELF): $(OBJ_FILES)
 	$(LD) $(LDFLAGS) -o $@ $(OBJ_FILES)
+	$(MAKE) -C $(SRC_DIR)/userland
 
 # Create ISO
 $(ISO_IMAGE): $(KERNEL_ELF) limine.cfg limine-setup
@@ -92,13 +93,18 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.cfg limine-setup
 	
 	# Copy Kernel and Config
 	cp $(KERNEL_ELF) $(ISO_DIR)/
+	# Build ISO limine.cfg natively with modules
 	cp limine.cfg $(ISO_DIR)/
+	mkdir -p $(ISO_DIR)/bin
+	@for f in $(SRC_DIR)/userland/*.elf; do \
+		if [ -f "$$f" ]; then \
+			basename=$$(basename "$$f"); \
+			cp "$$f" $(ISO_DIR)/bin/; \
+			echo "    MODULE_PATH=boot:///bin/$$basename" >> $(ISO_DIR)/limine.cfg; \
+		fi \
+	done
 	
 	# Copy README
-	cp README.md $(ISO_DIR)/
-
-	# Copy user file.c if it exists
-	@if [ -f file.c ]; then cp file.c $(ISO_DIR)/; fi
 	
 	# Copy Wallpaper (if it exists)
 	@if [ -f src/kernel/wallpaper.ppm ]; then cp src/kernel/wallpaper.ppm $(ISO_DIR)/; fi
@@ -126,6 +132,8 @@ clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_IMAGE)
 
 run: $(ISO_IMAGE)
+	dd if=/dev/zero of=disk.img bs=1M count=64
+	mformat -i disk.img -F ::
 	qemu-system-x86_64 -m 2G -serial stdio -cdrom $< -boot d \
 		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
 		-netdev user,id=net0,hostfwd=udp::12345-:12345 -device e1000,netdev=net0 \

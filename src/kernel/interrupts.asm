@@ -18,7 +18,10 @@ send_eoi:
     pop rax
     ret
 
-%macro ISR_NOERRCODE 1
+%macro ISR_NOERRCODE 2
+isr%2_wrapper:
+    push 0      ; Dummy error code
+    push %2     ; Vector
     push rax
     push rbx
     push rcx
@@ -35,7 +38,7 @@ send_eoi:
     push r14
     push r15
     
-    ; Pass current RSP as 1st argument
+    ; Pass current RSP as 1st argument (registers_t*)
     mov rdi, rsp
     
     call %1
@@ -58,17 +61,18 @@ send_eoi:
     pop rcx
     pop rbx
     pop rax
+    add rsp, 16 ; drop dummy vector and error code
     iretq
 %endmacro
 
 isr0_wrapper:
-    ISR_NOERRCODE timer_handler
+    ISR_NOERRCODE timer_handler, 32
 
 isr1_wrapper:
-    ISR_NOERRCODE keyboard_handler
+    ISR_NOERRCODE keyboard_handler, 33
 
 isr12_wrapper:
-    ISR_NOERRCODE mouse_handler
+    ISR_NOERRCODE mouse_handler, 44
 
 ; Common exception macro
 %macro EXCEPTION_ERRCODE 1
@@ -101,16 +105,14 @@ exception_common:
     push r14
     push r15
     
-    ; Call C handler: void exception_handler_c(uint64_t vector, uint64_t err_code, uint64_t rip, uint64_t cr2)
-    ; Stack right now: 15 registers (15*8=120 bytes), then vector (8), then err_code (8), then RIP (8), CS (8), RFLAGS (8), RSP (8), SS (8)
-    mov rdi, [rsp + 120] ; vector
-    mov rsi, [rsp + 128] ; err_code
-    mov rdx, [rsp + 136] ; RIP
-    mov rcx, cr2         ; CR2
-    
+    ; Call C handler: uint64_t exception_handler_c(registers_t *regs)
+    mov rdi, rsp
     call exception_handler_c
     
-    ; Restore (in case we want to return, but usually we halt)
+    ; Switch stack if needed (for process termination)
+    mov rsp, rax
+    
+    ; Restore (in case we want to return, but usually we halt if kernel)
     pop r15
     pop r14
     pop r13

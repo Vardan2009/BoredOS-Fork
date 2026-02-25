@@ -17,10 +17,18 @@ static bool initialized = false;
 // --- Helper Functions ---
 
 // Simple memset for internal use
-static void mem_memset(void *dest, int val, size_t len) {
+void mem_memset(void *dest, int val, size_t len) {
     uint8_t *ptr = (uint8_t *)dest;
     while (len-- > 0) {
         *ptr++ = (uint8_t)val;
+    }
+}
+
+void mem_memcpy(void *dest, const void *src, size_t len) {
+    uint8_t *d = (uint8_t *)dest;
+    const uint8_t *s = (const uint8_t *)src;
+    while (len-- > 0) {
+        *d++ = *s++;
     }
 }
 
