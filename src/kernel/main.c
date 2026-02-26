@@ -58,7 +58,6 @@ static void hcf(void) {
     }
 }
 
-// Simple serial port initialization and output for debugging
 static void init_serial() {
     outb(0x3F8 + 1, 0x00);
     outb(0x3F8 + 3, 0x80);
@@ -84,7 +83,6 @@ void kmain(void) {
     platform_init();
     serial_write("[DEBUG] platform_init OK\n");
 
-    // 1. Memory Detection and Heap Init
     uint64_t heap_phys_addr = 0;
     size_t heap_size = 0;
     if (memmap_request.response != NULL) {
@@ -99,7 +97,7 @@ void kmain(void) {
         }
     }
 
-    if (heap_size > 512 * 1024 * 1024) heap_size = 512 * 1024 * 1024; // Cap at 512MB
+    if (heap_size > 512 * 1024 * 1024) heap_size = 512 * 1024 * 1024;
     
     if (heap_phys_addr != 0) {
         memory_manager_init_at((void*)p2v(heap_phys_addr), heap_size);
@@ -109,7 +107,6 @@ void kmain(void) {
         hcf();
     }
 
-    // 2. Graphics Init
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
         serial_write("[DEBUG] No framebuffer! Halting.\n");
         hcf();
@@ -119,19 +116,15 @@ void kmain(void) {
     graphics_init(fb);
     serial_write("[DEBUG] graphics_init OK\n");
 
-    // 3. GDT & TSS Init
     gdt_init();
     serial_write("[DEBUG] gdt_init OK\n");
 
-    // 4. Paging Init
     paging_init();
     serial_write("[DEBUG] paging_init OK\n");
 
-    // 5. Syscall Init
     syscall_init();
     serial_write("[DEBUG] syscall_init OK\n");
 
-    // 6. Interrupts Init
     idt_init();
     idt_register_interrupts();
     idt_load();
@@ -141,13 +134,11 @@ void kmain(void) {
 
     serial_write("[DEBUG] Skipping user mode test, proceeding with normal boot.\n");
     
-    // Initialize FAT32 RAMFS and mount Limine modules
     fat32_init();
     if (module_request.response != NULL) {
         for (uint64_t i = 0; i < module_request.response->module_count; i++) {
             struct limine_file *mod = module_request.response->modules[i];
             
-            // mod->path typically starts with a '/' from Limine
             FAT32_FileHandle *fh = fat32_open(mod->path, "w");
             if (fh && fh->valid) {
                 fat32_write(fh, mod->address, mod->size);
@@ -159,25 +150,20 @@ void kmain(void) {
         }
     }
     
-    int ENABLE_USER_TEST = 1; // Set to 1 to test User Mode ring 3 jump
+    int ENABLE_USER_TEST = 1; 
     #ifdef ENABLE_USER_TEST
         process_init();
-        // The desktop is PID 0
     #endif
 
-    // 3. PS/2 Init (Mouse/Keyboard)
     asm("cli");
     ps2_init();
     asm("sti");
 
-    // 4. Window Manager Init (Draws initial desktop)
     wm_init();
 
-    // Re-enable interrupts since we removed sti from idt_load
     asm volatile("sti");
 
-    // 5. Main loop - just wait for interrupts
-    // Timer interrupt will drive the redraw system
+
     while (1) {
         wm_process_input();
         wm_process_deferred_thumbs();

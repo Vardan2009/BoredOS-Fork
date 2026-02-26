@@ -3,7 +3,7 @@
 
 extern void serial_write(const char *str);
 
-// Simple hex printer for debugging exceptions
+// Simple hex printer for debugging
 static void print_hex(uint64_t val) {
     const char* digits = "0123456789ABCDEF";
     char buf[17];
@@ -19,40 +19,64 @@ static void print_hex(uint64_t val) {
 #include "process.h"
 #include "cmd.h"
 
+void kernel_panic(registers_t *regs, const char *error_name);
+
+static const char *exception_messages[] = {
+    "Division By Zero",
+    "Debug",
+    "Non-Maskable Interrupt",
+    "Breakpoint",
+    "Into Detected Overflow",
+    "Out of Bounds",
+    "Invalid Opcode",
+    "No Coprocessor",
+    "Double Fault",
+    "Coprocessor Segment Overrun",
+    "Bad TSS",
+    "Segment Not Present",
+    "Stack Fault",
+    "General Protection Fault",
+    "Page Fault",
+    "Unknown Interrupt",
+    "Coprocessor Fault",
+    "Alignment Check",
+    "Machine Check",
+    "SIMD Floating-Point Exception",
+    "Virtualization Exception",
+    "Control Protection Exception",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Reserved",
+    "Hypervisor Injection Exception",
+    "VMM Communication Exception",
+    "Security Exception",
+    "Reserved"
+};
+
 uint64_t exception_handler_c(registers_t *regs) {
     uint64_t vector = regs->int_no;
-    uint64_t rip = regs->rip;
-    uint64_t cr2;
-    asm volatile("mov %%cr2, %0" : "=r"(cr2));
-
+    
+    // Serial Mirror
     serial_write("\n*** EXCEPTION ***\nVector: ");
     print_hex(vector);
-    serial_write("\nError Code: ");
-    print_hex(regs->err_code);
-    serial_write("\nRIP: ");
-    print_hex(rip);
-    serial_write("\nCR2: ");
-    print_hex(cr2);
-
-    // Mirror to shell
-    if (cmd_get_cursor_col() != 0) cmd_write("\n");
-    cmd_write("*** EXCEPTION ***\nVector: "); cmd_write_hex(vector);
-    cmd_write("\nError Code: "); cmd_write_hex(regs->err_code);
-    cmd_write("\nRIP: "); cmd_write_hex(rip);
-    cmd_write("\nCR2: "); cmd_write_hex(cr2);
-    cmd_write("\n");
-
-    // Filter by CS selector to check if we are in user mode (RPL=3)
+    
     if ((regs->cs & 0x3) != 0) {
         serial_write("\nUSER MODE EXCEPTION - Terminating process.\n");
-        cmd_write("USER MODE EXCEPTION - Terminating process.\n");
+        if (cmd_get_cursor_col() != 0) cmd_write("\n");
+        cmd_write("*** USER EXCEPTION ***\nVector: "); cmd_write_hex(vector);
+        cmd_write("\nRIP: "); cmd_write_hex(regs->rip);
+        cmd_write("\nTerminating process.\n");
         return process_terminate_current();
     }
 
-    serial_write("\nKERNEL PANIC - CPU HALTED.\n");
-    cmd_write("KERNEL PANIC - CPU HALTED.\n");
-    while(1) { asm volatile("cli; hlt"); }
-    return (uint64_t)regs; // Unreachable but for completeness
+    // Kernel mode exception
+    const char *name = (vector < 32) ? exception_messages[vector] : "Unknown Kernel Exception";
+    kernel_panic(regs, name);
+    
+    return (uint64_t)regs; // Unreachable
 }
 
 #define IDT_ENTRIES 256
@@ -145,10 +169,72 @@ void idt_register_interrupts(void) {
     idt_set_gate(44, isr12_wrapper, cs, 0x8E); // Mouse (IRQ 12)
 
     // Exceptions
-    extern void isr8_wrapper(void);
-    extern void isr14_wrapper(void);
-    idt_set_gate(8, isr8_wrapper, cs, 0x8E);  // Double Fault
-    idt_set_gate(14, isr14_wrapper, cs, 0x8E); // Page Fault
+    extern void exc0_wrapper(void);
+    extern void exc1_wrapper(void);
+    extern void exc2_wrapper(void);
+    extern void exc3_wrapper(void);
+    extern void exc4_wrapper(void);
+    extern void exc5_wrapper(void);
+    extern void exc6_wrapper(void);
+    extern void exc7_wrapper(void);
+    extern void exc8_wrapper(void);
+    extern void exc9_wrapper(void);
+    extern void exc10_wrapper(void);
+    extern void exc11_wrapper(void);
+    extern void exc12_wrapper(void);
+    extern void exc13_wrapper(void);
+    extern void exc14_wrapper(void);
+    extern void exc15_wrapper(void);
+    extern void exc16_wrapper(void);
+    extern void exc17_wrapper(void);
+    extern void exc18_wrapper(void);
+    extern void exc19_wrapper(void);
+    extern void exc20_wrapper(void);
+    extern void exc21_wrapper(void);
+    extern void exc22_wrapper(void);
+    extern void exc23_wrapper(void);
+    extern void exc24_wrapper(void);
+    extern void exc25_wrapper(void);
+    extern void exc26_wrapper(void);
+    extern void exc27_wrapper(void);
+    extern void exc28_wrapper(void);
+    extern void exc29_wrapper(void);
+    extern void exc30_wrapper(void);
+    extern void exc31_wrapper(void);
+
+    idt_set_gate(0,  exc0_wrapper,  cs, 0x8E);
+    idt_set_gate(1,  exc1_wrapper,  cs, 0x8E);
+    idt_set_gate(2,  exc2_wrapper,  cs, 0x8E);
+    idt_set_gate(3,  exc3_wrapper,  cs, 0x8E);
+    idt_set_gate(4,  exc4_wrapper,  cs, 0x8E);
+    idt_set_gate(5,  exc5_wrapper,  cs, 0x8E);
+    idt_set_gate(6,  exc6_wrapper,  cs, 0x8E);
+    idt_set_gate(7,  exc7_wrapper,  cs, 0x8E);
+    idt_set_gate(8,  exc8_wrapper,  cs, 0x8E);
+    idt_set_gate(9,  exc9_wrapper,  cs, 0x8E);
+    idt_set_gate(10, exc10_wrapper, cs, 0x8E);
+    idt_set_gate(11, exc11_wrapper, cs, 0x8E);
+    idt_set_gate(12, exc12_wrapper, cs, 0x8E);
+    idt_set_gate(13, exc13_wrapper, cs, 0x8E);
+    idt_set_gate(14, exc14_wrapper, cs, 0x8E);
+    idt_set_gate(15, exc15_wrapper, cs, 0x8E);
+    idt_set_gate(16, exc16_wrapper, cs, 0x8E);
+    idt_set_gate(17, exc17_wrapper, cs, 0x8E);
+    idt_set_gate(18, exc18_wrapper, cs, 0x8E);
+    idt_set_gate(19, exc19_wrapper, cs, 0x8E);
+    idt_set_gate(20, exc20_wrapper, cs, 0x8E);
+    idt_set_gate(21, exc21_wrapper, cs, 0x8E);
+    idt_set_gate(22, exc22_wrapper, cs, 0x8E);
+    idt_set_gate(23, exc23_wrapper, cs, 0x8E);
+    idt_set_gate(24, exc24_wrapper, cs, 0x8E);
+    idt_set_gate(25, exc25_wrapper, cs, 0x8E);
+    idt_set_gate(26, exc26_wrapper, cs, 0x8E);
+    idt_set_gate(27, exc27_wrapper, cs, 0x8E);
+    idt_set_gate(28, exc28_wrapper, cs, 0x8E);
+    idt_set_gate(29, exc29_wrapper, cs, 0x8E);
+    idt_set_gate(30, exc30_wrapper, cs, 0x8E);
+    idt_set_gate(31, exc31_wrapper, cs, 0x8E);
+
 }
 
 void idt_load(void) {

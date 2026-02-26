@@ -336,8 +336,6 @@ uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, u
                 asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
                 
                 if (win->pixels) {
-                    // String clipping is handled by draw_char -> put_pixel, 
-                    // but we ensure coordinate sanity here
                     if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
                         graphics_set_render_target(win->pixels, win->w, win->h - 20);
                         draw_string(ux, uy, kernel_str, color);

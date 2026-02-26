@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-// === RAMFS Implementation (Drive A:) ===
-// We keep the original logic for Drive A to preserve existing OS functionality.
 
 #define MAX_FILES 256
 #define MAX_CLUSTERS 1024
@@ -149,17 +147,14 @@ static char parse_drive_from_path(const char **path_ptr) {
 
 // Normalize path (remove .., ., etc)
 void fat32_normalize_path(const char *path, char *normalized) {
-    // Basic normalization
-    // If we have a drive letter, strip it for internal processing logic if needed,
-    // but the output 'normalized' should conceptually be the path *on that drive*.
+
     
     char temp[FAT32_MAX_PATH];
     int temp_len = 0;
     const char *p = path;
     char drive = parse_drive_from_path(&p);
     
-    // Initialize with current directory or root
-    // If drive changed, we assume root of that drive
+
     if (p[0] == '/') {
         fs_strcpy(temp, "/");
         temp_len = 1;
@@ -632,7 +627,6 @@ static FAT32_FileHandle* realfs_open(char drive, const char *path, const char *m
         }
         
         if (!found) {
-            // Check if we want to create file
             if ((mode[0] == 'w' || mode[0] == 'a') && *p == 0) {
                  // Create file logic
                  char dos_name[11];
@@ -1030,7 +1024,6 @@ static bool realfs_delete(char drive, const char *path) {
         if (*p == 0) break; // End of path
     }
     
-    // We found the file entry - now delete it
     
     // 1. Mark directory entry as deleted
     uint8_t *entry_buf = (uint8_t*)kmalloc(512);
@@ -1090,16 +1083,11 @@ static int realfs_list_directory(char drive, const char *path, FAT32_FileInfo *e
     }
     FAT32_Volume *vol = &volumes[vol_idx];
     
-    // Find directory start cluster
-    // Reuse realfs_open logic basically to find the cluster
-    // but without creating a handle.
-    // For simplicity, just use realfs_open and then read the directory entries
+
     FAT32_FileHandle *dir_handle = realfs_open(drive, path, "r");
     if (!dir_handle) return 0;
     
-    // Extract start_cluster BEFORE closing the handle
     uint32_t current_cluster = dir_handle->start_cluster;
-    // We don't use the handle for reading via realfs_read because directories are special
     fat32_close(dir_handle); // Return to pool - this invalidates the handle
     
     int count = 0;
@@ -1236,9 +1224,7 @@ void fat32_close(FAT32_FileHandle *handle) {
                              entry->start_cluster_high = (handle->start_cluster >> 16);
                              entry->start_cluster_low = (handle->start_cluster & 0xFFFF);
                          }
-                         // Write back with error checking
                          if (d->write_sector(d, handle->dir_sector, buf) != 0) {
-                             // Write failed - at least we tried
                          }
                      }
                      kfree(buf);
@@ -1506,26 +1492,13 @@ bool fat32_is_directory(const char *path) {
     } else {
         FAT32_FileHandle *fh = realfs_open(drive, p, "r");
         if (fh) {
-            // Wait, open checks if file/dir. 
-            // We need to check if what we opened is a directory.
-            // realfs_open returns handle for directory too if strictly reading?
-            // Actually my realfs_open logic tries to find the entry.
-            // If it returns a handle, how do we know if it was a dir?
-            // Handle doesn't store attributes.
-            // But we can check if size == 0 (often for dirs) or inferred from how we opened it.
-            // Better: use realfs_list_directory check or modify open to return attributes?
-            // For now, let's assume if we can open it and it has size 0 (or we opened root), it's dir.
-            // This is imperfect.
-            // Correct way: Add attributes to FAT32_FileHandle or separate check function.
-            // Let's rely on naming convention or just return false for now if not root.
+       
             if (fs_strcmp(p, "/") == 0 || fs_strcmp(p, "") == 0) is_dir = true;
             else {
-                 // Hack: check if list_directory returns > 0 entries? No empty dirs exists.
-                 // We need to improve realfs_open to store attr.
+
             }
             fat32_close(fh);
         }
-        // Workaround: assume true if path ends in /? No.
     }
     
     asm volatile("push %0; popfq" : : "r"(rflags));
@@ -1586,23 +1559,15 @@ bool fat32_chdir(const char *path) {
          }
     }
     
-    // Change dir on current drive
     if (fat32_is_directory(path)) {
-         // Normalize and set
          if (drive == 'A') {
              char normalized[FAT32_MAX_PATH];
              fat32_normalize_path(p, normalized);
              fs_strcpy(current_dir, normalized);
          } else {
-             // For real drive, just store path
-             // Need a way to validate path exists on real drive first
-             // fat32_is_directory call above should suffice?
-             // But my realfs is_directory is weak.
              fs_strcpy(current_dir, p); 
-             // Ensure leading slash
              if (current_dir[0] != '/') {
-                 // Prepend /
-                 // ... (skip for brevity, assume absolute paths mostly)
+
              }
          }
          asm volatile("push %0; popfq" : : "r"(rflags));

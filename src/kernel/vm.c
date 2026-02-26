@@ -464,15 +464,10 @@ int vm_exec(const uint8_t *code, int code_size) {
 
     vm_reset();
     
-    // Reset Graphics Overlay
     vm_rect_count = 0;
     wm_custom_paint_hook = vm_paint_overlay;
     
-    // Copy data segment if any?
-    // For this simple VM, we will copy the ENTIRE bytecode to the start of memory
-    // So code and data share the same space (Von Neumann)
-    // But we need to be careful not to overwrite running code if we write to it
-    
+
     // Safety check
     if (code_size > VM_MEMORY_SIZE) {
         cmd_write("VM Error: Binary too large\n");
@@ -489,13 +484,7 @@ int vm_exec(const uint8_t *code, int code_size) {
     while (pc < code_size) {
         uint8_t op = memory[pc++];
         
-        // DEBUGGING
-        /*
-        cmd_write("PC:"); cmd_write_int(pc-1); 
-        cmd_write(" OP:"); cmd_write_int(op);
-        cmd_write(" SP:"); cmd_write_int(sp);
-        cmd_write("\n");
-        */
+
 
         switch (op) {
             case OP_HALT: 

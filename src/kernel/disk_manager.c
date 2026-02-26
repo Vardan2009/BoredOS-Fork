@@ -112,7 +112,7 @@ static int ata_identify(uint16_t port_base, bool slave) {
     // Read 256 words (512 bytes) of identity data
     for (int i = 0; i < 256; i++) {
         uint16_t data = inw(port_base + ATA_REG_DATA);
-        (void)data; // We discard identity data for now, just checking presence
+        (void)data;
     }
     
     return 1;

@@ -74,28 +74,66 @@ isr1_wrapper:
 isr12_wrapper:
     ISR_NOERRCODE mouse_handler, 44
 
-; Common exception macro
-%macro EXCEPTION_ERRCODE 1
-isr%1_wrapper:
-    push %1
+; Common exception macro for exceptions WITHOUT error code
+%macro EXCEPTION_NOERRCODE 1
+global exc%1_wrapper
+exc%1_wrapper:
+    push 0      ; Dummy error code
+    push %1     ; Vector
     jmp exception_common
 %endmacro
 
-; Exception 8: Double Fault (has error code)
-EXCEPTION_ERRCODE 8
+; Common exception macro for exceptions WITH error code
+%macro EXCEPTION_ERRCODE 1
+global exc%1_wrapper
+exc%1_wrapper:
+    push %1     ; Vector
+    jmp exception_common
+%endmacro
 
-; Exception 14: Page Fault (has error code)
-EXCEPTION_ERRCODE 14
+; Define all 32 standard exceptions
+EXCEPTION_NOERRCODE 0  ; Divide Error
+EXCEPTION_NOERRCODE 1  ; Debug
+EXCEPTION_NOERRCODE 2  ; NMI
+EXCEPTION_NOERRCODE 3  ; Breakpoint
+EXCEPTION_NOERRCODE 4  ; Overflow
+EXCEPTION_NOERRCODE 5  ; Bound Range Exceeded
+EXCEPTION_NOERRCODE 6  ; Invalid Opcode
+EXCEPTION_NOERRCODE 7  ; Device Not Available
+EXCEPTION_ERRCODE   8  ; Double Fault
+EXCEPTION_NOERRCODE 9  ; Coprocessor Segment Overrun
+EXCEPTION_ERRCODE   10 ; Invalid TSS
+EXCEPTION_ERRCODE   11 ; Segment Not Present
+EXCEPTION_ERRCODE   12 ; Stack-Segment Fault
+EXCEPTION_ERRCODE   13 ; General Protection Fault
+EXCEPTION_ERRCODE   14 ; Page Fault
+EXCEPTION_NOERRCODE 15 ; Reserved
+EXCEPTION_NOERRCODE 16 ; x87 Floating-Point Exception
+EXCEPTION_ERRCODE   17 ; Alignment Check
+EXCEPTION_NOERRCODE 18 ; Machine Check
+EXCEPTION_NOERRCODE 19 ; SIMD Floating-Point Exception
+EXCEPTION_NOERRCODE 20 ; Virtualization Exception
+EXCEPTION_ERRCODE   21 ; Control Protection Exception
+EXCEPTION_NOERRCODE 22 ; Reserved
+EXCEPTION_NOERRCODE 23 ; Reserved
+EXCEPTION_NOERRCODE 24 ; Reserved
+EXCEPTION_NOERRCODE 25 ; Reserved
+EXCEPTION_NOERRCODE 26 ; Reserved
+EXCEPTION_NOERRCODE 27 ; Reserved
+EXCEPTION_NOERRCODE 28 ; Hypervisor Injection Exception
+EXCEPTION_ERRCODE   29 ; VMM Communication Exception
+EXCEPTION_ERRCODE   30 ; Security Exception
+EXCEPTION_NOERRCODE 31 ; Reserved
 
 exception_common:
-    ; Save registers
+    ; Save registers (registers_t structure)
     push rax
+    push rbx
     push rcx
     push rdx
-    push rbx
     push rbp
-    push rsi
     push rdi
+    push rsi
     push r8
     push r9
     push r10
@@ -105,14 +143,15 @@ exception_common:
     push r14
     push r15
     
-    ; Call C handler: uint64_t exception_handler_c(registers_t *regs)
+    ; Pass current RSP as 1st argument (registers_t*)
     mov rdi, rsp
+    
     call exception_handler_c
     
     ; Switch stack if needed (for process termination)
     mov rsp, rax
     
-    ; Restore (in case we want to return, but usually we halt if kernel)
+    ; Restore registers
     pop r15
     pop r14
     pop r13
@@ -121,12 +160,13 @@ exception_common:
     pop r10
     pop r9
     pop r8
-    pop rdi
     pop rsi
+    pop rdi
     pop rbp
-    pop rbx
     pop rdx
     pop rcx
+    pop rbx
     pop rax
     add rsp, 16 ; drop vector and error code
     iretq
+

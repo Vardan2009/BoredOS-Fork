@@ -325,8 +325,6 @@ static void editor_paint(ui_window_t win) {
     ui_draw_rounded_rect_filled(win, padding, status_y + 2, content_width, footer_h - 4, 6, COLOR_DARK_PANEL);
     
     char status_text[128];
-    // Simple manual sprintf-like functionality for BoredOS userspace
-    // We'll just draw parts for now as before but cleaned up
     ui_draw_string(win, padding + 15, status_y + 5, "Line:", COLOR_DKGRAY);
     
     char line_str[32];

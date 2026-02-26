@@ -18,6 +18,7 @@ void cli_cmd_boredver(char *args);
 void cli_cmd_clear(char *args);
 void cli_cmd_exit(char *args);
 
+
 // Filesystem commands
 void cli_cmd_cd(char *args);
 void cli_cmd_pwd(char *args);

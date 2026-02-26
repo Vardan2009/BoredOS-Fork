@@ -19,7 +19,6 @@ static void write_cr3(uint64_t cr3) {
 
 // Helper to allocate a page table and clear it
 static uint64_t alloc_page_table_phys(void) {
-    // We allocate a page table in Virtual Memory (HHDM)
     void* ptr = kmalloc(PAGE_SIZE * 2); 
     if (!ptr) return 0;
     
@@ -41,8 +40,7 @@ static uint64_t alloc_page_table_phys(void) {
 }
 
 void paging_init(void) {
-    // Limine sets up a highly mapped page table for us.
-    // CR3 contains the physical address of the PML4.
+
     current_pml4_phys = read_cr3() & PT_ADDR_MASK;
 }
 

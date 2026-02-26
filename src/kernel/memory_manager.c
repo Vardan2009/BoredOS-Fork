@@ -159,11 +159,9 @@ void memory_manager_init_at(void *pool_address, size_t pool_size) {
 }
 
 void memory_manager_init_with_size(size_t pool_size) {
-    // This is now just a wrapper if init_at wasn't called.
-    // However, in BoredOS we now prefer explicit init_at.
+
     if (initialized) return;
-    // Fallback: we still need a buffer if no address is provided?
-    // Let's assume for now that BoredOS always calls init_at.
+
 }
 
 void memory_manager_init(void) {
@@ -183,7 +181,6 @@ void* kmalloc_aligned(size_t size, size_t alignment) {
         return NULL;
     }
     
-    // Check if we can allocate
     if (total_allocated + size > memory_pool_size) {
         asm volatile("push %0; popfq" : : "r"(rflags));
         return NULL;

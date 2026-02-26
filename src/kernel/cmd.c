@@ -361,7 +361,6 @@ void pager_wrap_content(const char **lines, int count) {
             pager_total_lines++;
             processed += chunk_len;
             
-            // Skip the space we just split on
             if (processed < len && line[processed] == ' ') {
                 processed++;
             }
@@ -425,7 +424,6 @@ static void internal_cmd_cd(char *args) {
     }
     path[i] = 0;
     
-    // For cmd_state, we need to build and validate the full path
     if (cmd_state) {
         // Build full path for validation
         char full_path[512] = {0};
@@ -942,9 +940,7 @@ static void cmd_exec_single(char *cmd) {
         
         if (needs_path) {
             if (args && args[0]) {
-                // For echo with redirection, we need to prepend drive to redirect target too
                 if (is_echo_command) {
-                    // Find > or >> and prepend drive to the filename after it
                     char temp_args[512] = {0};
                     int i = 0;
                     int j = 0;
