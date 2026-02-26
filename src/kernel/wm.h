@@ -64,6 +64,7 @@ void wm_handle_key(char c);
 void wm_handle_click(int x, int y);
 void wm_handle_right_click(int x, int y);
 void wm_process_input(void);
+void wm_process_deferred_thumbs(void);
 void wm_add_window(Window *win);
 void wm_remove_window(Window *win);
 void wm_bring_to_front(Window *win);

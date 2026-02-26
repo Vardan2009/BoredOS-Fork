@@ -27,20 +27,20 @@ static bool str_eq(const char *s1, const char *s2) {
 }
 
 // --- State ---
-static int mx = 400, my = 300; // Mouse Pos
-static int prev_mx = 400, prev_my = 300; // Previous mouse position
+static int mx = 400, my = 300; 
+static int prev_mx = 400, prev_my = 300; 
 static bool start_menu_open = false;
-static char *start_menu_pending_app = NULL; // For click vs drag detection
-static int pending_desktop_icon_click = -1; // For desktop icon click vs drag
+static char *start_menu_pending_app = NULL; 
+static int pending_desktop_icon_click = -1; 
 
 // Desktop Context Menu
 static bool desktop_menu_visible = false;
 static int desktop_menu_x = 0;
 static int desktop_menu_y = 0;
-static int desktop_menu_target_icon = -1; // -1 for background
+static int desktop_menu_target_icon = -1; 
 
 // Desktop Dialog State
-static int desktop_dialog_state = 0; // 0=None, 8=Rename
+static int desktop_dialog_state = 0; 
 static char desktop_dialog_input[64];
 static int desktop_dialog_cursor = 0;
 static int desktop_dialog_target = -1;
@@ -62,7 +62,7 @@ static int drag_offset_y = 0;
 // File Dragging State
 bool is_dragging_file = false;
 static char drag_file_path[256];
-static int drag_icon_type = 0; // 0=File, 1=Folder, 2=App
+static int drag_icon_type = 0; 
 static int drag_start_x = 0;
 static int drag_start_y = 0;
 static int drag_icon_orig_x = 0;
@@ -74,7 +74,7 @@ static Window *all_windows[32];
 static int window_count = 0;
 
 // Redraw system
-static bool force_redraw = true;  // Force full redraw on next tick
+static bool force_redraw = true;  
 static uint32_t timer_ticks = 0;
 static int desktop_refresh_timer = 0;
 
@@ -88,7 +88,7 @@ static int last_cursor_y = 300;
 typedef struct {
     char name[64];
     int x, y;
-    int type; // 0=File, 1=Folder, 2=App
+    int type; 
 } DesktopIcon;
 
 static DesktopIcon desktop_icons[MAX_DESKTOP_ICONS];
@@ -101,7 +101,7 @@ int desktop_max_rows_per_col = 13;
 int desktop_max_cols = 23;
 
 // Mouse Settings
-int mouse_speed = 10; // Default 1.0x (range 1-50)
+int mouse_speed = 10;       
 static int mouse_accum_x = 0;
 static int mouse_accum_y = 0;
 
@@ -141,9 +141,7 @@ static void refresh_desktop_icons(void) {
     bool file_processed[MAX_DESKTOP_ICONS];
     for(int i=0; i<MAX_DESKTOP_ICONS; i++) file_processed[i] = false;
 
-    // 1. Preserve existing icons in their current order
     for (int i = 0; i < desktop_icon_count; i++) {
-        // Find if this icon still exists in the file list
         int found_idx = -1;
         for (int j = 0; j < file_count; j++) {
             if (!file_processed[j] && str_eq(desktop_icons[i].name, files[j].name) != 0) {
@@ -162,10 +160,9 @@ static void refresh_desktop_icons(void) {
         }
     }
 
-    // 2. Add new files (not currently on desktop) to the end
     for (int i = 0; i < file_count; i++) {
         if (!file_processed[i]) {
-            if (files[i].name[0] == '.') continue; // Skip . and ..
+            if (files[i].name[0] == '.') continue; 
             if (new_count >= MAX_DESKTOP_ICONS) break;
 
             DesktopIcon *dest = &new_icons[new_count];
@@ -186,14 +183,12 @@ static void refresh_desktop_icons(void) {
     for(int i=0; i<new_count; i++) desktop_icons[i] = new_icons[i];
     kfree(files);
     
-    // 3. Layout Icons
     if (desktop_auto_align) {
         int start_x = 20;
         int start_y = 30;
         int grid_x = 0;
         int grid_y = 0;
         
-        // Find Recycle Bin index
         int recycle_idx = -1;
         for (int i = 0; i < desktop_icon_count; i++) {
             if (str_starts_with(desktop_icons[i].name, "Recycle Bin")) {
@@ -521,6 +516,42 @@ static struct {
 } thumb_cache[THUMB_CACHE_SIZE];
 static int thumb_cache_next = 0; // Round-robin eviction
 
+// Deferred Thumbnail Request Queue
+#define THUMB_QUEUE_SIZE 16
+static char thumb_request_queue[THUMB_QUEUE_SIZE][256];
+static int thumb_queue_head = 0;
+static int thumb_queue_tail = 0;
+
+static void thumb_request_push(const char *path) {
+    if (!path) return;
+    
+    // Check if already in queue
+    int curr = thumb_queue_head;
+    while (curr != thumb_queue_tail) {
+        if (str_eq(thumb_request_queue[curr], path) != 0) return;
+        curr = (curr + 1) % THUMB_QUEUE_SIZE;
+    }
+    
+    // Push if space
+    int next_tail = (thumb_queue_tail + 1) % THUMB_QUEUE_SIZE;
+    if (next_tail != thumb_queue_head) {
+        int i = 0;
+        while (path[i] && i < 255) {
+            thumb_request_queue[thumb_queue_tail][i] = path[i];
+            i++;
+        }
+        thumb_request_queue[thumb_queue_tail][i] = 0;
+        thumb_queue_tail = next_tail;
+    }
+}
+
+static bool thumb_cache_is_failed(const char *path) {
+    for (int i = 0; i < THUMB_CACHE_SIZE; i++) {
+        if (thumb_cache[i].failed && str_eq(thumb_cache[i].path, path) != 0) return true;
+    }
+    return false;
+}
+
 static uint32_t* thumb_cache_lookup(const char *path) {
     for (int i = 0; i < THUMB_CACHE_SIZE; i++) {
         if (thumb_cache[i].valid && str_eq(thumb_cache[i].path, path) != 0) {
@@ -530,14 +561,7 @@ static uint32_t* thumb_cache_lookup(const char *path) {
     return NULL;
 }
 
-static bool thumb_cache_is_failed(const char *path) {
-    for (int i = 0; i < THUMB_CACHE_SIZE; i++) {
-        if (thumb_cache[i].failed && str_eq(thumb_cache[i].path, path) != 0) {
-            return true;
-        }
-    }
-    return false;
-}
+
 
 static uint32_t* thumb_cache_decode(const char *path) {
     // Open and read the JPG file
@@ -566,10 +590,13 @@ static uint32_t* thumb_cache_decode(const char *path) {
     // Decode JPEG
     njInit();
     if (njDecode(buf, total) != NJ_OK) {
+        serial_write("[WM] njDecode failed for deferred thumb\n");
         njDone();
         kfree(buf);
         return NULL;
     }
+    
+    serial_write("[WM] njDecode OK for deferred thumb\n");
     
     int img_w = njGetWidth();
     int img_h = njGetHeight();
@@ -627,22 +654,8 @@ void draw_image_icon(int x, int y, const char *label) {
     if (!thumb && !thumb_cache_is_failed(label)) {
         thumb = thumb_cache_lookup(label);
         if (!thumb) {
-            // Try to decode and cache
-            graphics_set_render_target(NULL, 0, 0); // Restore before file I/O
-            thumb = thumb_cache_decode(label);
-            if (!thumb) {
-                // Mark as failed so we don't retry every frame
-                int slot = thumb_cache_next;
-                int p = 0;
-                while (label[p] && p < 255) { thumb_cache[slot].path[p] = label[p]; p++; }
-                thumb_cache[slot].path[p] = 0;
-                thumb_cache[slot].valid = false;
-                thumb_cache[slot].failed = true;
-                thumb_cache_next = (thumb_cache_next + 1) % THUMB_CACHE_SIZE;
-            }
-            // Re-set render target for icon drawing
-            for (int i = 0; i < 48 * 48; i++) icon_buf[i] = 0xFFFF00FF;
-            graphics_set_render_target(icon_buf, 48, 48);
+            // Queue for background decoding
+            thumb_request_push(label);
         }
     }
     
@@ -1097,6 +1110,9 @@ void wm_paint(void) {
     int sw = get_screen_width();
     int sh = get_screen_height();
     
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
+
     DirtyRect dirty = graphics_get_dirty_rect();
     if (dirty.active) {
         graphics_set_clipping(dirty.x, dirty.y, dirty.w, dirty.h);
@@ -1299,6 +1315,9 @@ void wm_paint(void) {
     
     // Flip the buffer - display the rendered frame atomically
     graphics_flip_buffer();
+
+    // Restore IRQs
+    asm volatile("push %0; popfq" : : "r"(rflags));
 }
 
 // --- Input Handling ---
@@ -2299,11 +2318,14 @@ void wm_handle_key(char c) {
 }
 
 void wm_process_input(void) {
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
     while (key_head != key_tail) {
         char c = key_queue[key_tail];
         key_tail = (key_tail + 1) % INPUT_QUEUE_SIZE;
         wm_dispatch_key(c);
     }
+    asm volatile("push %0; popfq" : : "r"(rflags));
 }
 
 void wm_mark_dirty(int x, int y, int w, int h) {
@@ -2312,6 +2334,28 @@ void wm_mark_dirty(int x, int y, int w, int h) {
 
 void wm_refresh(void) {
     force_redraw = true;
+}
+
+void wm_process_deferred_thumbs(void) {
+    if (thumb_queue_head == thumb_queue_tail) return;
+    
+    char path[256];
+    int i = 0;
+    while (thumb_request_queue[thumb_queue_head][i]) {
+        path[i] = thumb_request_queue[thumb_queue_head][i];
+        i++;
+    }
+    path[i] = 0;
+    
+    serial_write("[WM] Processing deferred thumb: ");
+    serial_write(path);
+    serial_write("\n");
+    
+    // Pop from queue
+    thumb_queue_head = (thumb_queue_head + 1) % THUMB_QUEUE_SIZE;
+    
+    // Process (this takes time but it's okay because we are in the main loop with IRQs enabled)
+    thumb_cache_decode(path);
 }
 
 void wm_init(void) {

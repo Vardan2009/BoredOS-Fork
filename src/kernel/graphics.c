@@ -287,6 +287,7 @@ void draw_char(int x, int y, char c, uint32_t color) {
 }
 
 void draw_string(int x, int y, const char *s, uint32_t color) {
+    if (!s) return;
     int cur_x = x;
     int cur_y = y;
     while (*s) {
@@ -370,22 +371,22 @@ void graphics_set_bg_image(uint32_t *pixels, int w, int h) {
 void draw_boredos_logo(int x, int y, int scale) {
 
     static const uint8_t brewos_bmp[] = {
-        0,0,1,1,1,0,0,0,0,0,0,1,1,1,0,0, // 0: Ears
-        0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,0, // 1: Ears
-        1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1, // 2: Ears (Separated)
-        1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1, // 3: Forehead / Ears
-        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1, // 4: Face
-        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, // 5: Eyes start
-        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 6: Eyes
-        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 7: Eyes
-        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, // 8: Eyes
-        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, // 9: Under eyes
-        1,1,2,2,2,2,2,1,1,2,2,2,2,2,1,1, // 10: Nose
-        1,1,2,2,2,2,2,2,2,2,2,2,2,2,1,1, // 11: Cheeks
-        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1, // 12: Jaw
-        0,1,1,1,2,2,2,2,2,2,2,2,1,1,1,0, // 13: Chin
-        0,0,1,1,1,2,2,2,2,2,2,1,1,1,0,0, // 14: Chin outline
-        0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0  // 15: Bottom
+        0,0,1,1,1,0,0,0,0,0,0,1,1,1,0,0,
+        0,1,1,1,1,0,0,0,0,0,0,1,1,1,1,0, 
+        1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1, 
+        1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1, 
+        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1, 
+        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, 
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1, 
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1,
+        1,1,2,2,1,1,1,1,1,1,1,1,2,2,1,1,
+        1,1,2,2,2,1,1,2,2,1,1,2,2,2,1,1, 
+        1,1,2,2,2,2,2,1,1,2,2,2,2,2,1,1, 
+        1,1,2,2,2,2,2,2,2,2,2,2,2,2,1,1, 
+        1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1,
+        0,1,1,1,2,2,2,2,2,2,2,2,1,1,1,0, 
+        0,0,1,1,1,2,2,2,2,2,2,1,1,1,0,0, 
+        0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0 
     };
 
     for (int r = 0; r < 16; r++) {
@@ -435,6 +436,15 @@ void graphics_flip_buffer(void) {
 }
 
 void graphics_set_clipping(int x, int y, int w, int h) {
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    int sw = get_screen_width();
+    int sh = get_screen_height();
+    if (x + w > sw) w = sw - x;
+    if (y + h > sh) h = sh - y;
+    if (w < 0) w = 0;
+    if (h < 0) h = 0;
+
     g_clip_x = x;
     g_clip_y = y;
     g_clip_w = w;
@@ -459,9 +469,7 @@ void graphics_blit_buffer(uint32_t *src, int dst_x, int dst_y, int w, int h) {
             if (vx < 0 || vx >= sw) continue;
             
             uint32_t pcol = src[y * w + x];
-            // Alpha blending support:
-            // If the alpha byte is 0, we treat it as transparent ONLY if the color is also 0.
-            // This handles common 0xRRGGBB as opaque.
+
             if ((pcol & 0xFF000000) != 0 || (pcol & 0xFFFFFF) != 0) {
                 g_back_buffer[vy * sw + vx] = pcol;
             }

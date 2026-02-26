@@ -35,6 +35,9 @@ typedef struct process {
     
     void *fds[MAX_PROCESS_FDS];
     
+    void *kernel_stack_alloc; // Original pointer from kmalloc for freeing
+    void *user_stack_alloc;   // Original pointer from kmalloc for freeing
+
     struct process *next;
 } process_t;
 

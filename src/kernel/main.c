@@ -84,7 +84,32 @@ void kmain(void) {
     platform_init();
     serial_write("[DEBUG] platform_init OK\n");
 
-    // 1. Graphics Init
+    // 1. Memory Detection and Heap Init
+    uint64_t heap_phys_addr = 0;
+    size_t heap_size = 0;
+    if (memmap_request.response != NULL) {
+        for (uint64_t i = 0; i < memmap_request.response->entry_count; i++) {
+            struct limine_memmap_entry *entry = memmap_request.response->entries[i];
+            if (entry->type == LIMINE_MEMMAP_USABLE) {
+                if (entry->length > heap_size) {
+                    heap_size = entry->length;
+                    heap_phys_addr = entry->base;
+                }
+            }
+        }
+    }
+
+    if (heap_size > 512 * 1024 * 1024) heap_size = 512 * 1024 * 1024; // Cap at 512MB
+    
+    if (heap_phys_addr != 0) {
+        memory_manager_init_at((void*)p2v(heap_phys_addr), heap_size);
+        serial_write("[DEBUG] memory_manager_init OK\n");
+    } else {
+        serial_write("[DEBUG] ERROR: No usable memory for heap!\n");
+        hcf();
+    }
+
+    // 2. Graphics Init
     if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
         serial_write("[DEBUG] No framebuffer! Halting.\n");
         hcf();
@@ -94,20 +119,19 @@ void kmain(void) {
     graphics_init(fb);
     serial_write("[DEBUG] graphics_init OK\n");
 
-    // 1.5 GDT & TSS Init
+    // 3. GDT & TSS Init
     gdt_init();
     serial_write("[DEBUG] gdt_init OK\n");
 
-    // 1.6 Paging Init
+    // 4. Paging Init
     paging_init();
     serial_write("[DEBUG] paging_init OK\n");
 
-    // 1.7 Syscall Init
+    // 5. Syscall Init
     syscall_init();
     serial_write("[DEBUG] syscall_init OK\n");
 
-    // Set up a user page and jump to user space
-    // 2. Interrupts Init
+    // 6. Interrupts Init
     idt_init();
     idt_register_interrupts();
     idt_load();
@@ -115,33 +139,8 @@ void kmain(void) {
 
     process_init();
 
-
     serial_write("[DEBUG] Skipping user mode test, proceeding with normal boot.\n");
     
-    // 2.5 Memory Manager Init - Calculate available RAM from Limine
-    size_t total_usable_memory = 0;
-    if (memmap_request.response != NULL) {
-        for (uint64_t i = 0; i < memmap_request.response->entry_count; i++) {
-            struct limine_memmap_entry *entry = memmap_request.response->entries[i];
-            
-            
-            // Count usable memory regions
-            if (entry->type == LIMINE_MEMMAP_USABLE) {
-                total_usable_memory += entry->length;
-            }
-        }
-    }
-    
-    // Initialize memory manager with available memory (cap at 2GB for practical reasons)
-    size_t pool_size = total_usable_memory > (2 * 1024 * 1024 * 1024) ? 
-                       (2 * 1024 * 1024 * 1024) : total_usable_memory;
-    
-    if (pool_size == 0) {
-        pool_size = 512 * 1024 * 1024;  // Fallback to 512MB if detection fails
-    }
-    
-    memory_manager_init_with_size(pool_size);
-
     // Initialize FAT32 RAMFS and mount Limine modules
     fat32_init();
     if (module_request.response != NULL) {
@@ -181,6 +180,7 @@ void kmain(void) {
     // Timer interrupt will drive the redraw system
     while (1) {
         wm_process_input();
+        wm_process_deferred_thumbs();
         wallpaper_process_pending();
         asm("hlt");
     }

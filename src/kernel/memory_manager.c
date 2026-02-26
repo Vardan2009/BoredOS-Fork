@@ -3,10 +3,8 @@
 #include <stdint.h>
 
 // --- Internal State ---
-#define KERNEL_HEAP_SIZE (32 * 1024 * 1024) // 32MB Static Heap
-static uint8_t memory_pool_buffer[KERNEL_HEAP_SIZE];
-static uint8_t *memory_pool = memory_pool_buffer;
-static size_t memory_pool_size = KERNEL_HEAP_SIZE;
+static uint8_t *memory_pool = NULL;
+static size_t memory_pool_size = 0;
 static MemBlock block_list[MAX_ALLOCATIONS];
 static int block_count = 0;
 static size_t total_allocated = 0;
@@ -137,9 +135,11 @@ static size_t calculate_fragmentation(void) {
 
 // --- Public API ---
 
-void memory_manager_init_with_size(size_t pool_size) {
+void memory_manager_init_at(void *pool_address, size_t pool_size) {
     if (initialized) return;
     
+    memory_pool = (uint8_t *)pool_address;
+    memory_pool_size = pool_size;
     
     // Clear metadata
     mem_memset(block_list, 0, sizeof(block_list));
@@ -156,6 +156,14 @@ void memory_manager_init_with_size(size_t pool_size) {
     block_count = 1;
     
     initialized = true;
+}
+
+void memory_manager_init_with_size(size_t pool_size) {
+    // This is now just a wrapper if init_at wasn't called.
+    // However, in BoredOS we now prefer explicit init_at.
+    if (initialized) return;
+    // Fallback: we still need a buffer if no address is provided?
+    // Let's assume for now that BoredOS always calls init_at.
 }
 
 void memory_manager_init(void) {

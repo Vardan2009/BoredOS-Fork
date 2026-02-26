@@ -239,6 +239,8 @@ void process_create_elf(const char* filepath, const char* args_str) {
     *(--stack_ptr) = 0;                // R15
 
     new_proc->kernel_stack = (uint64_t)kernel_stack + 16384;
+    new_proc->kernel_stack_alloc = kernel_stack;
+    new_proc->user_stack_alloc = stack;
     new_proc->rsp = (uint64_t)stack_ptr;
 
     // We only increment process_count after success
@@ -332,6 +334,13 @@ uint64_t process_terminate_current(void) {
     }
     
     paging_switch_directory(current_process->pml4_phys);
+
+    // 5. Actually free the memory (after switching state to avoid issues)
+    if (to_delete->kernel_stack_alloc) kfree(to_delete->kernel_stack_alloc);
+    if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
+    
+    // NOTE: In a real system we would also free all physical pages
+    // used by the user page table. For now we just free the stacks.
 
     return current_process->rsp;
 }
