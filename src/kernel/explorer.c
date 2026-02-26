@@ -4,28 +4,16 @@
 #include "disk.h"
 #include "wm.h"
 #include "memory_manager.h"
-#include "editor.h"
-#include "markdown.h"
 #include "cmd.h"
-
 #include "process.h"
-#include "minesweeper.h"
-#include "viewer.h"
-#include "control_panel.h"
 #include "about.h"
-#include "paint.h"
-#include <stdbool.h>
-#include <stddef.h>
-
-// === File Explorer State ===
-Window win_explorer;
-
-#define EXPLORER_MAX_FILES 64
 #define EXPLORER_ITEM_HEIGHT 80
 #define EXPLORER_ITEM_WIDTH 120
 #define EXPLORER_COLS 4
 #define EXPLORER_ROWS 4
 #define EXPLORER_PADDING 15
+
+Window win_explorer;
 
 // Dialog states
 #define DIALOG_NONE 0
@@ -819,16 +807,13 @@ static void explorer_open_target(const char *path) {
         if (explorer_str_ends_with(path, ".elf")) {
             process_create_elf(path, NULL);
         } else if (explorer_is_markdown_file(path)) {
-            wm_bring_to_front(&win_markdown);
-            markdown_open_file(path);
+            process_create_elf("A:/bin/markdown.elf", path);
         } else if (explorer_str_ends_with(path, ".pnt")) {
-            paint_load(path);
-            wm_bring_to_front(&win_paint);
+            process_create_elf("A:/bin/paint.elf", path);
         } else if (explorer_str_ends_with(path, ".jpg") || explorer_str_ends_with(path, ".JPG")) {
-            viewer_open_file(path);
+            process_create_elf("A:/bin/viewer.elf", path);
         } else {
-            wm_bring_to_front(&win_editor);
-            editor_open_file(path);
+            process_create_elf("A:/bin/txtedit.elf", path);
         }
     }
 }
@@ -859,9 +844,9 @@ static void explorer_open_item(Window *win, int index) {
         } else if (explorer_strcmp(state->items[index].name, "Terminal.shortcut") == 0) {
             target = &win_cmd; cmd_reset();
         } else if (explorer_strcmp(state->items[index].name, "Minesweeper.shortcut") == 0) {
-            target = &win_minesweeper;
-        } else if (explorer_strcmp(state->items[index].name, "Control Panel.shortcut") == 0) {
-            target = &win_control_panel;
+            process_create_elf("/bin/minesweeper.elf", NULL); return;
+        } else if (explorer_strcmp(state->items[index].name, "Control Panel.shortcut") == 0 || explorer_strcmp(state->items[index].name, "Settings.shortcut") == 0) {
+            process_create_elf("/bin/settings.elf", NULL); return;
         } else if (explorer_strcmp(state->items[index].name, "About.shortcut") == 0) {
             target = &win_about;
         } else if (explorer_strcmp(state->items[index].name, "Explorer.shortcut") == 0) {
@@ -1781,17 +1766,7 @@ static void explorer_handle_file_context_menu_click(Window *win, int x, int y) {
         state->dialog_input_cursor = explorer_strlen(state->dialog_input);
         explorer_strcpy(state->dialog_target_path, full_path);
     } else if (clicked_action == 110) { // Open with Text Editor
-        win_editor.visible = true; win_editor.focused = true;
-        int max_z = 0;
-        for (int i = 0; i < explorer_win_count; i++) if (explorer_wins[i]->z_index > max_z) max_z = explorer_wins[i]->z_index;
-        if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
-        if (win_editor.z_index > max_z) max_z = win_editor.z_index;
-        if (win_markdown.z_index > max_z) max_z = win_markdown.z_index;
-        if (win_control_panel.z_index > max_z) max_z = win_control_panel.z_index;
-        if (win_about.z_index > max_z) max_z = win_about.z_index;
-        if (win_minesweeper.z_index > max_z) max_z = win_minesweeper.z_index;
-        win_editor.z_index = max_z + 1;
-        editor_open_file(full_path);
+        process_create_elf("A:/bin/txtedit.elf", full_path);
     } else if (clicked_action == ACTION_RESTORE) {
         explorer_restore_file(win, state->file_context_menu_item);
     } else if (clicked_action == ACTION_CREATE_SHORTCUT) {
@@ -2024,6 +1999,6 @@ void explorer_reset(void) {
     ExplorerState *state = (ExplorerState*)win_explorer.data;
     // Reset explorer to root directory on close/reopen
     explorer_load_directory(&win_explorer, "A:/");
-    win_explorer.focused = false;
     state->explorer_scroll_row = 0;
+    win_explorer.focused = false;
 }

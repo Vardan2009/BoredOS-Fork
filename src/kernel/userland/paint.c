@@ -1,0 +1,251 @@
+#include "libc/syscall.h"
+#include "libc/libui.h"
+#include "libc/stdlib.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define CANVAS_W 300
+#define CANVAS_H 200
+#define PAINT_MAGIC 0x544E5042 // 'BPNT'
+
+#define COLOR_BLACK         0xFF000000
+#define COLOR_WHITE         0xFFFFFFFF
+#define COLOR_RED           0xFFFF0000
+#define COLOR_APPLE_GREEN   0xFF4CD964
+#define COLOR_APPLE_BLUE    0xFF007AFF
+#define COLOR_APPLE_YELLOW  0xFFFFCC00
+
+#define COLOR_DARK_BG       0xFF121212
+#define COLOR_DARK_PANEL    0xFF202020
+#define COLOR_DARK_BORDER   0xFF404040
+#define COLOR_DARK_TEXT     0xFFE0E0E0
+
+static uint32_t *canvas_buffer = NULL;
+static uint32_t current_color = COLOR_BLACK;
+static int last_mx = -1;
+static int last_my = -1;
+static char current_file_path[256] = "/Desktop/drawing.pnt";
+
+static void paint_strcpy(char *dest, const char *src) {
+    while (*src) *dest++ = *src++;
+    *dest = 0;
+}
+
+static void debug_print(const char *msg) {
+    sys_write(1, msg, 0);
+    int i = 0;
+    while (msg[i]) i++;
+    sys_write(1, msg, i);
+    sys_write(1, "\n", 1);
+}
+
+static void paint_reset(void) {
+    if (canvas_buffer) {
+        for (int i = 0; i < CANVAS_W * CANVAS_H; i++) {
+            canvas_buffer[i] = COLOR_WHITE;
+        }
+    }
+}
+
+static void paint_paint(ui_window_t win) {
+    int canvas_x = 60;
+    int canvas_y = 30;
+    
+    // Canvas Area with dark background and rounded corners (draw first so it's behind everything)
+    ui_draw_rounded_rect_filled(win, canvas_x - 2, canvas_y - 2, CANVAS_W + 4, CANVAS_H + 4, 4, COLOR_DARK_BG);
+
+    // Toolbar area - dark mode
+    ui_draw_rounded_rect_filled(win, 10, 30, 40, 260 - 40, 6, COLOR_DARK_PANEL);
+    
+    // Color Palette with rounded corners
+    uint32_t colors[] = {COLOR_BLACK, COLOR_RED, COLOR_APPLE_GREEN, COLOR_APPLE_BLUE, COLOR_APPLE_YELLOW, COLOR_WHITE};
+    for (int i = 0; i < 6; i++) {
+        int cy = 40 + (i * 25);
+        ui_draw_rounded_rect_filled(win, 15, cy, 30, 20, 3, colors[i]);
+        
+        // Highlight selected color with border
+        if (current_color == colors[i]) {
+            // Note: libui might not have draw_rounded_rect (hollow), so we just draw four lines simulating it
+            // or we use ui_draw_rect for hollow border
+            ui_draw_rect(win, 13, cy - 2, 34, 1, COLOR_DARK_TEXT);
+            ui_draw_rect(win, 13, cy - 2 + 24, 34, 1, COLOR_DARK_TEXT);
+            ui_draw_rect(win, 13, cy - 2, 1, 24, COLOR_DARK_TEXT);
+            ui_draw_rect(win, 13 + 34, cy - 2, 1, 24, COLOR_DARK_TEXT);
+        }
+    }
+
+    // Toolbar Buttons - dark mode with rounded corners
+    ui_draw_rounded_rect_filled(win, 12, 260 - 65, 36, 20, 4, COLOR_DARK_BORDER);
+    ui_draw_string(win, 18, 260 - 58, "CLR", COLOR_DARK_TEXT);
+    
+    ui_draw_rounded_rect_filled(win, 12, 260 - 40, 36, 20, 4, COLOR_DARK_BORDER);
+    ui_draw_string(win, 18, 260 - 33, "SAV", COLOR_DARK_TEXT);
+
+    // Draw canvas content
+    if (canvas_buffer) {
+        for (int y = 0; y < CANVAS_H; y++) {
+            for (int x = 0; x < CANVAS_W; x++) {
+                uint32_t color = canvas_buffer[y * CANVAS_W + x];
+                ui_draw_rect(win, canvas_x + x, canvas_y + y, 1, 1, color);
+            }
+        }
+    }
+}
+
+static void paint_put_brush(ui_window_t win, int cx, int cy) {
+    if (!canvas_buffer) return;
+    for (int dy = 0; dy < 2; dy++) {
+        for (int dx = 0; dx < 2; dx++) {
+            int px = cx + dx;
+            int py = cy + dy;
+            if (px >= 0 && px < CANVAS_W && py >= 0 && py < CANVAS_H) {
+                canvas_buffer[py * CANVAS_W + px] = current_color;
+                ui_draw_rect(win, 60 + px, 30 + py, 1, 1, current_color);
+            }
+        }
+    }
+    ui_mark_dirty(win, 60 + cx, 30 + cy, 2, 2);
+}
+
+void paint_handle_mouse(ui_window_t win, int x, int y) {
+    int cx = x - 60;
+    int cy = y - 30;
+
+    if (cx < 0 || cx >= CANVAS_W || cy < 0 || cy >= CANVAS_H) {
+        last_mx = -1;
+        return;
+    }
+
+    if (last_mx == -1) {
+        paint_put_brush(win, cx, cy);
+    } else {
+        // Bresenham's line algorithm to fill gaps between points
+        int x0 = last_mx, y0 = last_my;
+        int x1 = cx, y1 = cy;
+        int dx = (x1 - x0 > 0) ? (x1 - x0) : (x0 - x1);
+        int dy = (y1 - y0 > 0) ? (y1 - y0) : (y0 - y1);
+        int sx = x0 < x1 ? 1 : -1;
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx - dy;
+
+        while (1) {
+            paint_put_brush(win, x0, y0);
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = 2 * err;
+            if (e2 > -dy) { err -= dy; x0 += sx; }
+            if (e2 < dx) { err += dx; y0 += sy; }
+        }
+    }
+    last_mx = cx;
+    last_my = cy;
+}
+
+void paint_reset_last_pos(void) {
+    last_mx = -1;
+    last_my = -1;
+}
+
+// Simple window message dialog wrapper using syscall
+static void wm_show_message(const char *title, const char *msg) {
+    // Wait, userland doesn't have wm_show_message syscall available yet, or maybe it does? 
+    // We didn't add it or GUI_EVENT doesn't support it directly.
+    // For now we do nothing, or just open a small window.
+}
+
+static void paint_save(const char *path) {
+    int fd = sys_open(path, "w");
+    if (fd >= 0) {
+        uint32_t header[3] = {PAINT_MAGIC, CANVAS_W, CANVAS_H};
+        sys_write_fs(fd, (char*)header, sizeof(header));
+        sys_write_fs(fd, (char*)canvas_buffer, CANVAS_W * CANVAS_H * sizeof(uint32_t));
+        sys_close(fd);
+        wm_show_message("Paint", "Image saved.");
+    }
+}
+
+void paint_load(const char *path) {
+    paint_strcpy(current_file_path, path);
+    int fd = sys_open(path, "r");
+    if (fd >= 0) {
+        uint32_t header[3];
+        if (sys_read(fd, (char*)header, sizeof(header)) == sizeof(header)) {
+            if (header[0] == PAINT_MAGIC) {
+                sys_read(fd, (char*)canvas_buffer, CANVAS_W * CANVAS_H * sizeof(uint32_t));
+            }
+        }
+        sys_close(fd);
+    }
+}
+
+static void paint_click(ui_window_t win, int x, int y) {
+    // Check Buttons
+    if (x >= 12 && x < 48) {
+        if (y >= 260 - 65 && y < 260 - 45) {
+            paint_reset();
+            paint_paint(win);
+            ui_mark_dirty(win, 0, 0, 380, 260);
+            return;
+        }
+        if (y >= 260 - 40 && y < 260 - 20) {
+            paint_save(current_file_path);
+            return;
+        }
+    }
+
+    // Check Palette
+    if (x >= 15 && x < 45) {
+        for (int i = 0; i < 6; i++) {
+            int cy = 40 + (i * 25);
+            if (y >= cy && y < cy + 20) {
+                uint32_t colors[] = {COLOR_BLACK, COLOR_RED, COLOR_APPLE_GREEN, COLOR_APPLE_BLUE, COLOR_APPLE_YELLOW, COLOR_WHITE};
+                current_color = colors[i];
+                paint_paint(win);
+                ui_mark_dirty(win, 0, 0, 380, 260);
+                return;
+            }
+        }
+    }
+    paint_handle_mouse(win, x, y);
+}
+
+int main(int argc, char **argv) {
+    ui_window_t win = ui_window_create("Paint", 150, 100, 380, 260);
+    if (!win) return 1;
+
+    canvas_buffer = malloc(CANVAS_W * CANVAS_H * sizeof(uint32_t));
+    if (!canvas_buffer) return 1;
+
+    paint_reset();
+
+    if (argc > 1) {
+        paint_load(argv[1]);
+    }
+
+    gui_event_t ev;
+    while (1) {
+        if (ui_get_event(win, &ev)) {
+            if (ev.type == GUI_EVENT_PAINT) {
+                paint_paint(win);
+                ui_mark_dirty(win, 0, 0, 380, 260);
+            } else if (ev.type == GUI_EVENT_CLICK) {
+                paint_click(win, ev.arg1, ev.arg2);
+                paint_paint(win);
+                ui_mark_dirty(win, 0, 0, 380, 260);
+            } else if (ev.type == GUI_EVENT_MOUSE_DOWN) {
+                paint_handle_mouse(win, ev.arg1, ev.arg2);
+            } else if (ev.type == GUI_EVENT_MOUSE_UP) {
+                paint_reset_last_pos();
+            } else if (ev.type == GUI_EVENT_MOUSE_MOVE) {
+                if (ev.arg3 & 0x01) { // Left button down
+                    paint_handle_mouse(win, ev.arg1, ev.arg2);
+                } else {
+                    paint_reset_last_pos();
+                }
+            } else if (ev.type == GUI_EVENT_CLOSE) {
+                sys_exit(0);
+            }
+        }
+    }
+    return 0;
+}

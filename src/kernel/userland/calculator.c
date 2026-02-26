@@ -4,7 +4,6 @@
 
 #define SCALE 1000000LL
 
-// Dark Mode Colors mapping to libui
 #define COLOR_DARK_BG       0xFF1E1E1E
 #define COLOR_DARK_PANEL    0xFF2D2D2D
 #define COLOR_DARK_TEXT     0xFFF0F0F0

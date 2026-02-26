@@ -3,22 +3,16 @@
 #include "io.h"
 #include "cmd.h"
 #include "process.h"
+#include "syscall.h"
 #include "cli_apps/cli_utils.h"
 #include "explorer.h"
-#include "editor.h"
-#include "markdown.h"
 #include <stdbool.h>
 #include <stddef.h>
-
-#include "viewer.h"
 #include "wallpaper.h"
-#include "control_panel.h"
 #include "about.h"
-#include "minesweeper.h"
 #include "fat32.h"
 #include "nanojpeg.h"
 #include "memory_manager.h"
-#include "paint.h"
 #include "disk.h"
 
 extern void serial_write(const char *str);
@@ -152,7 +146,7 @@ static void refresh_desktop_icons(void) {
         // Find if this icon still exists in the file list
         int found_idx = -1;
         for (int j = 0; j < file_count; j++) {
-            if (!file_processed[j] && str_eq(desktop_icons[i].name, files[j].name) == 0) {
+            if (!file_processed[j] && str_eq(desktop_icons[i].name, files[j].name) != 0) {
                 found_idx = j;
                 break;
             }
@@ -529,7 +523,7 @@ static int thumb_cache_next = 0; // Round-robin eviction
 
 static uint32_t* thumb_cache_lookup(const char *path) {
     for (int i = 0; i < THUMB_CACHE_SIZE; i++) {
-        if (thumb_cache[i].valid && str_eq(thumb_cache[i].path, path) == 0) {
+        if (thumb_cache[i].valid && str_eq(thumb_cache[i].path, path) != 0) {
             return thumb_cache[i].pixels;
         }
     }
@@ -538,7 +532,7 @@ static uint32_t* thumb_cache_lookup(const char *path) {
 
 static bool thumb_cache_is_failed(const char *path) {
     for (int i = 0; i < THUMB_CACHE_SIZE; i++) {
-        if (thumb_cache[i].failed && str_eq(thumb_cache[i].path, path) == 0) {
+        if (thumb_cache[i].failed && str_eq(thumb_cache[i].path, path) != 0) {
             return true;
         }
     }
@@ -619,10 +613,10 @@ void draw_image_icon(int x, int y, const char *label) {
     
     uint32_t *thumb = NULL;
     // Fast path: check hardcoded wallpaper names
-    if (str_eq(label, "moon.jpg") == 0) thumb = wallpaper_get_thumb(0);
-    else if (str_eq(label, "mountain.jpg") == 0) thumb = wallpaper_get_thumb(1);
-    else if (str_eq(label, "moon") == 0) thumb = wallpaper_get_thumb(0);
-    else if (str_eq(label, "mountain") == 0) thumb = wallpaper_get_thumb(1);
+    if (str_eq(label, "moon.jpg") != 0) thumb = wallpaper_get_thumb(0);
+    else if (str_eq(label, "mountain.jpg") != 0) thumb = wallpaper_get_thumb(1);
+    else if (str_eq(label, "moon") != 0) thumb = wallpaper_get_thumb(0);
+    else if (str_eq(label, "mountain") != 0) thumb = wallpaper_get_thumb(1);
     
     if (!thumb) {
         if (str_ends_with(label, "moon.jpg")) thumb = wallpaper_get_thumb(0);
@@ -658,7 +652,7 @@ void draw_image_icon(int x, int y, const char *label) {
         // Draw thumbnail into icon - handle both 100x60 wallpaper thumbs and 48x48 dynamic thumbs
         bool is_wallpaper_thumb = false;
         if (str_ends_with(label, "moon.jpg") || str_ends_with(label, "mountain.jpg") ||
-            str_eq(label, "moon") == 0 || str_eq(label, "mountain") == 0) {
+            str_eq(label, "moon") != 0 || str_eq(label, "mountain") != 0) {
             is_wallpaper_thumb = true;
         }
         int dst_w = 44, dst_h = 44;
@@ -1567,7 +1561,9 @@ void wm_handle_click(int x, int y) {
         if (item == 0) {  // About
             wm_bring_to_front(&win_about);
         } else if (item == 1) {  // Settings
-            wm_bring_to_front(&win_control_panel);
+            Window *existing = wm_find_window_by_title("Settings");
+            if (existing) wm_bring_to_front(existing);
+            else process_create_elf("/bin/settings.elf", NULL);
         } else if (item == 2) {  // Shutdown
             cli_cmd_shutdown(NULL);
         } else if (item == 3) {  // Restart
@@ -1608,10 +1604,6 @@ void wm_handle_click(int x, int y) {
             // Reset window state on close
             if (topmost == &win_explorer) {
                 explorer_reset();
-            } else if (topmost == &win_control_panel) {
-                control_panel_reset();
-            } else if (topmost == &win_paint) {
-                paint_reset();
             }
         } else if (y < topmost->y + 30) {
             // Dragging the title bar
@@ -1729,11 +1721,6 @@ void wm_handle_right_click(int x, int y) {
         // Mouse Down
         drag_start_x = mx;
         drag_start_y = my;
-        
-        if (win_paint.focused && win_paint.visible) {
-            paint_reset_last_pos();
-        }
-
         // Check Dock for app clicks (bottom of screen, floating)
         int dock_h = 60;
         int dock_y = sh - dock_h - 6;  // Float above bottom
@@ -1763,11 +1750,6 @@ void wm_handle_right_click(int x, int y) {
         }
     } else if (right && !prev_right) {
         wm_handle_right_click(mx, my);
-    } else if (left && win_paint.focused && win_paint.visible && !is_dragging) {
-        int rel_x = mx - win_paint.x;
-        int rel_y = my - win_paint.y;
-        paint_handle_mouse(rel_x, rel_y);
-        force_redraw = true;
     } else if (left && is_dragging && drag_window) {
         drag_window->x = mx - drag_offset_x;
         drag_window->y = my - drag_offset_y;
@@ -1855,7 +1837,9 @@ void wm_handle_right_click(int x, int y) {
                     process_create_elf("/bin/notepad.elf", NULL);
                 }
             } else if (str_starts_with(start_menu_pending_app, "Editor")) {
-                wm_bring_to_front(&win_editor);
+                Window *existing = wm_find_window_by_title("Txtedit");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/txtedit.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
                 cmd_reset(); wm_bring_to_front(&win_cmd);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
@@ -1866,11 +1850,17 @@ void wm_handle_right_click(int x, int y) {
                     process_create_elf("/bin/calculator.elf", NULL);
                 }
             } else if (str_starts_with(start_menu_pending_app, "Minesweeper")) {
-                wm_bring_to_front(&win_minesweeper);
+                Window *existing = wm_find_window_by_title("Minesweeper");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/minesweeper.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Settings")) {
-                wm_bring_to_front(&win_control_panel);
+                Window *existing = wm_find_window_by_title("Settings");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/settings.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Paint")) {
-                wm_bring_to_front(&win_paint);
+                Window *existing = wm_find_window_by_title("Paint");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/paint.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "About")) {
                 wm_bring_to_front(&win_about);
             } else if (str_starts_with(start_menu_pending_app, "Shutdown")) {
@@ -1896,9 +1886,9 @@ void wm_handle_right_click(int x, int y) {
                     } else if (str_ends_with(icon->name, "Calculator.shortcut")) {
                         process_create_elf("/bin/calculator.elf", NULL); handled = true;
                     } else if (str_ends_with(icon->name, "Minesweeper.shortcut")) {
-                        wm_bring_to_front(&win_minesweeper); handled = true;
+                        process_create_elf("/bin/minesweeper.elf", NULL); handled = true;
                     } else if (str_ends_with(icon->name, "Settings.shortcut")) {
-                        wm_bring_to_front(&win_control_panel); handled = true;
+                        process_create_elf("/bin/settings.elf", NULL); handled = true;
                     } else if (str_ends_with(icon->name, "Terminal.shortcut")) {
                         wm_bring_to_front(&win_cmd); handled = true;
                     } else if (str_ends_with(icon->name, "About.shortcut")) {
@@ -1908,7 +1898,7 @@ void wm_handle_right_click(int x, int y) {
                     } else if (str_ends_with(icon->name, "Recycle Bin.shortcut")) {
                         explorer_open_directory("/RecycleBin"); handled = true;
                     } else if (str_ends_with(icon->name, "Paint.shortcut")) {
-                        wm_bring_to_front(&win_paint); handled = true;
+                        process_create_elf("/bin/paint.elf", NULL); handled = true;
                     }
                     
                     if (!handled) {
@@ -1927,8 +1917,7 @@ void wm_handle_right_click(int x, int y) {
                                     if (fat32_is_directory(buf)) {
                                         explorer_open_directory(buf);
                                     } else {
-                                        editor_open_file(buf);
-                                        wm_bring_to_front(&win_editor);
+                                        process_create_elf("/bin/txtedit.elf", buf);
                                     }
                                     pending_desktop_icon_click = -1;
                                     force_redraw = true;
@@ -1948,16 +1937,13 @@ void wm_handle_right_click(int x, int y) {
                     if (str_ends_with(icon->name, ".elf")) {
                         process_create_elf(path, NULL);
                     } else if (str_ends_with(icon->name, ".pnt")) {
-                        paint_load(path);
-                        wm_bring_to_front(&win_paint);
+                        process_create_elf("/bin/paint.elf", path);
                     } else if (str_ends_with(icon->name, ".md")) {
-                        markdown_open_file(path);
-                        wm_bring_to_front(&win_markdown);
+                        process_create_elf("/bin/markdown.elf", path);
                     } else if (str_ends_with(icon->name, ".jpg") || str_ends_with(icon->name, ".JPG")) {
-                        viewer_open_file(path);
+                        process_create_elf("/bin/viewer.elf", path);
                     } else {
-                        editor_open_file(path);
-                        wm_bring_to_front(&win_editor);
+                        process_create_elf("/bin/txtedit.elf", path);
                     }
                 }
             }
@@ -2008,7 +1994,7 @@ void wm_handle_right_click(int x, int y) {
                         if (from_desktop) {
                             char path[128] = "/Desktop/";
                             int p=9; int n=0; while(desktop_icons[i].name[n]) path[p++] = desktop_icons[i].name[n++]; path[p]=0;
-                            if (str_eq(path, drag_file_path) == 0) continue;
+                            if (str_eq(path, drag_file_path) != 0) continue;
                         }
 
                         if (rect_contains(desktop_icons[i].x + 20, desktop_icons[i].y, 40, 40, mx, my)) {
@@ -2051,7 +2037,7 @@ void wm_handle_right_click(int x, int y) {
                         if (desktop_auto_align && !msg_box_visible) {
                             int new_idx = -1;
                             for(int i=0; i<desktop_icon_count; i++) {
-                                if (str_eq(desktop_icons[i].name, filename) == 0) {
+                                if (str_eq(desktop_icons[i].name, filename) != 0) {
                                     new_idx = i;
                                     break;
                                 }
@@ -2075,7 +2061,7 @@ void wm_handle_right_click(int x, int y) {
                             }
                         } else if (!desktop_auto_align && !msg_box_visible) {
                             for(int i=0; i<desktop_icon_count; i++) {
-                                if (str_eq(desktop_icons[i].name, filename) == 0) {
+                                if (str_eq(desktop_icons[i].name, filename) != 0) {
                                     desktop_icons[i].x = mx - 20;
                                     desktop_icons[i].y = my - 20;
                                     if (desktop_snap_to_grid) {
@@ -2096,7 +2082,7 @@ void wm_handle_right_click(int x, int y) {
                         for(int i=0; i<desktop_icon_count; i++) {
                             char path[128] = "/Desktop/";
                             int p=9; int n=0; while(desktop_icons[i].name[n]) path[p++] = desktop_icons[i].name[n++]; path[p]=0;
-                            if (str_eq(path, drag_file_path) == 0) {
+                            if (str_eq(path, drag_file_path) != 0) {
                                 dragged_idx = i;
                                 break;
                             }
@@ -2171,6 +2157,61 @@ void wm_handle_right_click(int x, int y) {
     
     if (is_dragging_file) {
         force_redraw = true;
+    }
+    
+    // Send mouse events to userland windows
+    if (left && !prev_left) {
+        // Left button pressed - send MOUSE_DOWN event to topmost window
+        Window *topmost = NULL;
+        int topmost_z = -1;
+        for (int w = 0; w < window_count; w++) {
+            Window *win = all_windows[w];
+            if (win->visible && rect_contains(win->x, win->y, win->w, win->h, mx, my)) {
+                if (win->z_index > topmost_z) {
+                    topmost = win;
+                    topmost_z = win->z_index;
+                }
+            }
+        }
+        if (topmost && topmost->data) {
+            syscall_send_mouse_down_event(topmost, mx - topmost->x, my - topmost->y);
+        }
+    }
+    
+    if (!left && prev_left) {
+        // Left button released - send MOUSE_UP event to topmost window
+        Window *topmost = NULL;
+        int topmost_z = -1;
+        for (int w = 0; w < window_count; w++) {
+            Window *win = all_windows[w];
+            if (win->visible && rect_contains(win->x, win->y, win->w, win->h, mx, my)) {
+                if (win->z_index > topmost_z) {
+                    topmost = win;
+                    topmost_z = win->z_index;
+                }
+            }
+        }
+        if (topmost && topmost->data) {
+            syscall_send_mouse_up_event(topmost, mx - topmost->x, my - topmost->y);
+        }
+    }
+    
+    if (dx != 0 || dy != 0) {
+        // Mouse moved - send MOUSE_MOVE event to topmost window
+        Window *topmost = NULL;
+        int topmost_z = -1;
+        for (int w = 0; w < window_count; w++) {
+            Window *win = all_windows[w];
+            if (win->visible && rect_contains(win->x, win->y, win->w, win->h, mx, my)) {
+                if (win->z_index > topmost_z) {
+                    topmost = win;
+                    topmost_z = win->z_index;
+                }
+            }
+        }
+        if (topmost && topmost->data) {
+            syscall_send_mouse_move_event(topmost, mx - topmost->x, my - topmost->y, buttons);
+        }
     }
     
     prev_left = left;
@@ -2290,13 +2331,7 @@ void wm_init(void) {
 
     cmd_init();
     explorer_init();
-    editor_init();
-    markdown_init();
-    control_panel_init();
     about_init();
-    minesweeper_init();
-    paint_init();
-    viewer_init();
     wallpaper_init();
     
     refresh_desktop_icons();
@@ -2304,24 +2339,12 @@ void wm_init(void) {
     // Initialize z-indices
     win_cmd.z_index = 0;
     win_explorer.z_index = 1;
-    win_editor.z_index = 2;
-    win_markdown.z_index = 3;
-    win_control_panel.z_index = 4;
-    win_about.z_index = 5;
-    win_minesweeper.z_index = 6;
-    win_paint.z_index = 7;
-    win_viewer.z_index = 8;
+    win_about.z_index = 2;
     
     all_windows[0] = &win_cmd;
     all_windows[1] = &win_explorer;
-    all_windows[2] = &win_editor;
-    all_windows[3] = &win_markdown;
-    all_windows[4] = &win_control_panel;
-    all_windows[5] = &win_about;
-    all_windows[6] = &win_minesweeper;
-    all_windows[7] = &win_paint;
-    all_windows[8] = &win_viewer;
-    window_count = 9;
+    all_windows[2] = &win_about;
+    window_count = 3;
     
     // Only show Explorer on desktop (initially hidden)
     win_explorer.visible = false;
@@ -2330,11 +2353,7 @@ void wm_init(void) {
     
     // Rest are hidden initially
     win_cmd.visible = false;
-    win_editor.visible = false;
-    win_markdown.visible = false;
-    win_control_panel.visible = false;
     win_about.visible = false;
-    win_minesweeper.visible = false;
     
     force_redraw = true;
 }

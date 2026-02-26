@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+// Forward declarations
+typedef struct Window Window;
+
 // MSRs used for syscalls in x86_64
 #define MSR_EFER       0xC0000080
 #define MSR_STAR       0xC0000081
@@ -31,5 +34,10 @@
 
 void syscall_init(void);
 uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
+
+// Mouse event helpers for WM
+void syscall_send_mouse_move_event(Window *win, int x, int y, uint8_t buttons);
+void syscall_send_mouse_down_event(Window *win, int x, int y);
+void syscall_send_mouse_up_event(Window *win, int x, int y);
 
 #endif // SYSCALL_H

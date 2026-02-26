@@ -8,7 +8,7 @@ LDFLAGS = -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic
 LIBC_SOURCES = $(wildcard libc/*.c)
 LIBC_OBJS = $(LIBC_SOURCES:.c=.o) crt0.o
 
-APP_SOURCES = $(wildcard *.c)
+APP_SOURCES = $(filter-out nanojpeg.c, $(wildcard *.c))
 APP_OBJS = $(APP_SOURCES:.c=.o)
 APP_ELFS = $(APP_SOURCES:.c=.elf)
 
@@ -22,6 +22,9 @@ libc/%.o: libc/%.c
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+viewer.elf: $(LIBC_OBJS) viewer.o nanojpeg.o
+	$(LD) $(LDFLAGS) $^ -o $@
 
 %.elf: $(LIBC_OBJS) %.o
 	$(LD) $(LDFLAGS) $^ -o $@

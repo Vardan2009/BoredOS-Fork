@@ -577,7 +577,7 @@ static FAT32_FileHandle* realfs_open(char drive, const char *path, const char *m
                 if (entry[e].attributes & ATTR_VOLUME_ID) continue; // Volume label
                 
                 // Compare name (simplistic 8.3 matching)
-                char name[12];
+                char name[13];
                 int n = 0;
                 for (int k = 0; k < 8 && entry[e].filename[k] != ' '; k++) name[n++] = entry[e].filename[k];
                 if (entry[e].extension[0] != ' ') {
@@ -973,7 +973,7 @@ static bool realfs_delete(char drive, const char *path) {
                 if (entry[e].attributes & ATTR_VOLUME_ID) continue; // Skip volume label
                 
                 // Format name and compare
-                char name[12];
+                char name[13];
                 int n = 0;
                 for (int k = 0; k < 8 && entry[e].filename[k] != ' '; k++) name[n++] = entry[e].filename[k];
                 if (entry[e].extension[0] != ' ') {

@@ -119,6 +119,8 @@ void process_create_elf(const char* filepath, const char* args_str) {
     new_proc->gui_event_head = 0;
     new_proc->gui_event_tail = 0;
     new_proc->ui_window = NULL;
+    new_proc->heap_start = 0x20000000; // 512MB mark
+    new_proc->heap_end = 0x20000000;
 
     // 2. Load ELF executable
     uint64_t entry_point = elf_load(filepath, new_proc->pml4_phys);
@@ -352,7 +354,6 @@ void process_push_gui_event(process_t *proc, gui_event_t *ev) {
     // Drop event if queue is full
     if (next_tail == proc->gui_event_head) {
         extern void serial_write(const char *str);
-        serial_write("PROC: GUI event queue full, dropping event!\n");
         return;
     }
     proc->gui_events[proc->gui_event_tail] = *ev;

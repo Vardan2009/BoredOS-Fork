@@ -70,6 +70,14 @@ int sys_write(int fd, const char *buf, int len) {
     return (int)syscall3(SYS_WRITE, (uint64_t)fd, (uint64_t)buf, (uint64_t)len);
 }
 
+void *sys_sbrk(int incr) {
+    return (void *)syscall1(SYS_SBRK, (uint64_t)incr);
+}
+
+int sys_system(int cmd, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4) {
+    return (int)syscall5(SYS_SYSTEM, (uint64_t)cmd, arg1, arg2, arg3, arg4);
+}
+
 int sys_open(const char *path, const char *mode) {
     return (int)syscall3(SYS_FS, FS_CMD_OPEN, (uint64_t)path, (uint64_t)mode);
 }

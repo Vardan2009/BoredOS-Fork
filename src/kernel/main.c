@@ -15,7 +15,6 @@
 #include "memory_manager.h"
 #include "platform.h"
 #include "wallpaper.h"
-#include "viewer.h"
 
 // --- Limine Requests ---
 __attribute__((used, section(".requests")))
@@ -183,7 +182,6 @@ void kmain(void) {
     while (1) {
         wm_process_input();
         wallpaper_process_pending();
-        viewer_process_pending();
         asm("hlt");
     }
 }

@@ -1,0 +1,431 @@
+#include "libc/syscall.h"
+#include "libc/libui.h"
+#include <stddef.h>
+
+#define COLOR_DARK_PANEL  0xFF202020
+#define COLOR_DARK_TEXT   0xFFE0E0E0
+#define COLOR_DARK_BORDER 0xFF404040
+#define COLOR_RED         0xFFFF4444
+#define COLOR_DARK_BG     0xFF121212
+#define COLOR_DKGRAY      0xFF808080
+#define COLOR_WHITE       0xFFFFFFFF
+
+#define EDITOR_MAX_LINES 128
+#define EDITOR_MAX_LINE_LEN 256
+#define EDITOR_LINE_HEIGHT 16
+#define EDITOR_CHAR_WIDTH 8
+
+typedef struct {
+    char content[EDITOR_MAX_LINE_LEN];
+    int length;
+} EditorLine;
+
+static EditorLine lines[EDITOR_MAX_LINES];
+static int line_count = 1;
+static int cursor_line = 0;
+static int cursor_col = 0;
+static int scroll_top = 0;
+static char open_filename[256] = "";
+static _Bool file_modified = 0;
+
+static int win_w = 700;
+static int win_h = 450;
+
+static void editor_strcpy(char *dest, const char *src) {
+    while (*src) *dest++ = *src++;
+    *dest = 0;
+}
+
+static void editor_clear_all(void) {
+    for (int i = 0; i < EDITOR_MAX_LINES; i++) {
+        for (int j = 0; j < EDITOR_MAX_LINE_LEN; j++) {
+            lines[i].content[j] = 0;
+        }
+        lines[i].length = 0;
+    }
+    line_count = 1;
+    cursor_line = 0;
+    cursor_col = 0;
+    scroll_top = 0;
+    open_filename[0] = 0;
+    file_modified = 0;
+}
+
+static void editor_ensure_cursor_visible(void) {
+    int visible_lines = 22;
+    if (cursor_line < scroll_top) {
+        scroll_top = cursor_line;
+    }
+    if (cursor_line >= scroll_top + visible_lines) {
+        scroll_top = cursor_line - visible_lines + 1;
+    }
+}
+
+void editor_open_file(const char *filename) {
+    editor_clear_all();
+    editor_strcpy(open_filename, filename);
+    
+    int fd = sys_open(filename, "r");
+    if (fd < 0) {
+        file_modified = 0;
+        return;
+    }
+    
+    static char buffer[16384];
+    int bytes_read = sys_read(fd, buffer, sizeof(buffer));
+    sys_close(fd);
+    
+    if (bytes_read <= 0) {
+        file_modified = 0;
+        return;
+    }
+    
+    int line = 0;
+    int col = 0;
+    
+    for (int i = 0; i < bytes_read && line < EDITOR_MAX_LINES; i++) {
+        char ch = buffer[i];
+        if (ch == '\n') {
+            lines[line].content[col] = 0;
+            lines[line].length = col;
+            line++;
+            col = 0;
+        } else if (ch != '\r') {
+            if (col < EDITOR_MAX_LINE_LEN - 1) {
+                lines[line].content[col] = ch;
+                col++;
+            }
+        }
+    }
+    
+    if (col > 0) {
+        lines[line].content[col] = 0;
+        lines[line].length = col;
+        line++;
+    }
+    
+    line_count = (line > 0) ? line : 1;
+    file_modified = 0;
+}
+
+static void editor_save_file(void) {
+    if (!open_filename[0]) return;
+    
+    int fd = sys_open(open_filename, "w");
+    if (fd < 0) return;
+    
+    for (int i = 0; i < line_count; i++) {
+        sys_write_fs(fd, lines[i].content, lines[i].length);
+        sys_write_fs(fd, "\n", 1);
+    }
+    sys_close(fd);
+    file_modified = 0;
+}
+
+static void editor_insert_char(char ch) {
+    if (cursor_line >= EDITOR_MAX_LINES) return;
+    EditorLine *line = &lines[cursor_line];
+    
+    if (ch == '\n') {
+        if (line_count >= EDITOR_MAX_LINES) return;
+        for (int j = line_count; j > cursor_line; j--) {
+            lines[j] = lines[j - 1];
+        }
+        line_count++;
+        
+        for (int k = 0; k < EDITOR_MAX_LINE_LEN; k++) {
+            lines[cursor_line + 1].content[k] = 0;
+        }
+        lines[cursor_line + 1].length = 0;
+        
+        int current_len = lines[cursor_line].length;
+        int new_len = current_len - cursor_col;
+        
+        for (int i = 0; i < new_len; i++) {
+            lines[cursor_line + 1].content[i] = lines[cursor_line].content[cursor_col + i];
+        }
+        lines[cursor_line + 1].content[new_len] = 0;
+        lines[cursor_line + 1].length = new_len;
+        
+        lines[cursor_line].content[cursor_col] = 0;
+        lines[cursor_line].length = cursor_col;
+        
+        cursor_line++;
+        cursor_col = 0;
+    } else if (ch == '\b') {
+        if (cursor_col > 0) {
+            for (int i = cursor_col - 1; i < line->length; i++) {
+                line->content[i] = line->content[i + 1];
+            }
+            line->length--;
+            cursor_col--;
+        } else if (cursor_line > 0) {
+            EditorLine *prev = &lines[cursor_line - 1];
+            int merge_point = prev->length;
+            
+            int i = 0;
+            while (i < line->length && (merge_point + i) < EDITOR_MAX_LINE_LEN - 1) {
+                prev->content[merge_point + i] = line->content[i];
+                i++;
+            }
+            prev->content[merge_point + i] = 0;
+            prev->length = merge_point + i;
+            
+            for (int j = cursor_line; j < line_count - 1; j++) {
+                lines[j] = lines[j + 1];
+            }
+            lines[line_count - 1].length = 0;
+            lines[line_count - 1].content[0] = 0;
+            
+            cursor_line--;
+            cursor_col = merge_point;
+            line_count--;
+        }
+    } else if (ch >= 32 && ch <= 126) {
+        if (cursor_col < EDITOR_MAX_LINE_LEN - 1) {
+            for (int i = line->length; i > cursor_col; i--) {
+                line->content[i] = line->content[i - 1];
+            }
+            line->content[cursor_col] = ch;
+            line->length++;
+            cursor_col++;
+        }
+    }
+    file_modified = 1;
+    editor_ensure_cursor_visible();
+}
+
+static void editor_paint(ui_window_t win) {
+    int offset_x = 4;
+    int offset_y = 24;
+    int content_width = win_w - 8;
+    int content_height = win_h - 28;
+    
+    // Top content bar
+    ui_draw_rounded_rect_filled(win, offset_x, offset_y, content_width, 25, 6, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 10, offset_y + 6, "File", COLOR_DARK_TEXT);
+    ui_draw_string(win, offset_x + 55, offset_y + 6, open_filename, COLOR_DARK_TEXT);
+    
+    // Save button
+    int save_btn_x = offset_x + content_width - 80;
+    int save_btn_y = offset_y + 3;
+    ui_draw_rounded_rect_filled(win, save_btn_x, save_btn_y, 70, 20, 6, COLOR_DARK_BORDER);
+    ui_draw_string(win, save_btn_x + 20, save_btn_y + 6, "Save", COLOR_DARK_TEXT);
+    
+    if (file_modified) {
+        ui_draw_string(win, offset_x + content_width - 200, offset_y + 5, "[Modified]", COLOR_RED);
+    }
+    
+    // Editor background
+    ui_draw_rect(win, 4, 54, win_w - 8, win_h - 58, COLOR_DARK_BG);
+    
+    int text_start_x = offset_x + 40;
+    int available_width = content_width - 40;
+    int max_chars_per_line = available_width / EDITOR_CHAR_WIDTH;
+    if (max_chars_per_line < 1) max_chars_per_line = 1;
+    
+    int display_line = 0;
+    int visible_lines = (content_height - 55) / EDITOR_LINE_HEIGHT;
+    int max_display_lines = visible_lines;
+    
+    int line_idx = scroll_top;
+    while (line_idx < line_count && display_line < max_display_lines) {
+        int display_y = offset_y + 35 + display_line * EDITOR_LINE_HEIGHT;
+        
+        if (display_line == 0 || line_idx < line_count) {
+            char line_num_str[16];
+            int temp = line_idx + 1;
+            int str_len = 0;
+            if (temp == 0) {
+                line_num_str[0] = '0';
+                str_len = 1;
+            } else {
+                while (temp > 0) {
+                    line_num_str[str_len++] = (temp % 10) + '0';
+                    temp /= 10;
+                }
+                for (int j = 0; j < str_len / 2; j++) {
+                    char t = line_num_str[j];
+                    line_num_str[j] = line_num_str[str_len - 1 - j];
+                    line_num_str[str_len - 1 - j] = t;
+                }
+            }
+            line_num_str[str_len] = 0;
+            ui_draw_string(win, offset_x + 4, display_y, line_num_str, COLOR_DKGRAY);
+        }
+        
+        const char *text = lines[line_idx].content;
+        int text_len = lines[line_idx].length;
+        int char_idx = 0;
+        int local_display_line = 0;
+        _Bool first_pass = 1;
+        
+        while ((char_idx < text_len || (text_len == 0 && first_pass)) && display_line < max_display_lines) {
+            first_pass = 0;
+            int current_display_y = offset_y + 35 + display_line * EDITOR_LINE_HEIGHT;
+            
+            char segment[256];
+            int segment_len = 0;
+            int segment_start = char_idx;
+            
+            while (char_idx < text_len && segment_len < max_chars_per_line) {
+                segment[segment_len++] = text[char_idx++];
+            }
+            segment[segment_len] = 0;
+            
+            if (char_idx < text_len && segment_len > 0) {
+                int last_space = -1;
+                for (int i = segment_len - 1; i >= 0; i--) {
+                    if (segment[i] == ' ') {
+                        last_space = i;
+                        break;
+                    }
+                }
+                if (last_space > 0) {
+                    segment_len = last_space;
+                    segment[segment_len] = 0;
+                    char_idx = segment_start + last_space + 1;
+                    while (char_idx < text_len && text[char_idx] == ' ') {
+                        char_idx++;
+                    }
+                }
+            }
+            
+            if (segment_len > 0) {
+                ui_draw_string(win, text_start_x, current_display_y, segment, COLOR_DARK_TEXT);
+            }
+            
+            if (line_idx == cursor_line) {
+                int segment_end = segment_start + segment_len;
+                _Bool draw_cursor = 0;
+                if (cursor_col >= segment_start && cursor_col < segment_end) {
+                    draw_cursor = 1;
+                } else if (cursor_col == text_len && segment_end == text_len) {
+                    draw_cursor = 1;
+                }
+                if (draw_cursor) {
+                    int cursor_x = text_start_x + ((cursor_col - segment_start) * EDITOR_CHAR_WIDTH);
+                    ui_draw_rect(win, cursor_x, current_display_y, 2, 10, COLOR_WHITE);
+                }
+            }
+            
+            display_line++;
+            local_display_line++;
+            if (char_idx >= text_len) break;
+        }
+        line_idx++;
+    }
+    
+    int status_y = offset_y + content_height - 20;
+    ui_draw_rounded_rect_filled(win, offset_x, status_y, content_width, 20, 6, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 10, status_y + 5, "Line: ", COLOR_DARK_TEXT);
+    
+    char line_str[32];
+    int temp = cursor_line + 1;
+    int idx = 0;
+    while (temp > 0) {
+        line_str[idx++] = (temp % 10) + '0';
+        temp /= 10;
+    }
+    for (int j = 0; j < idx / 2; j++) {
+        char t = line_str[j];
+        line_str[j] = line_str[idx - 1 - j];
+        line_str[idx - 1 - j] = t;
+    }
+    line_str[idx] = 0;
+    
+    ui_draw_string(win, offset_x + 60, status_y + 5, line_str, COLOR_DARK_TEXT);
+    ui_draw_string(win, offset_x + 100, status_y + 5, "  Col: ", COLOR_DARK_TEXT);
+    
+    char col_str[32];
+    temp = cursor_col + 1;
+    idx = 0;
+    while (temp > 0) {
+        col_str[idx++] = (temp % 10) + '0';
+        temp /= 10;
+    }
+    for (int j = 0; j < idx / 2; j++) {
+        char t = col_str[j];
+        col_str[j] = col_str[idx - 1 - j];
+        col_str[idx - 1 - j] = t;
+    }
+    col_str[idx] = 0;
+    
+    ui_draw_string(win, offset_x + 170, status_y + 5, col_str, COLOR_DARK_TEXT);
+}
+
+static void editor_handle_key(char c) {
+    if (c == 17) { // UP
+        if (cursor_line > 0) {
+            cursor_line--;
+            if (cursor_col > lines[cursor_line].length) cursor_col = lines[cursor_line].length;
+            if (cursor_line < scroll_top) scroll_top = cursor_line;
+        }
+    } else if (c == 18) { // DOWN
+        if (cursor_line < line_count - 1) {
+            cursor_line++;
+            if (cursor_col > lines[cursor_line].length) cursor_col = lines[cursor_line].length;
+            int visible_lines = 20;
+            if (cursor_line >= scroll_top + visible_lines) scroll_top = cursor_line - visible_lines + 1;
+        }
+    } else if (c == 19) { // LEFT
+        if (cursor_col > 0) {
+            cursor_col--;
+        } else if (cursor_line > 0) {
+            cursor_line--;
+            cursor_col = lines[cursor_line].length;
+        }
+    } else if (c == 20) { // RIGHT
+        if (cursor_col < lines[cursor_line].length) {
+            cursor_col++;
+        } else if (cursor_line < line_count - 1) {
+            cursor_line++;
+            cursor_col = 0;
+        }
+    } else {
+        editor_insert_char(c);
+    }
+}
+
+static void editor_handle_click(int x, int y) {
+    int content_width = win_w - 8;
+    int button_x = 4 + content_width - 80;
+    int button_y = 24 + 3;
+    
+    if (x >= button_x && x < button_x + 70 && y >= button_y && y < button_y + 20) {
+        editor_save_file();
+    }
+}
+
+int main(int argc, char **argv) {
+    ui_window_t win = ui_window_create("Text Editor", 100, 150, win_w, win_h);
+    if (!win) return 1;
+
+    editor_clear_all();
+    if (argc > 1) {
+        editor_open_file(argv[1]);
+    } else {
+        editor_strcpy(open_filename, "untitled.txt");
+    }
+
+    gui_event_t ev;
+    while (1) {
+        if (ui_get_event(win, &ev)) {
+            if (ev.type == GUI_EVENT_PAINT) {
+                editor_paint(win);
+                ui_mark_dirty(win, 0, 0, win_w, win_h);
+            } else if (ev.type == GUI_EVENT_CLICK) {
+                editor_handle_click(ev.arg1, ev.arg2);
+                editor_paint(win);
+                ui_mark_dirty(win, 0, 0, win_w, win_h);
+            } else if (ev.type == GUI_EVENT_KEY) {
+                editor_handle_key((char)ev.arg1);
+                editor_paint(win);
+                ui_mark_dirty(win, 0, 0, win_w, win_h);
+            } else if (ev.type == GUI_EVENT_CLOSE) {
+                sys_exit(0);
+            }
+        }
+    }
+    return 0;
+}

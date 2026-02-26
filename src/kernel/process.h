@@ -30,6 +30,9 @@ typedef struct process {
     int gui_event_tail;
     void *ui_window; // Pointer to the active Window
     
+    uint64_t heap_start;
+    uint64_t heap_end;
+    
     void *fds[MAX_PROCESS_FDS];
     
     struct process *next;

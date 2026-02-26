@@ -5,7 +5,8 @@
 #include "process.h"
 #include "wm.h"
 #include "fat32.h"
-#include "fat32.h"
+#include "paging.h"
+#include "platform.h"
 
 // Read MSR
 static inline uint64_t rdmsr(uint32_t msr) {
@@ -67,6 +68,50 @@ static void user_window_click(Window *win, int x, int y) {
     if (!proc) return;
     gui_event_t ev = { .type = GUI_EVENT_CLICK, .arg1 = x, .arg2 = y };
     process_push_gui_event(proc, &ev);
+}
+
+static void user_window_right_click(Window *win, int x, int y) {
+    process_t *proc = (process_t *)win->data;
+    if (!proc) return;
+    gui_event_t ev = { .type = GUI_EVENT_RIGHT_CLICK, .arg1 = x, .arg2 = y };
+    process_push_gui_event(proc, &ev);
+}
+
+static void user_window_mouse_down(Window *win, int x, int y) {
+    process_t *proc = (process_t *)win->data;
+    if (!proc) return;
+    gui_event_t ev = { .type = GUI_EVENT_MOUSE_DOWN, .arg1 = x, .arg2 = y };
+    process_push_gui_event(proc, &ev);
+}
+
+static void user_window_mouse_up(Window *win, int x, int y) {
+    process_t *proc = (process_t *)win->data;
+    if (!proc) return;
+    gui_event_t ev = { .type = GUI_EVENT_MOUSE_UP, .arg1 = x, .arg2 = y };
+    process_push_gui_event(proc, &ev);
+}
+
+static void user_window_mouse_move(Window *win, int x, int y, uint8_t buttons) {
+    process_t *proc = (process_t *)win->data;
+    if (!proc) return;
+    gui_event_t ev = { .type = GUI_EVENT_MOUSE_MOVE, .arg1 = x, .arg2 = y, .arg3 = buttons };
+    process_push_gui_event(proc, &ev);
+}
+
+// Helper function for WM to send mouse events
+void syscall_send_mouse_move_event(Window *win, int x, int y, uint8_t buttons) {
+    if (!win || !win->data) return;
+    user_window_mouse_move(win, x, y, buttons);
+}
+
+void syscall_send_mouse_down_event(Window *win, int x, int y) {
+    if (!win || !win->data) return;
+    user_window_mouse_down(win, x, y);
+}
+
+void syscall_send_mouse_up_event(Window *win, int x, int y) {
+    if (!win || !win->data) return;
+    user_window_mouse_up(win, x, y);
 }
 
 static void user_window_key(Window *win, char c) {
@@ -185,9 +230,9 @@ uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, u
             // Set callbacks
             win->paint = user_window_paint;
             win->handle_click = user_window_click;
+            win->handle_right_click = user_window_right_click;
             win->handle_close = user_window_close;
             win->handle_key = user_window_key;
-            win->handle_right_click = NULL;
             
             proc->ui_window = win;
             wm_add_window(win);
@@ -398,6 +443,110 @@ uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, u
         extern void serial_write(const char *str);
         serial_write((const char *)arg2);
         return 0;
+    } else if (syscall_num == 9) { // SYS_SBRK
+        int incr = (int)arg1;
+        process_t *proc = process_get_current();
+        if (!proc || !proc->is_user) return (uint64_t)-1;
+        
+        uint64_t old_end = proc->heap_end;
+        if (incr == 0) return old_end;
+        
+        uint64_t new_end = old_end + incr;
+        
+        // If expanding, we might need to map new pages
+        if (incr > 0) {
+            uint64_t start_page = (old_end + 0xFFF) & ~0xFFF;
+            uint64_t end_page = (new_end + 0xFFF) & ~0xFFF;
+            
+            for (uint64_t page = start_page; page < end_page; page += 4096) {
+                void *phys = kmalloc_aligned(4096, 4096);
+                if (!phys) return (uint64_t)-1; // Out of memory
+                
+                extern void mem_memset(void *dest, int val, size_t len);
+                mem_memset(phys, 0, 4096);
+                
+                paging_map_page(proc->pml4_phys, page, v2p((uint64_t)phys), 0x07); // PT_PRESENT | PT_RW | PT_USER
+            }
+        }
+        
+        proc->heap_end = new_end;
+        return old_end;
+    } else if (syscall_num == 5) { // SYS_SYSTEM
+        int cmd = (int)arg1;
+        if (cmd == 1) { // SYSTEM_CMD_SET_BG_COLOR
+            uint32_t color = (uint32_t)arg2;
+            extern void graphics_set_bg_color(uint32_t color);
+            graphics_set_bg_color(color);
+            return 0;
+        } else if (cmd == 2) { // SYSTEM_CMD_SET_BG_PATTERN
+            uint32_t *user_pat = (uint32_t *)arg2;
+            if (!user_pat) {
+                extern void graphics_set_bg_pattern(uint32_t *pattern);
+                graphics_set_bg_pattern(NULL);
+            } else {
+                static uint32_t global_bg_pattern[128*128];
+                for (int i=0; i<128*128; i++) {
+                    global_bg_pattern[i] = user_pat[i];
+                }
+                extern void graphics_set_bg_pattern(uint32_t *pattern);
+                graphics_set_bg_pattern(global_bg_pattern);
+            }
+            extern void wm_refresh(void);
+            wm_refresh();
+            return 0;
+        } else if (cmd == 3) { // SYSTEM_CMD_SET_WALLPAPER
+            int wp_id = (int)arg2;
+            extern void wallpaper_request_set(int index);
+            wallpaper_request_set(wp_id);
+            return 0;
+        } else if (cmd == 4) { // SYSTEM_CMD_SET_DESKTOP_PROP
+            int prop = (int)arg2;
+            int val = (int)arg3;
+            extern _Bool desktop_snap_to_grid;
+            extern _Bool desktop_auto_align;
+            extern int desktop_max_rows_per_col;
+            extern int desktop_max_cols;
+            if (prop == 1) desktop_snap_to_grid = val;
+            if (prop == 2) desktop_auto_align = val;
+            if (prop == 3) desktop_max_rows_per_col = val;
+            if (prop == 4) desktop_max_cols = val;
+            extern void wm_refresh_desktop(void);
+            wm_refresh_desktop();
+            return 0;
+        } else if (cmd == 5) { // SYSTEM_CMD_SET_MOUSE_SPEED
+            extern int mouse_speed;
+            mouse_speed = (int)arg2;
+            return 0;
+        } else if (cmd == 6) { // SYSTEM_CMD_NETWORK_INIT
+            extern int network_init(void);
+            return network_init();
+        } else if (cmd == 7) { // SYSTEM_CMD_GET_DESKTOP_PROP
+            int prop = (int)arg2;
+            extern _Bool desktop_snap_to_grid;
+            extern _Bool desktop_auto_align;
+            extern int desktop_max_rows_per_col;
+            extern int desktop_max_cols;
+            if (prop == 1) return desktop_snap_to_grid;
+            if (prop == 2) return desktop_auto_align;
+            if (prop == 3) return desktop_max_rows_per_col;
+            if (prop == 4) return desktop_max_cols;
+            return 0;
+        } else if (cmd == 8) { // SYSTEM_CMD_GET_MOUSE_SPEED
+            extern int mouse_speed;
+            return mouse_speed;
+        } else if (cmd == 9) { // SYSTEM_CMD_GET_WALLPAPER_THUMB
+            int id = (int)arg2;
+            uint32_t *dest = (uint32_t *)arg3;
+            if (!dest) return -1;
+            extern uint32_t* wallpaper_get_thumb(int index);
+            extern _Bool wallpaper_thumb_valid(int index);
+            if (!wallpaper_thumb_valid(id)) return -1;
+            uint32_t *thumb = wallpaper_get_thumb(id);
+            if (!thumb) return -1;
+            for (int i=0; i<100*60; i++) dest[i] = thumb[i];
+            return 0;
+        }
+        return -1;
     }
     
     return 0;

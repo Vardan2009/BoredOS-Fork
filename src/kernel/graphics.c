@@ -4,34 +4,27 @@
 #include "io.h"
 
 static struct limine_framebuffer *g_fb = NULL;
-static uint32_t g_bg_color = 0xFF696969;  // Dark gray background
+static uint32_t g_bg_color = 0xFF696969;
 
-// Pattern support
 #define PATTERN_SIZE 128
 static uint32_t g_bg_pattern[PATTERN_SIZE * PATTERN_SIZE];
 static bool g_use_pattern = false;
 
-// Wallpaper image support
 static uint32_t *g_bg_image = NULL;
 static int g_bg_image_w = 0;
 static int g_bg_image_h = 0;
 static bool g_use_image = false;
 
-// Dirty rectangle tracking
 static DirtyRect g_dirty = {0, 0, 0, 0, false};
 
-// Double buffering - allocate a back buffer
-// Max screen size: 2048x2048 @ 32bpp = 16MB, but allocate for common sizes
-// Using a simple approach: allocate max size buffer
+
 #define MAX_FB_WIDTH 2048
 #define MAX_FB_HEIGHT 2048
 static uint32_t g_back_buffer[MAX_FB_WIDTH * MAX_FB_HEIGHT] __attribute__((aligned(4096)));
 
-// Clipping state
 static int g_clip_x = 0, g_clip_y = 0, g_clip_w = 0, g_clip_h = 0;
 static bool g_clip_enabled = false;
 
-// Custom Render Target
 static uint32_t *g_render_target = NULL;
 static int g_rt_width = 0;
 static int g_rt_height = 0;
@@ -256,24 +249,17 @@ void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t c
     draw_rect(x, y + radius, radius, h - 2*radius, color);
     draw_rect(x + w - radius, y + radius, radius, h - 2*radius, color);
     
-    // Draw rounded corners using scanline approach (fills gaps properly)
     for (int dy = 0; dy < radius; dy++) {
-        // For top corners: distance formula inverted (narrow at top, wide at junction)
         int dx_top = isqrt(radius*radius - (radius - dy) * (radius - dy));
         
-        // For bottom corners: distance formula normal (wide at junction, narrow at bottom)
         int dx_bottom = isqrt(radius*radius - dy*dy);
         
-        // Top-left corner - horizontal scanline
         draw_rect(x + radius - dx_top, y + dy, dx_top, 1, color);
         
-        // Top-right corner - horizontal scanline
         draw_rect(x + w - radius, y + dy, dx_top, 1, color);
         
-        // Bottom-left corner - horizontal scanline
         draw_rect(x + radius - dx_bottom, y + h - radius + dy, dx_bottom, 1, color);
         
-        // Bottom-right corner - horizontal scanline
         draw_rect(x + w - radius, y + h - radius + dy, dx_bottom, 1, color);
     }
 }
@@ -282,7 +268,6 @@ void draw_char(int x, int y, char c, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return;
 
-    // Fast rejection: if the character is entirely outside the clipping/dirty rect, skip it
     if (g_clip_enabled && !g_render_target) {
         if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
             y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {

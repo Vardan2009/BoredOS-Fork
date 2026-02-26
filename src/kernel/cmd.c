@@ -513,7 +513,7 @@ static void internal_cmd_txtedit(char *args) {
         i++;
     }
     
-    // Extract filepath (args now includes drive prefix from cmd_exec_single)
+    // Extract filepath
     int j = 0;
     while (args && args[i] && args[i] != ' ' && args[i] != '\t' && j < 255) {
         filepath[j++] = args[i++];
@@ -523,50 +523,19 @@ static void internal_cmd_txtedit(char *args) {
     // If no filepath provided, show usage
     if (j == 0) {
         cmd_write("Usage: txtedit <filename>\n");
-        cmd_write("Example: txtedit myfile.txt\n");
-        cmd_write("         txtedit /document.txt\n");
         return;
     }
 
-    // Normalize the path (filepath already includes drive from cmd_exec_single)
+    // Normalize the path
     char normalized_path[256];
     fat32_normalize_path(filepath, normalized_path);
-    
-    // Extract drive from normalized path to set it as current temporarily
-    char drive = 'A';
-    if (normalized_path[1] == ':') {
-        drive = normalized_path[0];
-        if (drive >= 'a' && drive <= 'z') drive -= 32;
-    }
-    
-    // Set global drive temporarily to match file's drive
-    char saved_drive = fat32_get_current_drive();
-    fat32_change_drive(drive);
-    
-    // Open the file in the GUI editor
-    extern void editor_open_file(const char *filename);
-    extern Window win_editor;
-    editor_open_file(normalized_path);
-    
-    // Restore the drive
-    fat32_change_drive(saved_drive);
-
-    // Make editor window visible and focused, bring to front
-    extern Window win_explorer;
-    extern Window win_cmd;
-    
-    win_editor.visible = true;
-    win_editor.focused = true;
-    
-    // Calculate max z_index to bring window to front
-    int max_z = 0;
-    if (win_explorer.z_index > max_z) max_z = win_explorer.z_index;
-    if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
-    win_editor.z_index = max_z + 1;
     
     cmd_write("Opening: ");
     cmd_write(normalized_path);
     cmd_write("\n");
+
+    cmd_is_waiting_for_process = true;
+    process_create_elf("A:/bin/txtedit.elf", normalized_path);
 }
 
 static void internal_cmd_ls(char *args) {
