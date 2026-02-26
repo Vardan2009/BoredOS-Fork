@@ -59,10 +59,6 @@ uint64_t elf_load(const char *path, uint64_t user_pml4) {
         return 0;
     }
 
-    serial_write("[ELF] Number of program headers: ");
-    print_hex(ehdr.e_phnum);
-    serial_write("\n");
-
     // Iterate Over Program Headers
     for (int i = 0; i < ehdr.e_phnum; i++) {
         fat32_seek(file, ehdr.e_phoff + (i * ehdr.e_phentsize), 0);
@@ -72,10 +68,6 @@ uint64_t elf_load(const char *path, uint64_t user_pml4) {
             continue;
         }
 
-        serial_write("[ELF] Header type parsed: ");
-        print_hex(phdr.p_type);
-        serial_write("\n");
-
         // Only load segments with type PT_LOAD
         if (phdr.p_type == PT_LOAD) {
             uint64_t p_vaddr = phdr.p_vaddr;
@@ -83,10 +75,6 @@ uint64_t elf_load(const char *path, uint64_t user_pml4) {
             uint64_t p_filesz = phdr.p_filesz;
             uint64_t p_offset = phdr.p_offset;
             
-            serial_write("[ELF] Loaded PT_LOAD segment vaddr=");
-            print_hex(p_vaddr);
-            serial_write("\n");
-
             if (p_memsz == 0) continue;
 
             // Calculate page-aligned boundaries
@@ -103,36 +91,32 @@ uint64_t elf_load(const char *path, uint64_t user_pml4) {
                     fat32_close(file);
                     return 0;
                 }
-                // Determine Flags
-                uint64_t flags = 0x07; // Present, RW, User
+                
+                // Map page to user space (Present, RW, User)
+                paging_map_page(user_pml4, vaddr, v2p((uint64_t)phys), 0x07);
 
-                paging_map_page(user_pml4, vaddr, v2p((uint64_t)phys), flags);
-
-                // Initialize page memory
+                // Zero out the entire page (handles BSS and padding)
                 uint8_t* dest = (uint8_t*)phys;
-                for (int j=0; j<4096; j++) dest[j] = 0; // zero memory (handles BSS)
+                for (int j=0; j<4096; j++) dest[j] = 0;
 
-                // If loading from file
-                if (p_filesz > 0) {
-                    uint64_t copy_start_offset = 0;
-                    uint64_t file_seek_pos = p_offset;
-                    uint64_t bytes_to_copy = 4096;
-                    
-                    if (p == 0) {
-                        copy_start_offset = align_offset;
-                        bytes_to_copy = 4096 - align_offset;
-                    } else {
-                        file_seek_pos += (p * 4096) - align_offset;
-                    }
+                // Copy data from file if available for this page
+                uint64_t page_vaddr_start = vaddr;
+                uint64_t page_vaddr_end = vaddr + 4096;
 
-                    if (bytes_to_copy > p_filesz) {
-                        bytes_to_copy = p_filesz;
-                    }
-                    if (bytes_to_copy > 0) {
-                        fat32_seek(file, file_seek_pos, 0);
-                        fat32_read(file, dest + copy_start_offset, bytes_to_copy);
-                        p_filesz -= bytes_to_copy;
-                    }
+                // What part of the segment (p_vaddr to p_vaddr + p_filesz) overlaps this page?
+                uint64_t overlap_vaddr_start = p_vaddr;
+                if (page_vaddr_start > overlap_vaddr_start) overlap_vaddr_start = page_vaddr_start;
+                
+                uint64_t overlap_vaddr_end = p_vaddr + p_filesz;
+                if (page_vaddr_end < overlap_vaddr_end) overlap_vaddr_end = page_vaddr_end;
+
+                if (overlap_vaddr_start < overlap_vaddr_end) {
+                    uint64_t copy_size = overlap_vaddr_end - overlap_vaddr_start;
+                    uint64_t dest_offset = overlap_vaddr_start - page_vaddr_start;
+                    uint64_t file_offset = p_offset + (overlap_vaddr_start - p_vaddr);
+
+                    fat32_seek(file, file_offset, 0);
+                    fat32_read(file, dest + dest_offset, (uint32_t)copy_size);
                 }
             }
         }

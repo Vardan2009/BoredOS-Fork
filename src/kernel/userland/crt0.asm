@@ -12,9 +12,6 @@ _start:
     and rsp, -16
 
     ; Call main(argc, argv)
-    ; We don't have argc or argv yet, pass 0
-    xor rdi, rdi
-    xor rsi, rsi
     call main
 
     ; If main returns, call exit(status)

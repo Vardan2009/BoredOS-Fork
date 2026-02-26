@@ -13,6 +13,7 @@
 #define GUI_EVENT_CLICK       2
 #define GUI_EVENT_RIGHT_CLICK 3
 #define GUI_EVENT_CLOSE       4
+#define GUI_EVENT_KEY         5
 
 typedef struct {
     int type;

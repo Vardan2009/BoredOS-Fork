@@ -3,7 +3,7 @@
 #include "wm.h"
 #include "io.h"
 #include "rtc.h"
-#include "notepad.h"
+
 #include "fat32.h"
 #include "disk.h"
 #include "cli_apps/cli_apps.h"
@@ -554,7 +554,6 @@ static void internal_cmd_txtedit(char *args) {
     // Make editor window visible and focused, bring to front
     extern Window win_explorer;
     extern Window win_cmd;
-    extern Window win_notepad;
     
     win_editor.visible = true;
     win_editor.focused = true;
@@ -563,7 +562,6 @@ static void internal_cmd_txtedit(char *args) {
     int max_z = 0;
     if (win_explorer.z_index > max_z) max_z = win_explorer.z_index;
     if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
-    if (win_notepad.z_index > max_z) max_z = win_notepad.z_index;
     win_editor.z_index = max_z + 1;
     
     cmd_write("Opening: ");
@@ -646,7 +644,7 @@ void cmd_exec_elf(char *args) {
     }
     
     cmd_is_waiting_for_process = true;
-    process_create_elf(full_exec_path);
+    process_create_elf(full_exec_path, args);
 }
 
 // Public API for syscall exit 
@@ -1176,7 +1174,7 @@ static void cmd_exec_single(char *cmd) {
         if (fh) {
             fat32_close(fh);
             cmd_is_waiting_for_process = true;
-            process_create_elf(search_path);
+            process_create_elf(search_path, args);
             return;
         }
     }
@@ -1197,7 +1195,7 @@ static void cmd_exec_single(char *cmd) {
         if (fh) {
             fat32_close(fh);
             cmd_is_waiting_for_process = true;
-            process_create_elf(search_path);
+            process_create_elf(search_path, args);
             return;
         }
     }

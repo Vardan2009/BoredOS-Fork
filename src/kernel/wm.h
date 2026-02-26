@@ -68,6 +68,7 @@ void wm_process_input(void);
 void wm_add_window(Window *win);
 void wm_remove_window(Window *win);
 void wm_bring_to_front(Window *win);
+Window* wm_find_window_by_title(const char *title);
 
 // Redraw system
 void wm_mark_dirty(int x, int y, int w, int h);

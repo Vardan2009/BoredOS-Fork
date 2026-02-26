@@ -12,7 +12,22 @@
 
 // Syscall Numbers
 #define SYS_WRITE 1
+#define SYS_GUI   3
+#define SYS_FS    4
 #define SYS_EXIT  60
+
+// FS Commands
+#define FS_CMD_OPEN 1
+#define FS_CMD_READ 2
+#define FS_CMD_WRITE 3
+#define FS_CMD_CLOSE 4
+#define FS_CMD_SEEK 5
+#define FS_CMD_TELL 6
+#define FS_CMD_LIST 7
+#define FS_CMD_DELETE 8
+#define FS_CMD_SIZE 9
+#define FS_CMD_MKDIR 10
+#define FS_CMD_EXISTS 11
 
 void syscall_init(void);
 uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);

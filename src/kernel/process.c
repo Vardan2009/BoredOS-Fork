@@ -28,6 +28,8 @@ void process_init(void) {
     kernel_proc->pml4_phys = paging_get_pml4_phys();
     kernel_proc->kernel_stack = 0;
     
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) kernel_proc->fds[i] = NULL;
+    
     kernel_proc->next = kernel_proc; // Circular linked list
     current_process = kernel_proc;
 }
@@ -102,7 +104,7 @@ void process_create(void* entry_point, bool is_user) {
     current_process->next = new_proc;
 }
 
-void process_create_elf(const char* filepath) {
+void process_create_elf(const char* filepath, const char* args_str) {
     if (process_count >= MAX_PROCESSES) return;
 
     process_t *new_proc = &processes[process_count];
@@ -112,6 +114,11 @@ void process_create_elf(const char* filepath) {
     // 1. Setup Page Table
     new_proc->pml4_phys = paging_create_user_pml4_phys();
     if (!new_proc->pml4_phys) return;
+
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) new_proc->fds[i] = NULL;
+    new_proc->gui_event_head = 0;
+    new_proc->gui_event_tail = 0;
+    new_proc->ui_window = NULL;
 
     // 2. Load ELF executable
     uint64_t entry_point = elf_load(filepath, new_proc->pml4_phys);
@@ -127,22 +134,107 @@ void process_create_elf(const char* filepath) {
     void* stack = kmalloc_aligned(4096, 4096);
     void* kernel_stack = kmalloc_aligned(16384, 16384); 
     
-    // Map User stack to 0x800000 -> Note: ELFs might overwrite this if they load there!
-    // But our ELF loader defaults 0x400000 for standard code.
+    // Map User stack to 0x800000 
     paging_map_page(new_proc->pml4_phys, 0x800000, v2p((uint64_t)stack), PT_PRESENT | PT_RW | PT_USER);
 
-    // 4. Build Stack Frame
+    // Parse arguments and push them to the user stack
+    // We'll place the strings at the very high end of the user stack
+    int argc = 1;
+    char *args_buf = (char *)stack + 4096;
+    uint64_t user_args_buf = 0x800000 + 4096;
+
+    // Copy filepath as argv[0]
+    int path_len = 0;
+    while (filepath[path_len]) path_len++;
+    args_buf -= (path_len + 1);
+    user_args_buf -= (path_len + 1);
+    for (int i = 0; i <= path_len; i++) args_buf[i] = filepath[i];
+    
+    uint64_t argv_ptrs[32];
+    argv_ptrs[0] = user_args_buf;
+
+    if (args_str) {
+        int i = 0;
+        while (args_str[i] && argc < 31) {
+            // Skip spaces
+            while (args_str[i] == ' ') i++;
+            if (!args_str[i]) break;
+
+            int arg_start = i;
+            bool in_quotes = false;
+            
+            if (args_str[i] == '"') {
+                in_quotes = true;
+                i++;
+                arg_start = i;
+                while (args_str[i] && args_str[i] != '"') i++;
+            } else {
+                while (args_str[i] && args_str[i] != ' ') i++;
+            }
+            
+            int arg_len = i - arg_start;
+
+            args_buf -= (arg_len + 1);
+            user_args_buf -= (arg_len + 1);
+            
+            for (int k = 0; k < arg_len; k++) {
+                args_buf[k] = args_str[arg_start + k];
+            }
+            args_buf[arg_len] = '\0';
+            
+            argv_ptrs[argc++] = user_args_buf;
+            
+            if (in_quotes && args_str[i] == '"') i++; // Skip closing quote
+        }
+    }
+    argv_ptrs[argc] = 0; // Null terminator for argv
+
+    // Align stack to 8 bytes before pushing argv array
+    uint64_t current_user_sp = user_args_buf;
+    current_user_sp &= ~7ULL;
+    args_buf = (char *)((uint64_t)stack + (current_user_sp - 0x800000));
+
+    // Push argv array
+    int argv_size = (argc + 1) * sizeof(uint64_t);
+    args_buf -= argv_size;
+    current_user_sp -= argv_size;
+    
+    uint64_t actual_argv_ptr = current_user_sp; // Store the true pointer to argv array
+    
+    uint64_t *user_argv_array = (uint64_t *)args_buf;
+    for (int i = 0; i <= argc; i++) {
+        user_argv_array[i] = argv_ptrs[i];
+    }
+    
+    // Align stack to 16 bytes. crt0.asm does `and rsp, -16`, but it's good practice
+    current_user_sp &= ~15ULL;
+
+    // 4. Build Stack Frame for context switch via IRETQ
     uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 16384);
     *(--stack_ptr) = 0x1B;            // SS (User Mode Data)
-    *(--stack_ptr) = 0x800000 + 4096;   // RSP 
+    *(--stack_ptr) = current_user_sp; // RSP (Updated user stack pointer)
     *(--stack_ptr) = 0x202;           // RFLAGS (Interrupts Enabled)
     *(--stack_ptr) = 0x23;            // CS (User Mode Code)
-    *(--stack_ptr) = entry_point;       // RIP
+    *(--stack_ptr) = entry_point;     // RIP
     *(--stack_ptr) = 0;               // int_no
     *(--stack_ptr) = 0;               // err_code
 
     // 15 General purpose registers
-    for (int i = 0; i < 15; i++) *(--stack_ptr) = 0;
+    *(--stack_ptr) = 0;                // RAX
+    *(--stack_ptr) = 0;                // RBX
+    *(--stack_ptr) = 0;                // RCX
+    *(--stack_ptr) = 0;                // RDX
+    *(--stack_ptr) = 0;                // RBP
+    *(--stack_ptr) = argc;             // RDI = argc
+    *(--stack_ptr) = actual_argv_ptr;  // RSI = actual argv array
+    *(--stack_ptr) = 0;                // R8
+    *(--stack_ptr) = 0;                // R9
+    *(--stack_ptr) = 0;                // R10
+    *(--stack_ptr) = 0;                // R11
+    *(--stack_ptr) = 0;                // R12
+    *(--stack_ptr) = 0;                // R13
+    *(--stack_ptr) = 0;                // R14
+    *(--stack_ptr) = 0;                // R15
 
     new_proc->kernel_stack = (uint64_t)kernel_stack + 16384;
     new_proc->rsp = (uint64_t)stack_ptr;
@@ -193,8 +285,18 @@ uint64_t process_terminate_current(void) {
     
     // 1. Cleanup side effects
     if (current_process->ui_window) {
+        extern void serial_write(const char *str);
+        serial_write("PROC: Terminating proc with window\n");
         wm_remove_window((Window *)current_process->ui_window);
         current_process->ui_window = NULL;
+    }
+    
+    extern void fat32_close(struct FAT32_FileHandle *fh);
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) {
+        if (current_process->fds[i]) {
+            fat32_close(current_process->fds[i]);
+            current_process->fds[i] = NULL;
+        }
     }
     
     extern void cmd_process_finished(void);
@@ -234,9 +336,23 @@ uint64_t process_terminate_current(void) {
 
 void process_push_gui_event(process_t *proc, gui_event_t *ev) {
     if (!proc) return;
+
+    // Coalesce PAINT events: if a PAINT event is already in the queue, don't add another
+    if (ev->type == 1) { // GUI_EVENT_PAINT
+        int curr = proc->gui_event_head;
+        while (curr != proc->gui_event_tail) {
+            if (proc->gui_events[curr].type == 1) {
+                return; // Already has a paint event pending
+            }
+            curr = (curr + 1) % MAX_GUI_EVENTS;
+        }
+    }
+
     int next_tail = (proc->gui_event_tail + 1) % MAX_GUI_EVENTS;
     // Drop event if queue is full
     if (next_tail == proc->gui_event_head) {
+        extern void serial_write(const char *str);
+        serial_write("PROC: GUI event queue full, dropping event!\n");
         return;
     }
     proc->gui_events[proc->gui_event_tail] = *ev;

@@ -6,6 +6,9 @@
 #include "gui_ipc.h"
 
 #define MAX_GUI_EVENTS 32
+#define MAX_PROCESS_FDS 16
+
+struct FAT32_FileHandle;
 
 // Registers saved on the stack by interrupts/exceptions
 typedef struct {
@@ -27,12 +30,14 @@ typedef struct process {
     int gui_event_tail;
     void *ui_window; // Pointer to the active Window
     
+    void *fds[MAX_PROCESS_FDS];
+    
     struct process *next;
 } process_t;
 
 void process_init(void);
 void process_create(void* entry_point, bool is_user);
-void process_create_elf(const char* filepath);
+void process_create_elf(const char* filepath, const char* args_str);
 process_t* process_get_current(void);
 uint64_t process_schedule(uint64_t current_rsp);
 uint64_t process_terminate_current(void);

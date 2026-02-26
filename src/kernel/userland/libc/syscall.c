@@ -69,3 +69,48 @@ void sys_exit(int status) {
 int sys_write(int fd, const char *buf, int len) {
     return (int)syscall3(SYS_WRITE, (uint64_t)fd, (uint64_t)buf, (uint64_t)len);
 }
+
+int sys_open(const char *path, const char *mode) {
+    return (int)syscall3(SYS_FS, FS_CMD_OPEN, (uint64_t)path, (uint64_t)mode);
+}
+
+int sys_read(int fd, void *buf, uint32_t len) {
+    return (int)syscall4(SYS_FS, FS_CMD_READ, (uint64_t)fd, (uint64_t)buf, (uint64_t)len);
+}
+
+int sys_write_fs(int fd, const void *buf, uint32_t len) {
+    return (int)syscall4(SYS_FS, FS_CMD_WRITE, (uint64_t)fd, (uint64_t)buf, (uint64_t)len);
+}
+
+void sys_close(int fd) {
+    syscall2(SYS_FS, FS_CMD_CLOSE, (uint64_t)fd);
+}
+
+int sys_seek(int fd, int offset, int whence) {
+    return (int)syscall4(SYS_FS, FS_CMD_SEEK, (uint64_t)fd, (uint64_t)offset, (uint64_t)whence);
+}
+
+uint32_t sys_tell(int fd) {
+    return (uint32_t)syscall2(SYS_FS, FS_CMD_TELL, (uint64_t)fd);
+}
+
+uint32_t sys_size(int fd) {
+    return (uint32_t)syscall2(SYS_FS, FS_CMD_SIZE, (uint64_t)fd);
+}
+
+int sys_list(const char *path, struct FAT32_FileInfo *entries, int max_entries) {
+    return (int)syscall4(SYS_FS, FS_CMD_LIST, (uint64_t)path, (uint64_t)entries, (uint64_t)max_entries);
+}
+
+int sys_delete(const char *path) {
+    return (int)syscall2(SYS_FS, FS_CMD_DELETE, (uint64_t)path);
+}
+
+int sys_mkdir(const char *path) {
+    return (int)syscall2(SYS_FS, FS_CMD_MKDIR, (uint64_t)path);
+}
+
+int sys_exists(const char *path) {
+    return (int)syscall2(SYS_FS, FS_CMD_EXISTS, (uint64_t)path);
+}
+

@@ -7,7 +7,7 @@
 #include "editor.h"
 #include "markdown.h"
 #include "cmd.h"
-#include "notepad.h"
+
 #include "process.h"
 #include "minesweeper.h"
 #include "viewer.h"
@@ -817,7 +817,7 @@ static void explorer_open_target(const char *path) {
         explorer_open_directory(path);
     } else {
         if (explorer_str_ends_with(path, ".elf")) {
-            process_create_elf(path);
+            process_create_elf(path, NULL);
         } else if (explorer_is_markdown_file(path)) {
             wm_bring_to_front(&win_markdown);
             markdown_open_file(path);
@@ -853,9 +853,9 @@ static void explorer_open_item(Window *win, int index) {
     if (explorer_str_ends_with(state->items[index].name, ".shortcut")) {
         Window *target = NULL;
         if (explorer_strcmp(state->items[index].name, "Notepad.shortcut") == 0) {
-            target = &win_notepad;
+            process_create_elf("/bin/notepad.elf", NULL); return;
         } else if (explorer_strcmp(state->items[index].name, "Calculator.shortcut") == 0) {
-            process_create_elf("/bin/calculator.elf"); return;
+            process_create_elf("/bin/calculator.elf", NULL); return;
         } else if (explorer_strcmp(state->items[index].name, "Terminal.shortcut") == 0) {
             target = &win_cmd; cmd_reset();
         } else if (explorer_strcmp(state->items[index].name, "Minesweeper.shortcut") == 0) {
@@ -1785,7 +1785,6 @@ static void explorer_handle_file_context_menu_click(Window *win, int x, int y) {
         int max_z = 0;
         for (int i = 0; i < explorer_win_count; i++) if (explorer_wins[i]->z_index > max_z) max_z = explorer_wins[i]->z_index;
         if (win_cmd.z_index > max_z) max_z = win_cmd.z_index;
-        if (win_notepad.z_index > max_z) max_z = win_notepad.z_index;
         if (win_editor.z_index > max_z) max_z = win_editor.z_index;
         if (win_markdown.z_index > max_z) max_z = win_markdown.z_index;
         if (win_control_panel.z_index > max_z) max_z = win_control_panel.z_index;

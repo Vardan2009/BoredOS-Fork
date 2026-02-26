@@ -257,6 +257,9 @@ int main(void) {
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }
+        } else {
+            // Avoid high CPU usage
+            for(volatile int i=0; i<10000; i++);
         }
     }
     

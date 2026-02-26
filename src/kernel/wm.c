@@ -9,7 +9,7 @@
 #include "markdown.h"
 #include <stdbool.h>
 #include <stddef.h>
-#include "notepad.h"
+
 #include "viewer.h"
 #include "wallpaper.h"
 #include "control_panel.h"
@@ -20,6 +20,17 @@
 #include "memory_manager.h"
 #include "paint.h"
 #include "disk.h"
+
+extern void serial_write(const char *str);
+
+static bool str_eq(const char *s1, const char *s2) {
+    if (!s1 || !s2) return false;
+    while (*s1 && *s2) {
+        if (*s1 != *s2) return false;
+        s1++; s2++;
+    }
+    return (*s1 == *s2);
+}
 
 // --- State ---
 static int mx = 400, my = 300; // Mouse Pos
@@ -120,10 +131,6 @@ static bool str_starts_with(const char *str, const char *prefix) {
     return true;
 }
 
-static int str_eq(const char *s1, const char *s2) {
-    while (*s1 && (*s1 == *s2)) { s1++; s2++; }
-    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
-}
 
 static void refresh_desktop_icons(void) {
     // Update limit in FS
@@ -1344,8 +1351,23 @@ void wm_add_window(Window *win) {
     }
 }
 
+Window* wm_find_window_by_title(const char *title) {
+    if (!title) return NULL;
+    for (int i = 0; i < window_count; i++) {
+        if (all_windows[i] && all_windows[i]->title && str_eq(all_windows[i]->title, title)) {
+            return all_windows[i];
+        }
+    }
+    return NULL;
+}
+
 void wm_remove_window(Window *win) {
     if (!win) return;
+    
+    serial_write("WM: Removing window '");
+    if (win->title) serial_write(win->title);
+    else serial_write("unknown");
+    serial_write("'\n");
     
     int index = -1;
     for (int i = 0; i < window_count; i++) {
@@ -1375,6 +1397,8 @@ void wm_remove_window(Window *win) {
         
         kfree(win);
         force_redraw = true;
+    } else {
+        serial_write("WM: Window not found in all_windows list!\n");
     }
 }
 
@@ -1824,13 +1848,23 @@ void wm_handle_right_click(int x, int y) {
             if (str_starts_with(start_menu_pending_app, "Files")) {
                 explorer_open_directory("/");
             } else if (str_starts_with(start_menu_pending_app, "Notepad")) {
-                wm_bring_to_front(&win_notepad);
+                Window *existing = wm_find_window_by_title("Notepad");
+                if (existing) {
+                    wm_bring_to_front(existing);
+                } else {
+                    process_create_elf("/bin/notepad.elf", NULL);
+                }
             } else if (str_starts_with(start_menu_pending_app, "Editor")) {
                 wm_bring_to_front(&win_editor);
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
                 cmd_reset(); wm_bring_to_front(&win_cmd);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
-                process_create_elf("/bin/calculator.elf");
+                Window *existing = wm_find_window_by_title("Calculator");
+                if (existing) {
+                    wm_bring_to_front(existing);
+                } else {
+                    process_create_elf("/bin/calculator.elf", NULL);
+                }
             } else if (str_starts_with(start_menu_pending_app, "Minesweeper")) {
                 wm_bring_to_front(&win_minesweeper);
             } else if (str_starts_with(start_menu_pending_app, "Settings")) {
@@ -1858,9 +1892,9 @@ void wm_handle_right_click(int x, int y) {
                 if (icon->type == 2) { // App Shortcut
                     // Check name to launch app
                     if (str_ends_with(icon->name, "Notepad.shortcut")) {
-                        wm_bring_to_front(&win_notepad); handled = true;
+                        process_create_elf("/bin/notepad.elf", NULL); handled = true;
                     } else if (str_ends_with(icon->name, "Calculator.shortcut")) {
-                        process_create_elf("/bin/calculator.elf"); handled = true;
+                        process_create_elf("/bin/calculator.elf", NULL); handled = true;
                     } else if (str_ends_with(icon->name, "Minesweeper.shortcut")) {
                         wm_bring_to_front(&win_minesweeper); handled = true;
                     } else if (str_ends_with(icon->name, "Settings.shortcut")) {
@@ -1912,7 +1946,7 @@ void wm_handle_right_click(int x, int y) {
                     int p=9; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
                     
                     if (str_ends_with(icon->name, ".elf")) {
-                        process_create_elf(path);
+                        process_create_elf(path, NULL);
                     } else if (str_ends_with(icon->name, ".pnt")) {
                         paint_load(path);
                         wm_bring_to_front(&win_paint);
@@ -2254,7 +2288,6 @@ void wm_init(void) {
     disk_manager_scan();
     // Drives are now dynamically managed - only real drives are registered
 
-    notepad_init();
     cmd_init();
     explorer_init();
     editor_init();
@@ -2269,36 +2302,31 @@ void wm_init(void) {
     refresh_desktop_icons();
     
     // Initialize z-indices
-    win_notepad.z_index = 0;
-    win_cmd.z_index = 1;
-    win_explorer.z_index = 2;
-    win_editor.z_index = 3;
-    win_markdown.z_index = 4;
-    win_control_panel.z_index = 5;
-    win_about.z_index = 6;
-    win_minesweeper.z_index = 7;
-    win_paint.z_index = 8;
+    win_cmd.z_index = 0;
+    win_explorer.z_index = 1;
+    win_editor.z_index = 2;
+    win_markdown.z_index = 3;
+    win_control_panel.z_index = 4;
+    win_about.z_index = 5;
+    win_minesweeper.z_index = 6;
+    win_paint.z_index = 7;
+    win_viewer.z_index = 8;
     
-    all_windows[0] = &win_notepad;
-    all_windows[1] = &win_cmd;
-    all_windows[2] = &win_explorer;
-    all_windows[3] = &win_editor;
-    all_windows[4] = &win_markdown;
-    all_windows[5] = &win_control_panel;
-    all_windows[6] = &win_about;
-    all_windows[7] = &win_minesweeper;
-    all_windows[8] = &win_paint;
-    all_windows[9] = &win_viewer;
-    window_count = 10;
+    all_windows[0] = &win_cmd;
+    all_windows[1] = &win_explorer;
+    all_windows[2] = &win_editor;
+    all_windows[3] = &win_markdown;
+    all_windows[4] = &win_control_panel;
+    all_windows[5] = &win_about;
+    all_windows[6] = &win_minesweeper;
+    all_windows[7] = &win_paint;
+    all_windows[8] = &win_viewer;
+    window_count = 9;
     
-    // Only show Explorer and Notepad on desktop (Explorer on top)
+    // Only show Explorer on desktop (initially hidden)
     win_explorer.visible = false;
     win_explorer.focused = false;
     win_explorer.z_index = 10;
-    
-    win_notepad.visible = false;
-    win_notepad.focused = false;
-    win_notepad.z_index = 9;
     
     // Rest are hidden initially
     win_cmd.visible = false;

@@ -1,5 +1,6 @@
 #include "libui.h"
 #include "syscall.h"
+#include "syscall_user.h"
 #include <stddef.h>
 
 extern uint64_t syscall3(uint64_t sys_num, uint64_t arg1, uint64_t arg2, uint64_t arg3);

@@ -34,3 +34,28 @@ process_jump_usermode:
 
     ; Jump to Ring 3!
     iretq
+
+; void context_switch_to(uint64_t rsp)
+; Restores context from isr frame and jumps
+global context_switch_to
+context_switch_to:
+    mov rsp, rdi
+    
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+    
+    add rsp, 16 ; drop int_no and err_code
+    iretq

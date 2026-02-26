@@ -18,6 +18,7 @@
 #define GUI_EVENT_CLICK       2
 #define GUI_EVENT_RIGHT_CLICK 3
 #define GUI_EVENT_CLOSE       4
+#define GUI_EVENT_KEY         5
 
 typedef struct {
     int type;
@@ -26,7 +27,7 @@ typedef struct {
 } gui_event_t;
 
 // Window Handle
-typedef int ui_window_t;
+typedef uint64_t ui_window_t;
 
 // libui API
 ui_window_t ui_window_create(const char *title, int x, int y, int w, int h);
