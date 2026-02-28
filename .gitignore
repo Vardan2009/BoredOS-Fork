@@ -26,3 +26,4 @@ limine/
 src/kernel/userland/bin/
 boredos.iso
 disk.img
+limine
