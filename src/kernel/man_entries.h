@@ -53,7 +53,7 @@ void create_man_entries(void) {
     write_man_file("mv", "MV - Move or rename file\n\nUsage: mv <source> <dest>\n\nMoves or renames a file or directory.");
     write_man_file("cp", "CP - Copy file\n\nUsage: cp <source> <dest>\n\nCopies a file from the source path to the destination path.");
     write_man_file("touch", "TOUCH - Create empty file\n\nUsage: touch <filename>\n\nCreates a new empty file if it doesn't exist.");
-    write_man_file("cc", "CC - C Compiler\n\nUsage: cc <file.c>\n\nThe BoredOS C Compiler. Compiles C source files into ELF executables.");
+    write_man_file("cc", "CC - C Compiler\n\nUsage: cc <file.c>\n\nThe BoredOS C Compiler. Compiles C source files into executables. (execute these with ./>file<)");
     write_man_file("crash", "CRASH - Trigger kernel exception\n\nUsage: crash\n\nIntentionally triggers a null pointer dereference to test handlers.");
     write_man_file("boredver", "BOREDVER - Show OS version\n\nUsage: boredver\n\nDisplays current BoredOS version and kernel build information.");
     write_man_file("meminfo", "MEMINFO - Memory usage stats\n\nUsage: meminfo\n\nDisplays current physical and virtual memory allocation statistics.");

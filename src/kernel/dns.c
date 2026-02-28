@@ -9,6 +9,7 @@ static ipv4_address_t dns_result_ip;
 static bool dns_resolved = false;
 
 void dns_handle_response(void *data, uint16_t len) {
+    (void)len;
     dns_header_t *dns = (dns_header_t*)data;
     if ((ntohs(dns->flags) & 0x8000) == 0) return; // Not a response
     
@@ -29,6 +30,9 @@ void dns_handle_response(void *data, uint16_t len) {
         uint16_t class = ntohs(*(uint16_t*)p); p += 2;
         uint32_t ttl = ntohl(*(uint32_t*)p); p += 4;
         uint16_t dlen = ntohs(*(uint16_t*)p); p += 2;
+        
+        (void)class;
+        (void)ttl;
         
         if (type == 1 && dlen == 4) { // A Record
             dns_result_ip.bytes[0] = p[0];

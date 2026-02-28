@@ -286,18 +286,18 @@ static uint32_t parse_color(const char *s) {
 }
 
 static void cmd_init_config_defaults(void) {
-    shell_config.prompt_drive_color = 0xFFCCCCCC; // Default light gray
+    shell_config.prompt_drive_color = 0xFFFFFFFF; // Default light gray
     shell_config.prompt_colon_color = 0xFFCCCCCC;
     shell_config.prompt_dir_color = 0xFF569CD6;   // Blue
     shell_config.prompt_op_color = 0xFFCCCCCC;
     shell_config.prompt_op_char = '>';
-    shell_config.default_text_color = 0xFFCCCCCC;
+    shell_config.default_text_color = 0xFFFFFFFF; // White
     shell_config.bg_color = 0xFF1E1E1E;          // Dark background
     shell_config.cursor_color = 0xFFFFFFFF;
     shell_config.show_drive = true;
     shell_config.show_dir = true;
     shell_config.dir_color = 0xFF569CD6;
-    shell_config.file_color = 0xFFCCCCCC;
+    shell_config.file_color = 0xFFFFFFFF;
     shell_config.size_color = 0xFF6A9955;         // Green
     shell_config.error_color = 0xFFFF4444;        // Red
     shell_config.success_color = 0xFF6A9955;

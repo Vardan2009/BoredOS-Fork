@@ -114,42 +114,9 @@ void kmain(void) {
     serial_write_hex(kernel_virt_base);
     serial_write("\n");
 
-    uint64_t heap_phys_addr = 0;
-    size_t heap_size = 0;
     if (memmap_request.response != NULL) {
-        serial_write("[DEBUG] Memory Map entries: ");
-        serial_write_num(memmap_request.response->entry_count);
-        serial_write("\n");
-        for (uint64_t i = 0; i < memmap_request.response->entry_count; i++) {
-            struct limine_memmap_entry *entry = memmap_request.response->entries[i];
-            serial_write("[DEBUG] Map entry ");
-            serial_write_num(i);
-            serial_write(": base=");
-            serial_write_hex(entry->base);
-            serial_write(" len=");
-            serial_write_hex(entry->length);
-            serial_write(" type=");
-            serial_write_num(entry->type);
-            serial_write("\n");
-            
-            if (entry->type == LIMINE_MEMMAP_USABLE) {
-                if (entry->length > heap_size) {
-                    heap_size = entry->length;
-                    heap_phys_addr = entry->base;
-                }
-            }
-        }
-    }
-
-    if (heap_size > 512 * 1024 * 1024) heap_size = 512 * 1024 * 1024;
-    
-    if (heap_phys_addr != 0) {
-        serial_write("[DEBUG] Selected heap base (Phys): 0x");
-        serial_write_hex(heap_phys_addr);
-        serial_write(", Size: ");
-        serial_write_num(heap_size / 1024 / 1024);
-        serial_write(" MB\n");
-        memory_manager_init_at((void*)p2v(heap_phys_addr), heap_size);
+        // The memory manager will now scan the memory map and manage all usable regions.
+        memory_manager_init_from_memmap(memmap_request.response);
         serial_write("[DEBUG] memory_manager_init OK\n");
     } else {
         serial_write("[DEBUG] ERROR: No usable memory for heap! Check Limine memmap.\n");
@@ -196,23 +163,14 @@ void kmain(void) {
         serial_write("\n");
         for (uint64_t i = 0; i < module_request.response->module_count; i++) {
             struct limine_file *mod = module_request.response->modules[i];
-            
-            serial_write("[DEBUG] Found module: ");
-            serial_write(mod->path);
-            serial_write(" adr=0x");
-            serial_write_hex((uint64_t)mod->address);
-            serial_write(" size=");
-            serial_write_num(mod->size);
-            serial_write("\n");
+
 
             const char *clean_path = mod->path;
             // Strip boot():/ or boot:/// prefixes common in different Limine versions
             if (fs_starts_with(clean_path, "boot():")) clean_path += 7;
             else if (fs_starts_with(clean_path, "boot:///")) clean_path += 8;
             
-            serial_write("[DEBUG] Stripped module path: ");
-            serial_write(clean_path);
-            serial_write("\n");
+
 
             FAT32_FileHandle *fh = fat32_open(clean_path, "w");
             if (fh && fh->valid) {

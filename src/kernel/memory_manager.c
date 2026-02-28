@@ -2,11 +2,13 @@
 // This software is released under the GNU General Public License v3.0. See LICENSE file for details.
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "memory_manager.h"
-#include "io.h"
 #include <stdint.h>
+#include "limine.h"
+#include "platform.h"
 
 // --- Internal State ---
-static uint8_t *memory_pool = NULL;
+// memory_pool is no longer a single pointer, as we now manage multiple regions.
+// The block_list will contain all information about free and allocated regions.
 static size_t memory_pool_size = 0;
 static MemBlock block_list[MAX_ALLOCATIONS];
 static int block_count = 0;
@@ -14,6 +16,9 @@ static size_t total_allocated = 0;
 static size_t peak_allocated = 0;
 static uint32_t allocation_counter = 0;
 static bool initialized = false;
+
+extern void serial_write(const char *str);
+extern void serial_write_num(uint32_t n);
 
 // --- Helper Functions ---
 
@@ -53,59 +58,8 @@ static uint32_t get_timestamp(void) {
     return tick++;
 }
 
-// Find free space in memory pool with alignment
-static void* find_free_space_aligned(size_t size, size_t alignment) {
-    size_t offset = 0;
-    
-    // Ensure 8-byte minimum alignment for regular malloc if 0 is passed
-    if (alignment == 0) alignment = 8;
-    
-    while (offset + size <= memory_pool_size) {
-        // Align offset
-        if ((uint64_t)((uint8_t*)memory_pool + offset) % alignment != 0) {
-            size_t diff = alignment - ((uint64_t)((uint8_t*)memory_pool + offset) % alignment);
-            offset += diff;
-        }
-        
-        if (offset + size > memory_pool_size) break;
-        
-        bool space_free = true;
-        
-        // Check if this range is free
-        for (int i = 0; i < block_count; i++) {
-            if (!block_list[i].allocated) continue;
-            
-            void *block_start = block_list[i].address;
-            void *block_end = (uint8_t *)block_start + block_list[i].size;
-            void *check_start = (uint8_t *)memory_pool + offset;
-            void *check_end = (uint8_t *)check_start + size;
-            
-            // Check for overlap
-            if (check_start < block_end && check_end > block_start) {
-                space_free = false;
-                // Move offset past this block
-                offset = (size_t)((uint8_t *)block_end - (uint8_t *)memory_pool);
-                break;
-            }
-        }
-        
-        if (space_free) {
-            return (uint8_t *)memory_pool + offset;
-        }
-    }
-    
-    return NULL;
-}
-
-static void* find_free_space(size_t size) {
-    return find_free_space_aligned(size, 8);
-}
-
-// Calculate fragmentation
-static size_t calculate_fragmentation(void) {
-    if (total_allocated == 0) return 0;
-    
-    // Sort blocks by address
+// Sorts the block list by address. This is crucial for efficient merging of free blocks.
+static void sort_block_list() {
     for (int i = 0; i < block_count - 1; i++) {
         for (int j = i + 1; j < block_count; j++) {
             if ((uintptr_t)block_list[i].address > (uintptr_t)block_list[j].address) {
@@ -115,34 +69,31 @@ static size_t calculate_fragmentation(void) {
             }
         }
     }
-    
-    // Count gaps between allocated blocks
-    size_t total_gaps = 0;
-    void *pool_end = (uint8_t *)memory_pool + memory_pool_size;
-    
-    void *current_end = memory_pool;
-    
+}
+
+// Calculate fragmentation
+static size_t calculate_fragmentation(void) {
+    size_t total_free = memory_pool_size - total_allocated;
+    if (total_free == 0) return 0;
+
+    size_t largest_free = 0;
     for (int i = 0; i < block_count; i++) {
-        if (!block_list[i].allocated) continue;
-        
-        if (block_list[i].address > current_end) {
-            total_gaps += (uintptr_t)block_list[i].address - (uintptr_t)current_end;
+        if (!block_list[i].allocated && block_list[i].size > largest_free) {
+            largest_free = block_list[i].size;
         }
-        
-        current_end = (uint8_t *)block_list[i].address + block_list[i].size;
     }
     
     if (total_allocated == 0) return 0;
-    return (total_gaps * 100) / total_allocated;
+    
+    // Fragmentation = 1 - (Largest Free / Total Free)
+    size_t frag_percent = 100 - ((largest_free * 100) / total_free);
+    return frag_percent;
 }
 
 // --- Public API ---
 
-void memory_manager_init_at(void *pool_address, size_t pool_size) {
-    if (initialized) return;
-    
-    memory_pool = (uint8_t *)pool_address;
-    memory_pool_size = pool_size;
+void memory_manager_init_from_memmap(struct limine_memmap_response *memmap) {
+    if (initialized || !memmap) return;
     
     // Clear metadata
     mem_memset(block_list, 0, sizeof(block_list));
@@ -150,77 +101,115 @@ void memory_manager_init_at(void *pool_address, size_t pool_size) {
     total_allocated = 0;
     peak_allocated = 0;
     allocation_counter = 0;
-    
-    // Create initial free block representing entire pool
-    block_list[0].address = memory_pool;
-    block_list[0].size = memory_pool_size;
-    block_list[0].allocated = false;
-    block_list[0].allocation_id = 0;
-    block_count = 1;
-    
+    memory_pool_size = 0;
+
+    for (uint64_t i = 0; i < memmap->entry_count; i++) {
+        struct limine_memmap_entry *entry = memmap->entries[i];
+
+        if (entry->type == LIMINE_MEMMAP_USABLE) {
+            uint64_t base = entry->base;
+            uint64_t size = entry->length;
+
+            // Avoid low memory below 1MB which is used for boot/kernel structures
+            if (base < 0x100000) {
+                if (base + size <= 0x100000) {
+                    continue; // Skip this low memory block entirely
+                }
+                uint64_t diff = 0x100000 - base;
+                base = 0x100000;
+                size -= diff;
+            }
+
+            if (size < 4096) continue; // Ignore small fragments
+
+            if (block_count >= MAX_ALLOCATIONS) {
+                serial_write("[MEM] WARN: Exceeded MAX_ALLOCATIONS while parsing memmap.\n");
+                break;
+            }
+
+            block_list[block_count].address = (void*)p2v(base);
+            block_list[block_count].size = size;
+            block_list[block_count].allocated = false;
+            block_list[block_count].allocation_id = 0;
+            block_count++;
+
+            memory_pool_size += size;
+        }
+    }
+
+    sort_block_list();
     initialized = true;
-}
-
-void memory_manager_init_with_size(size_t pool_size) {
-
-    if (initialized) return;
-
-}
-
-void memory_manager_init(void) {
-    memory_manager_init_with_size(DEFAULT_POOL_SIZE);
+    serial_write("[MEM] Total usable memory: ");
+    serial_write_num(memory_pool_size / 1024 / 1024);
+    serial_write(" MB\n");
 }
 
 void* kmalloc_aligned(size_t size, size_t alignment) {
-    if (!initialized) {
-        memory_manager_init();
-    }
+    if (!initialized || size == 0) return NULL;
     
     uint64_t rflags;
     asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
 
-    if (size == 0 || size > memory_pool_size) {
-        asm volatile("push %0; popfq" : : "r"(rflags));
-        return NULL;
+    if (alignment == 0) alignment = 8;
+    size = (size + 7) & ~7ULL; // Ensure size is multiple of 8
+
+    for (int i = 0; i < block_count; i++) {
+        if (block_list[i].allocated) continue;
+
+        uintptr_t block_start = (uintptr_t)block_list[i].address;
+        size_t block_size = block_list[i].size;
+
+        uintptr_t aligned_addr = block_start;
+        if (aligned_addr % alignment != 0) {
+            aligned_addr = (aligned_addr + alignment - 1) & ~(alignment - 1);
+        }
+
+        size_t padding = aligned_addr - block_start;
+
+        if (block_size >= size + padding) {
+            void* ptr = (void*)aligned_addr;
+            size_t remaining_size = block_size - (size + padding);
+
+            // The original free block becomes the trailing free part.
+            block_list[i].address = (void*)(aligned_addr + size);
+            block_list[i].size = remaining_size;
+            if (remaining_size == 0) {
+                for (int j = i; j < block_count - 1; j++) block_list[j] = block_list[j+1];
+                block_count--;
+            }
+
+            // Create a new block for the allocation.
+            if (block_count >= MAX_ALLOCATIONS) continue;
+            block_list[block_count].address = ptr;
+            block_list[block_count].size = size;
+            block_list[block_count].allocated = true;
+            block_list[block_count].allocation_id = ++allocation_counter;
+            block_list[block_count].timestamp = get_timestamp();
+            block_count++;
+
+            // Create a new block for the leading padding if it exists.
+            if (padding > 0) {
+                if (block_count < MAX_ALLOCATIONS) {
+                    block_list[block_count].address = (void*)block_start;
+                    block_list[block_count].size = padding;
+                    block_list[block_count].allocated = false;
+                    block_count++;
+                }
+            }
+            
+            sort_block_list();
+
+            total_allocated += size;
+            if (total_allocated > peak_allocated) peak_allocated = total_allocated;
+
+            mem_memset(ptr, 0, size);
+            asm volatile("push %0; popfq" : : "r"(rflags));
+            return ptr;
+        }
     }
-    
-    if (total_allocated + size > memory_pool_size) {
-        asm volatile("push %0; popfq" : : "r"(rflags));
-        return NULL;
-    }
-    
-    // Find free space with alignment
-    void *ptr = find_free_space_aligned(size, alignment);
-    if (ptr == NULL) {
-        asm volatile("push %0; popfq" : : "r"(rflags));
-        return NULL;
-    }
-    
-    // Add block entry
-    if (block_count >= MAX_ALLOCATIONS) {
-        asm volatile("push %0; popfq" : : "r"(rflags));
-        return NULL;
-    }
-    
-    allocation_counter++;
-    int idx = block_count++;
-    
-    block_list[idx].address = ptr;
-    block_list[idx].size = size;
-    block_list[idx].allocated = true;
-    block_list[idx].allocation_id = allocation_counter;
-    block_list[idx].timestamp = get_timestamp();
-    
-    total_allocated += size;
-    if (total_allocated > peak_allocated) {
-        peak_allocated = total_allocated;
-    }
-    
-    // Clear memory
-    mem_memset(ptr, 0, size);
-    
+
     asm volatile("push %0; popfq" : : "r"(rflags));
-    return ptr;
+    return NULL;
 }
 
 void* kmalloc(size_t size) {
@@ -228,36 +217,55 @@ void* kmalloc(size_t size) {
 }
 
 void kfree(void *ptr) {
-    if (ptr == NULL || !initialized) {
-        return;
-    }
+    if (ptr == NULL || !initialized) return;
     
     uint64_t rflags;
     asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
 
-    // Find and free the block
+    int block_idx = -1;
     for (int i = 0; i < block_count; i++) {
         if (block_list[i].allocated && block_list[i].address == ptr) {
-            total_allocated -= block_list[i].size;
-            block_list[i].allocated = false;
-            
-            // Compact: remove freed entry and shift remaining
-            for (int j = i; j < block_count - 1; j++) {
-                block_list[j] = block_list[j + 1];
-            }
+            block_idx = i;
+            break;
+        }
+    }
+
+    if (block_idx == -1) {
+        asm volatile("push %0; popfq" : : "r"(rflags));
+        return;
+    }
+
+    total_allocated -= block_list[block_idx].size;
+    block_list[block_idx].allocated = false;
+
+    // Merge with next block if it's free and physically adjacent
+    if (block_idx + 1 < block_count && !block_list[block_idx + 1].allocated) {
+        uintptr_t current_end = (uintptr_t)block_list[block_idx].address + block_list[block_idx].size;
+        uintptr_t next_start = (uintptr_t)block_list[block_idx + 1].address;
+        if (current_end == next_start) {
+            block_list[block_idx].size += block_list[block_idx + 1].size;
+            for (int i = block_idx + 1; i < block_count - 1; i++) block_list[i] = block_list[i + 1];
+            block_count--;
+        }
+    }
+
+    // Merge with previous block if it's free and physically adjacent
+    if (block_idx > 0 && !block_list[block_idx - 1].allocated) {
+        uintptr_t prev_end = (uintptr_t)block_list[block_idx - 1].address + block_list[block_idx - 1].size;
+        uintptr_t current_start = (uintptr_t)block_list[block_idx].address;
+        if (prev_end == current_start) {
+            block_list[block_idx - 1].size += block_list[block_idx].size;
+            for (int i = block_idx; i < block_count - 1; i++) block_list[i] = block_list[i + 1];
             block_count--;
             asm volatile("push %0; popfq" : : "r"(rflags));
             return;
         }
     }
+
     asm volatile("push %0; popfq" : : "r"(rflags));
 }
 
 void* krealloc(void *ptr, size_t new_size) {
-    if (!initialized) {
-        memory_manager_init();
-    }
-    
     if (new_size == 0) {
         kfree(ptr);
         return NULL;
@@ -267,24 +275,18 @@ void* krealloc(void *ptr, size_t new_size) {
         return kmalloc(new_size);
     }
     
-    // Find the block
     for (int i = 0; i < block_count; i++) {
         if (block_list[i].allocated && block_list[i].address == ptr) {
             if (block_list[i].size >= new_size) {
-                // Allocation is large enough
                 return ptr;
             }
             
-            // Need to allocate new space
             void *new_ptr = kmalloc(new_size);
             if (new_ptr == NULL) {
                 return NULL;
             }
             
-            // Copy data
             mem_memmove(new_ptr, ptr, block_list[i].size);
-            
-            // Free old pointer
             kfree(ptr);
             
             return new_ptr;
@@ -468,10 +470,7 @@ void memory_reset_peak(void) {
 bool memory_is_valid_ptr(void *ptr) {
     if (ptr == NULL) return false;
     
-    void *pool_start = memory_pool;
-    void *pool_end = (uint8_t *)memory_pool + memory_pool_size;
-    
-    if (ptr < pool_start || ptr >= pool_end) {
+    if (!initialized) {
         return false;
     }
     

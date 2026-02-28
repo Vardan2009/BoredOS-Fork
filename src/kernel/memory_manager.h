@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "limine.h"
 
 // Memory Manager Configuration
 #define DEFAULT_POOL_SIZE (128 * 1024 * 1024)  // 128MB default
@@ -36,9 +37,7 @@ typedef struct {
 } MemStats;
 
 // Public API
-void memory_manager_init(void);
-void memory_manager_init_with_size(size_t pool_size);
-void memory_manager_init_at(void *pool_address, size_t pool_size);
+void memory_manager_init_from_memmap(struct limine_memmap_response *memmap);
 
 // Allocation/Deallocation
 void* kmalloc(size_t size);
