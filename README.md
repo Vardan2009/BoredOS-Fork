@@ -1,13 +1,13 @@
 # BoredOS
 
 <div align="center">
-  <div style="font-family: monospace; white-space: pre; text-align: left; display: inline-block; font-weight: bold;">
-<span style="color:#B589D6">====================== </span><span style="color:#FFFFFF">__    ____  ____ </span>
-<span style="color:#B589D6">===================== </span><span style="color:#FFFFFF">/ /_  / __ \/ ___\</span>
-<span style="color:#569CD6">==================== </span><span style="color:#FFFFFF">/ __ \/ / / /\___ \</span>
-<span style="color:#569CD6">=================== </span><span style="color:#FFFFFF">/ /_/ / /_/ /____/ /</span>
-<span style="color:#4EC9B0">================== </span><span style="color:#FFFFFF">/_.___/\____//_____/ </span>
-<span style="color:#4EC9B0">================= </span>
+  <div style="font-family: monospace; text-align: left; display: inline-block; font-weight: bold; line-height: 1.2;">
+<span style="color:#B589D6">======================&nbsp;</span><span style="color:#FFFFFF">__&nbsp;&nbsp;&nbsp;&nbsp;____&nbsp;&nbsp;____&nbsp;</span><br>
+<span style="color:#B589D6">=====================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;/_&nbsp;&nbsp;/&nbsp;__&nbsp;\/&nbsp;___\</span><br>
+<span style="color:#569CD6">====================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;__&nbsp;\/&nbsp;/&nbsp;/&nbsp;/\___&nbsp;\</span><br>
+<span style="color:#569CD6">===================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;/_/&nbsp;/&nbsp;/_/&nbsp;/____/&nbsp;/</span><br>
+<span style="color:#4EC9B0">==================&nbsp;</span><span style="color:#FFFFFF">/_.___/\____//_____/&nbsp;</span><br>
+<span style="color:#4EC9B0">=================&nbsp;</span>
   </div>
 </div>
 BoredOS is a simple x86_64 hobbyist operating system. 
