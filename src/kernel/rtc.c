@@ -74,3 +74,40 @@ void rtc_get_datetime(int *year, int *month, int *day, int *hour, int *minute, i
     // Calculate full year
     *year += 2000;
 }
+
+static void set_rtc_register(int reg, uint8_t value) {
+    outb(CMOS_ADDRESS, reg);
+    outb(CMOS_DATA, value);
+}
+
+void rtc_set_datetime(int year, int month, int day, int hour, int minute, int second) {
+    uint8_t registerB = get_rtc_register(0x0B);
+
+    // Disable NMI and start update
+    outb(CMOS_ADDRESS, 0x8B); 
+    uint8_t prev_b = inb(CMOS_DATA);
+    outb(CMOS_DATA, prev_b | 0x80); // Set SET bit to prevent updates while writing
+
+    if (year >= 2000) year -= 2000;
+
+    if (!(registerB & 0x04)) {
+        // Convert binary to BCD
+        second = ((second / 10) << 4) | (second % 10);
+        minute = ((minute / 10) << 4) | (minute % 10);
+        hour   = ((hour / 10) << 4) | (hour % 10);
+        day    = ((day / 10) << 4) | (day % 10);
+        month  = ((month / 10) << 4) | (month % 10);
+        year   = ((year / 10) << 4) | (year % 10);
+    }
+
+    set_rtc_register(0x00, (uint8_t)second);
+    set_rtc_register(0x02, (uint8_t)minute);
+    set_rtc_register(0x04, (uint8_t)hour);
+    set_rtc_register(0x07, (uint8_t)day);
+    set_rtc_register(0x08, (uint8_t)month);
+    set_rtc_register(0x09, (uint8_t)year);
+
+    // Re-enable updates
+    outb(CMOS_ADDRESS, 0x8B);
+    outb(CMOS_DATA, prev_b & ~0x80);
+}

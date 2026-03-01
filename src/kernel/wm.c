@@ -385,6 +385,7 @@ static void draw_dock_calculator(int x, int y);
 static void draw_dock_terminal(int x, int y);
 static void draw_dock_minesweeper(int x, int y);
 static void draw_dock_paint(int x, int y);
+static void draw_dock_clock(int x, int y);
 static void draw_dock_editor(int x, int y);
 static void draw_filled_circle(int cx, int cy, int r, uint32_t color);
 
@@ -713,6 +714,11 @@ void draw_control_panel_icon(int x, int y, const char *label) {
     draw_icon_label(x, y, label);
 }
 
+void draw_clock_icon(int x, int y, const char *label) {
+    draw_scaled_icon(x, y, draw_dock_clock);
+    draw_icon_label(x, y, label);
+}
+
 void draw_about_icon(int x, int y, const char *label) {
     uint32_t icon_buf[48 * 48];
     for (int i = 0; i < 48 * 48; i++) icon_buf[i] = 0xFFFF00FF;
@@ -953,6 +959,21 @@ static void draw_dock_paint(int x, int y) {
     draw_rounded_rect_filled(x + 30, y + 22, 3, 7, 1, 0xFF1A1A1A);
 }
 
+static void draw_dock_clock(int x, int y) {
+    draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF4A4A4A);
+    draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF6E6E6E);
+    draw_rounded_rect_filled(x + 1, y + 24, 46, 23, 9, 0xFF5A5A5A);
+    
+    int cx = x + 24, cy = y + 24;
+    draw_filled_circle(cx, cy, 18, 0xFFF0F0F0);
+    draw_filled_circle(cx, cy, 1, 0xFF333333);
+    
+    // Hour hand
+    draw_rect(cx - 1, cy - 8, 2, 8, 0xFF333333);
+    // Minute hand
+    draw_rect(cx, cy - 1, 10, 2, 0xFF333333);
+}
+
 static void draw_dock_editor(int x, int y) {
     draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF0A1628);
     draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF1565C0);
@@ -1130,6 +1151,7 @@ void wm_paint(void) {
             else if (str_starts_with(icon->name, "Terminal")) draw_terminal_icon(icon->x, icon->y, label);
             else if (str_starts_with(icon->name, "Minesweeper")) draw_minesweeper_icon(icon->x, icon->y, label);
             else if (str_starts_with(icon->name, "Settings")) draw_control_panel_icon(icon->x, icon->y, label);
+            else if (str_starts_with(icon->name, "Clock")) draw_clock_icon(icon->x, icon->y, label);
             else if (str_starts_with(icon->name, "About")) draw_about_icon(icon->x, icon->y, label);
             else if (str_starts_with(icon->name, "Recycle Bin")) draw_recycle_bin_icon(icon->x, icon->y, label);
             else if (str_starts_with(icon->name, "Files")) draw_folder_icon(icon->x, icon->y, label);
@@ -1192,7 +1214,7 @@ void wm_paint(void) {
     int dock_y = sh - dock_h - 6;   
     int dock_item_size = 48;
     int dock_spacing = 10;
-    int total_dock_width = 7 * (dock_item_size + dock_spacing);
+    int total_dock_width = 8 * (dock_item_size + dock_spacing);
     int dock_bg_x = (sw - total_dock_width) / 2 - 12;   
     int dock_bg_w = total_dock_width + 24;
     draw_rounded_rect_filled(dock_bg_x, dock_y, dock_bg_w, dock_h, 18, COLOR_DOCK_BG);
@@ -1213,6 +1235,8 @@ void wm_paint(void) {
     draw_dock_minesweeper(dock_x, dock_item_y);
     dock_x += dock_item_size + dock_spacing;
     draw_dock_paint(dock_x, dock_item_y);
+    dock_x += dock_item_size + dock_spacing;
+    draw_dock_clock(dock_x, dock_item_y);
     // Editor removed from dock
     
     // Desktop Context Menu (with rounded corners)
@@ -1725,7 +1749,7 @@ void wm_handle_right_click(int x, int y) {
         int dock_y = sh - dock_h - 6;  
         int dock_item_size = 48;
         int dock_spacing = 10;
-        int total_dock_width = 7 * (dock_item_size + dock_spacing);
+        int total_dock_width = 8 * (dock_item_size + dock_spacing);
         int dock_bg_x = (sw - total_dock_width) / 2 - 12;
         int dock_bg_w = total_dock_width + 24;
         
@@ -1743,6 +1767,7 @@ void wm_handle_right_click(int x, int y) {
                 else if (item == 4) start_menu_pending_app = "Terminal";
                 else if (item == 5) start_menu_pending_app = "Minesweeper";
                 else if (item == 6) start_menu_pending_app = "Paint";
+                else if (item == 7) start_menu_pending_app = "Clock";
             }
         } else {
             wm_handle_click(mx, my);
@@ -1858,6 +1883,10 @@ void wm_handle_right_click(int x, int y) {
                 Window *existing = wm_find_window_by_title("Paint");
                 if (existing) wm_bring_to_front(existing);
                 else process_create_elf("/bin/paint.elf", NULL);
+            } else if (str_starts_with(start_menu_pending_app, "Clock")) {
+                Window *existing = wm_find_window_by_title("Clock");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/clock.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "About")) {
                 process_create_elf("/bin/about.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Shutdown")) {

@@ -725,6 +725,12 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             extern void wallpaper_request_set_from_file(const char *path);
             wallpaper_request_set_from_file(kernel_path);
             return 0;
+        } else if (cmd == 32) { // SYSTEM_CMD_RTC_SET
+            int *dt = (int *)arg2;
+            if (!dt) return -1;
+            extern void rtc_set_datetime(int y, int m, int d, int h, int min, int s);
+            rtc_set_datetime(dt[0], dt[1], dt[2], dt[3], dt[4], dt[5]);
+            return 0;
         }
         return -1;
     }
