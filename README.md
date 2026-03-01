@@ -1,14 +1,7 @@
 # BoredOS
 
 <div align="center">
-  <div style="font-family: monospace; text-align: left; display: inline-block; font-weight: bold; line-height: 1.2;">
-<span style="color:#B589D6">======================&nbsp;</span><span style="color:#FFFFFF">__&nbsp;&nbsp;&nbsp;&nbsp;____&nbsp;&nbsp;____&nbsp;</span><br>
-<span style="color:#B589D6">=====================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;/_&nbsp;&nbsp;/&nbsp;__&nbsp;\/&nbsp;___\</span><br>
-<span style="color:#569CD6">====================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;__&nbsp;\/&nbsp;/&nbsp;/&nbsp;/\___&nbsp;\</span><br>
-<span style="color:#569CD6">===================&nbsp;</span><span style="color:#FFFFFF">/&nbsp;/_/&nbsp;/&nbsp;/_/&nbsp;/____/&nbsp;/</span><br>
-<span style="color:#4EC9B0">==================&nbsp;</span><span style="color:#FFFFFF">/_.___/\____//_____/&nbsp;</span><br>
-<span style="color:#4EC9B0">=================&nbsp;</span>
-  </div>
+  <img src="boredos.svg" alt="BoredOS Logo" width="450" />
 </div>
 BoredOS is a simple x86_64 hobbyist operating system. 
 It features a DE (and WM), a FAT32 filesystem, customizable UI and much much more!
