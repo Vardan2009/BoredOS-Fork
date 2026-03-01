@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
     }
     if (config.os_label[0]) {
         strcpy(info_lines[info_line_count], config.os_label);
-        strcat(info_lines[info_line_count++], ": BoredOS V1.65");
+        strcat(info_lines[info_line_count++], ": BoredOS V1.65 'Retrowave'");
     }
     if (config.kernel_label[0]) {
         strcpy(info_lines[info_line_count], config.kernel_label);
