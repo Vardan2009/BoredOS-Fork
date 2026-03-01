@@ -29,9 +29,9 @@ isr%2_wrapper:
     push rbx
     push rcx
     push rdx
-    push rbp
-    push rdi
     push rsi
+    push rdi
+    push rbp
     push r8
     push r9
     push r10
@@ -57,9 +57,9 @@ isr%2_wrapper:
     pop r10
     pop r9
     pop r8
-    pop rsi
-    pop rdi
     pop rbp
+    pop rdi
+    pop rsi
     pop rdx
     pop rcx
     pop rbx
@@ -134,9 +134,9 @@ exception_common:
     push rbx
     push rcx
     push rdx
-    push rbp
-    push rdi
     push rsi
+    push rdi
+    push rbp
     push r8
     push r9
     push r10
@@ -163,9 +163,9 @@ exception_common:
     pop r10
     pop r9
     pop r8
-    pop rsi
-    pop rdi
     pop rbp
+    pop rdi
+    pop rsi
     pop rdx
     pop rcx
     pop rbx

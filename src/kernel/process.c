@@ -108,9 +108,19 @@ void process_create(void* entry_point, bool is_user) {
 }
 
 process_t* process_create_elf(const char* filepath, const char* args_str) {
-    if (process_count >= MAX_PROCESSES) return NULL;
+    process_t *new_proc = NULL;
+    
+    // Find an available slot
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        if (processes[i].pid == 0xFFFFFFFF || i >= process_count) {
+            new_proc = &processes[i];
+            if (i >= process_count) process_count = i + 1;
+            break;
+        }
+    }
 
-    process_t *new_proc = &processes[process_count];
+    if (!new_proc) return NULL;
+    
     new_proc->pid = next_pid++;
     new_proc->is_user = true;
     
@@ -248,8 +258,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     new_proc->user_stack_alloc = stack;
     new_proc->rsp = (uint64_t)stack_ptr;
 
-    // We only increment process_count after success
-    process_count++;
+    // Slot is already counted in process_count if new, or reused.
 
     // Add to linked list
     new_proc->next = current_process->next;
@@ -291,13 +300,17 @@ uint64_t process_schedule(uint64_t current_rsp) {
 }
 
 uint64_t process_terminate_current(void) {
-    if (!current_process) return 0;
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
+
+    if (!current_process) {
+        asm volatile("push %0; popfq" : : "r"(rflags));
+        return 0;
+    }
     
     // 1. Cleanup side effects
     extern Window win_cmd;
     if (current_process->ui_window && (current_process->ui_window != &win_cmd)) {
-        extern void serial_write(const char *str);
-        serial_write("PROC: Terminating proc with window\n");
         wm_remove_window((Window *)current_process->ui_window);
         current_process->ui_window = NULL;
     }
@@ -324,13 +337,14 @@ uint64_t process_terminate_current(void) {
     
     if (prev == current_process) {
         // Only one process (should be kernel), cannot terminate.
+        asm volatile("push %0; popfq" : : "r"(rflags));
         return to_delete->rsp;
     }
 
     prev->next = to_delete->next;
     current_process = to_delete->next;
     
-    // Mark slot as freeish (simple version)
+    // Mark slot as free
     to_delete->pid = 0xFFFFFFFF; 
 
     // 4. Load context for the NEXT process
@@ -343,13 +357,17 @@ uint64_t process_terminate_current(void) {
     paging_switch_directory(current_process->pml4_phys);
 
     // 5. Actually free the memory (after switching state to avoid issues)
-    if (to_delete->kernel_stack_alloc) kfree(to_delete->kernel_stack_alloc);
+    // We only safely free the user stack. Immediate freeing of the current 
+    // kernel stack is unsafe while we are still running on it.
     if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
     
-    // NOTE: In a real system we would also free all physical pages
-    // used by the user page table. For now we just free the stacks.
-
-    return current_process->rsp;
+    // Clear pointers to avoid double-free during slot reuse
+    to_delete->user_stack_alloc = NULL;
+    to_delete->kernel_stack_alloc = NULL; // Leak the small kernel stack for safety
+    
+    uint64_t next_rsp = current_process->rsp;
+    asm volatile("push %0; popfq" : : "r"(rflags));
+    return next_rsp;
 }
 
 void process_push_gui_event(process_t *proc, gui_event_t *ev) {

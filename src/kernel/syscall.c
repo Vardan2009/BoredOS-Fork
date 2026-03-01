@@ -131,20 +131,12 @@ static void user_window_key(Window *win, char c) {
 }
 
 
-uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5) {
+static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5) {
     extern void cmd_write(const char *str);
     extern void serial_write(const char *str);
-    extern void cmd_process_finished(void);
     
     if (syscall_num == 1) { // SYS_WRITE
         cmd_write((const char*)arg2);
-    } else if (syscall_num == 0 || syscall_num == 60) { // SYS_EXIT
-        uint64_t next_rsp = process_terminate_current();
-        extern void context_switch_to(uint64_t rsp);
-        context_switch_to(next_rsp);
-        
-        // This point is never reached
-        while(1);
     } else if (syscall_num == 3) { // SYS_GUI
         int cmd = (int)arg1;
         process_t *proc = process_get_current();
@@ -501,11 +493,7 @@ uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, u
         serial_write((const char *)arg2);
         return 0;
     } else if (syscall_num == 10) { // SYS_KILL
-        // Simplified kill: just terminate current for now
-        uint64_t next_rsp = process_terminate_current();
-        extern void context_switch_to(uint64_t rsp);
-        context_switch_to(next_rsp);
-        while(1);
+        return 0; // Handled in outer
     } else if (syscall_num == 9) { // SYS_SBRK
         int incr = (int)arg1;
         process_t *proc = process_get_current();
@@ -738,4 +726,19 @@ uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, u
     }
     
     return 0;
+}
+
+uint64_t syscall_handler_c(registers_t *regs) {
+    uint64_t syscall_num = regs->rax;
+    
+    // Check for context-switching syscalls
+    if (syscall_num == 0 || syscall_num == 60 || syscall_num == 10) { // EXIT or KILL
+        return process_terminate_current();
+    }
+    
+    // Normal syscalls
+    regs->rax = syscall_handler_inner(regs->rax, regs->rdi, regs->rsi, regs->rdx, regs->r10, regs->r8);
+    
+    // Return current RSP to assembly wrapper
+    return (uint64_t)regs;
 }

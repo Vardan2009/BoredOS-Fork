@@ -60,14 +60,18 @@ static uint32_t get_timestamp(void) {
 
 // Sorts the block list by address. This is crucial for efficient merging of free blocks.
 static void sort_block_list() {
+    bool swapped;
     for (int i = 0; i < block_count - 1; i++) {
-        for (int j = i + 1; j < block_count; j++) {
-            if ((uintptr_t)block_list[i].address > (uintptr_t)block_list[j].address) {
-                MemBlock tmp = block_list[i];
-                block_list[i] = block_list[j];
-                block_list[j] = tmp;
+        swapped = false;
+        for (int j = 0; j < block_count - i - 1; j++) {
+            if ((uintptr_t)block_list[j].address > (uintptr_t)block_list[j + 1].address) {
+                MemBlock tmp = block_list[j];
+                block_list[j] = block_list[j + 1];
+                block_list[j + 1] = tmp;
+                swapped = true;
             }
         }
+        if (!swapped) break;
     }
 }
 
@@ -167,34 +171,48 @@ void* kmalloc_aligned(size_t size, size_t alignment) {
         size_t padding = aligned_addr - block_start;
 
         if (block_size >= size + padding) {
-            void* ptr = (void*)aligned_addr;
+            int needed_slots = 0;
+            if (padding > 0) needed_slots++;
             size_t remaining_size = block_size - (size + padding);
-
-            // The original free block becomes the trailing free part.
-            block_list[i].address = (void*)(aligned_addr + size);
-            block_list[i].size = remaining_size;
-            if (remaining_size == 0) {
-                for (int j = i; j < block_count - 1; j++) block_list[j] = block_list[j+1];
-                block_count--;
+            if (remaining_size > 0) {
+                needed_slots++;
+            } else {
+                // The current slot will be reused for the allocation.
             }
 
-            // Create a new block for the allocation.
-            if (block_count >= MAX_ALLOCATIONS) continue;
-            block_list[block_count].address = ptr;
-            block_list[block_count].size = size;
-            block_list[block_count].allocated = true;
-            block_list[block_count].allocation_id = ++allocation_counter;
-            block_list[block_count].timestamp = get_timestamp();
-            block_count++;
+            if (block_count + needed_slots > MAX_ALLOCATIONS) {
+                continue; // Cannot fit metadata for this split
+            }
 
-            // Create a new block for the leading padding if it exists.
+            void* ptr = (void*)aligned_addr;
+            
+            // Perform the split
+            if (remaining_size > 0) {
+
+                block_list[block_count].address = ptr;
+                block_list[block_count].size = size;
+                block_list[block_count].allocated = true;
+                block_list[block_count].allocation_id = ++allocation_counter;
+                block_list[block_count].timestamp = get_timestamp();
+                block_count++;
+
+                block_list[i].address = (void*)(aligned_addr + size);
+                block_list[i].size = remaining_size;
+                block_list[i].allocated = false;
+            } else {
+                block_list[i].address = ptr;
+                block_list[i].size = size;
+                block_list[i].allocated = true;
+                block_list[i].allocation_id = ++allocation_counter;
+                block_list[i].timestamp = get_timestamp();
+            }
+
             if (padding > 0) {
-                if (block_count < MAX_ALLOCATIONS) {
-                    block_list[block_count].address = (void*)block_start;
-                    block_list[block_count].size = padding;
-                    block_list[block_count].allocated = false;
-                    block_count++;
-                }
+                block_list[block_count].address = (void*)block_start;
+                block_list[block_count].size = padding;
+                block_list[block_count].allocated = false;
+                block_list[block_count].allocation_id = 0;
+                block_count++;
             }
             
             sort_block_list();
@@ -237,8 +255,20 @@ void kfree(void *ptr) {
 
     total_allocated -= block_list[block_idx].size;
     block_list[block_idx].allocated = false;
+    block_list[block_idx].allocation_id = 0;
 
-    // Merge with next block if it's free and physically adjacent
+    // Merge adjacent blocks. We sort first to make adjacency checking trivial.
+    sort_block_list();
+
+    // Re-find the block (it might have moved during sort)
+    for (int i = 0; i < block_count; i++) {
+        if (block_list[i].address == ptr) {
+            block_idx = i;
+            break;
+        }
+    }
+
+    // Merge with next block if possible
     if (block_idx + 1 < block_count && !block_list[block_idx + 1].allocated) {
         uintptr_t current_end = (uintptr_t)block_list[block_idx].address + block_list[block_idx].size;
         uintptr_t next_start = (uintptr_t)block_list[block_idx + 1].address;
@@ -249,7 +279,7 @@ void kfree(void *ptr) {
         }
     }
 
-    // Merge with previous block if it's free and physically adjacent
+    // Merge with previous block if possible
     if (block_idx > 0 && !block_list[block_idx - 1].allocated) {
         uintptr_t prev_end = (uintptr_t)block_list[block_idx - 1].address + block_list[block_idx - 1].size;
         uintptr_t current_start = (uintptr_t)block_list[block_idx].address;
@@ -257,8 +287,6 @@ void kfree(void *ptr) {
             block_list[block_idx - 1].size += block_list[block_idx].size;
             for (int i = block_idx; i < block_count - 1; i++) block_list[i] = block_list[i + 1];
             block_count--;
-            asm volatile("push %0; popfq" : : "r"(rflags));
-            return;
         }
     }
 
@@ -298,6 +326,7 @@ void* krealloc(void *ptr, size_t new_size) {
 
 MemStats memory_get_stats(void) {
     MemStats stats;
+    mem_memset(&stats, 0, sizeof(MemStats));
     
     stats.total_memory = memory_pool_size;
     stats.used_memory = total_allocated;

@@ -8,6 +8,7 @@
 
 // Forward declarations
 typedef struct Window Window;
+typedef struct registers_t registers_t;
 
 // MSRs used for syscalls in x86_64
 #define MSR_EFER       0xC0000080
@@ -38,7 +39,7 @@ typedef struct Window Window;
 #define FS_CMD_CHDIR 13
 
 void syscall_init(void);
-uint64_t syscall_handler_c(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
+uint64_t syscall_handler_c(registers_t *regs);
 
 // Mouse event helpers for WM
 void syscall_send_mouse_move_event(Window *win, int x, int y, uint8_t buttons);

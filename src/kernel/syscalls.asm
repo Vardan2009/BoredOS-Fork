@@ -16,63 +16,63 @@ section .text
 
 syscall_entry:
     ; 1. Switch to Kernel Stack
-    ; Use scratch temporarily to pivot (Risk: Task switch here is rare but possible)
     mov [rel user_rsp_scratch], rsp
     mov rsp, [rel kernel_syscall_stack]
 
-    ; 2. Save User RSP on per-process kernel stack
-    push qword [rel user_rsp_scratch]
-
-    ; 3. Save preserved registers (System V ABI)
+    ; 2. Build iretq frame (compatible with registers_t)
+    push 0x1B           ; SS (User Data)
+    push qword [rel user_rsp_scratch] ; RSP
+    push r11            ; RFLAGS (captured by syscall)
+    push 0x23           ; CS (User Code)
+    push rcx            ; RIP (return address from syscall)
+    
+    push 0              ; err_code
+    push 0              ; int_no (can be used for syscall vector)
+    
+    ; 3. Save all registers in registers_t order
+    push rax
     push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
     push rbp
+    push r8
+    push r9
+    push r10
+    push r11
     push r12
     push r13
     push r14
     push r15
-    
-    ; 4. Save RCX (RIP) and R11 (RFLAGS)
-    push rcx
-    push r11
 
-    ; Shuffling for SYS V C ABI:
-    ; arg5: R9 (remains R9 as 6th arg in C)
-    ; arg4: R8 (was R9)
-    ; arg3: RCX (was R10)
-    ; arg2: RDX (was RSI)
-    ; arg1: RSI (was RDI)
-    ; num: RDI (was RAX)
-    
-    mov r9, r8   ; arg5
-    mov r8, r10  ; arg4
-    mov rcx, rdx ; arg3
-    mov rdx, rsi ; arg2
-    mov rsi, rdi ; arg1
-    mov rdi, rax ; syscall_num
-
-    ; 5. Call C handler
+    ; 4. Call C handler with registers_t*
+    mov rdi, rsp
     sti
     call syscall_handler_c
     cli
 
-    ; 6. Restore RCX and R11
-    pop r11
-    pop rcx
+    ; 5. Switch to the resulting RSP (might be different if task switched)
+    mov rsp, rax
 
-    ; 7. Restore preserved registers
+    ; 6. Restore and return via iretq
     pop r15
     pop r14
     pop r13
     pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
     pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
     pop rbx
-
-    ; 8. Restore User RSP from kernel stack
-    pop rsp
-
-    ; 9. Return to User Mode (sysret)
-    or r11, 0x200 ; Force Interrupts enabled
-    o64 sysret
+    pop rax
+    add rsp, 16 ; drop int_no/err_code
+    iretq
 
 section .bss
 global kernel_syscall_stack
