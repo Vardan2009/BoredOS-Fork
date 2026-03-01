@@ -468,6 +468,12 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             const char *path = (const char *)arg2;
             if (!path) return -1;
             return fat32_delete(path) ? 0 : -1;
+        } else if (cmd == FS_CMD_GET_INFO) {
+            const char *path = (const char *)arg2;
+            FAT32_FileInfo *info = (FAT32_FileInfo *)arg3;
+            if (!path || !info) return -1;
+            extern int fat32_get_info(const char *path, FAT32_FileInfo *info);
+            return (uint64_t)fat32_get_info(path, info);
         } else if (cmd == FS_CMD_MKDIR) {
             const char *path = (const char *)arg2;
             if (!path) return -1;

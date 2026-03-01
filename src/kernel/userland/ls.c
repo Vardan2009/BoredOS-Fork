@@ -20,6 +20,24 @@ int main(int argc, char **argv) {
         }
     }
     
+    FAT32_FileInfo info;
+    if (sys_get_file_info(path, &info) < 0) {
+        sys_set_text_color(error_color);
+        printf("Error: Path '%s' does not exist\n", path);
+        sys_set_text_color(default_color);
+        return 1;
+    }
+
+    if (!info.is_directory) {
+        sys_set_text_color(file_color);
+        printf("[FILE] %s", info.name);
+        sys_set_text_color(size_color);
+        printf(" (%d bytes)\n", info.size);
+        sys_set_text_color(default_color);
+        printf("\nTotal: 1 items\n");
+        return 0;
+    }
+    
     FAT32_FileInfo entries[128];
     int count = sys_list(path, entries, 128);
     

@@ -37,6 +37,7 @@ typedef struct registers_t registers_t;
 #define FS_CMD_EXISTS 11
 #define FS_CMD_GETCWD 12
 #define FS_CMD_CHDIR 13
+#define FS_CMD_GET_INFO 14
 
 void syscall_init(void);
 uint64_t syscall_handler_c(registers_t *regs);

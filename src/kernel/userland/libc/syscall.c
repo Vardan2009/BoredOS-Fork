@@ -109,6 +109,10 @@ int sys_list(const char *path, FAT32_FileInfo *entries, int max_entries) {
     return (int)syscall4(SYS_FS, FS_CMD_LIST, (uint64_t)path, (uint64_t)entries, (uint64_t)max_entries);
 }
 
+int sys_get_file_info(const char *path, FAT32_FileInfo *info) {
+    return (int)syscall3(SYS_FS, FS_CMD_GET_INFO, (uint64_t)path, (uint64_t)info);
+}
+
 int sys_delete(const char *path) {
     return (int)syscall2(SYS_FS, FS_CMD_DELETE, (uint64_t)path);
 }

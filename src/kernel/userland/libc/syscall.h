@@ -27,6 +27,7 @@
 #define FS_CMD_EXISTS 11
 #define FS_CMD_GETCWD 12
 #define FS_CMD_CHDIR 13
+#define FS_CMD_GET_INFO 14
 
 // System Commands (via SYS_SYSTEM)
 #define SYSTEM_CMD_SET_BG_COLOR 1
@@ -100,6 +101,7 @@ typedef struct {
 } FAT32_FileInfo;
 
 int sys_list(const char *path, FAT32_FileInfo *entries, int max_entries);
+int sys_get_file_info(const char *path, FAT32_FileInfo *info);
 
 // Network API
 typedef struct { uint8_t bytes[6]; } net_mac_address_t;
