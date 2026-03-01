@@ -3,6 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "libc/syscall.h"
 #include "libc/libui.h"
+#include "libc/stdlib.h"
 #include "nanojpeg.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -145,8 +146,8 @@ static void load_wallpapers(void) {
         if (fd >= 0) {
             int size = sys_seek(fd, 0, 2); // SEEK_END
             sys_seek(fd, 0, 0); // SEEK_SET
-            if (size > 0 && size < 1024 * 1024) {
-                    unsigned char *buf = (unsigned char *)sys_sbrk(size);
+            if (size > 0 && size < 8 * 1024 * 1024) {
+                    unsigned char *buf = (unsigned char *)malloc(size);
                     if (buf) {
                         sys_read(fd, buf, size);
                         njInit();
@@ -155,7 +156,7 @@ static void load_wallpapers(void) {
                             wp->valid = 1;
                         }
                         njDone();
-                        sys_sbrk(-size); // Release memory
+                        free(buf); // Release memory
                     }
             }
             sys_close(fd);

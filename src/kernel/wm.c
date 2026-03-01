@@ -574,7 +574,7 @@ static uint32_t* thumb_cache_decode(const char *path) {
     if (!fh) return NULL;
     
     uint32_t file_size = fh->size;
-    if (file_size == 0 || file_size > 2 * 1024 * 1024) {
+    if (file_size == 0 || file_size > 8 * 1024 * 1024) {
         fat32_close(fh);
         return NULL;
     }
@@ -1161,7 +1161,9 @@ void wm_paint(void) {
             if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
             else if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
             else if (str_ends_with(icon->name, ".jpg") || str_ends_with(icon->name, ".JPG")) {
-                draw_image_icon(icon->x, icon->y, icon->name);
+                char full_path[128] = "/Desktop/";
+                int p=9; int n=0; while(icon->name[n] && p < 127) full_path[p++] = icon->name[n++]; full_path[p]=0;
+                draw_image_icon(icon->x, icon->y, full_path);
                 draw_icon_label(icon->x, icon->y, icon->name);
             }
             else draw_document_icon(icon->x, icon->y, icon->name);
@@ -2366,16 +2368,13 @@ void wm_process_deferred_thumbs(void) {
         i++;
     }
     path[i] = 0;
-    
-    serial_write("[WM] Processing deferred thumb: ");
-    serial_write(path);
-    serial_write("\n");
-    
+
     // Pop from queue
     thumb_queue_head = (thumb_queue_head + 1) % THUMB_QUEUE_SIZE;
     
     // Process (this takes time but it's okay because we are in the main loop with IRQs enabled)
     thumb_cache_decode(path);
+    force_redraw = true;
 }
 
 void wm_init(void) {
