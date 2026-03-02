@@ -104,6 +104,7 @@ int boot_time_init = 0;
 // Output redirection state
 static FAT32_FileHandle *redirect_file = NULL;
 static char redirect_mode = 0;  // '>' for write, 'a' for append, 0 for normal output
+static char redirect_filename[256];
 static bool pipe_capture_mode = false;
 static char pipe_buffer[8192];
 static int pipe_buffer_pos = 0;
@@ -914,6 +915,15 @@ void cmd_process_finished(void) {
     if (cmd_is_waiting_for_process) {
         cmd_is_waiting_for_process = false;
 
+        if (redirect_file) {
+            fat32_close(redirect_file);
+            redirect_file = NULL;
+            redirect_mode = 0;
+            cmd_write("Output redirected to: ");
+            cmd_write(redirect_filename);
+            cmd_write("\n");
+        }
+
         extern int cursor_col;
         void cmd_putchar(char c);
         if (cursor_col > 0) {
@@ -1629,6 +1639,8 @@ static void cmd_exec(char *cmd, bool print_prompt) {
             return;
         }
         
+        cmd_strcpy(redirect_filename, output_file);
+
         // Open file for redirection
         const char *mode = (redirect_op == 'a') ? "a" : "w";
         redirect_file = fat32_open(output_file, mode);
@@ -1644,7 +1656,9 @@ static void cmd_exec(char *cmd, bool print_prompt) {
     cmd_exec_single(cmd);
     
     // Close redirected file if it was opened
-    if (redirect_file) {
+    // If we started a process, we must NOT close the file yet.
+    // The file will be closed in cmd_process_finished().
+    if (redirect_file && !cmd_is_waiting_for_process) {
         fat32_close(redirect_file);
         redirect_file = NULL;
         redirect_mode = 0;
