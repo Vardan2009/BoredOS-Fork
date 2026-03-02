@@ -44,13 +44,13 @@
 #define E1000_RCTL_RDMTS_HALF (0 << 8)
 #define E1000_RCTL_MO_36   (0 << 12)
 #define E1000_RCTL_BAM     (1 << 15)
-#define E1000_RCTL_BSIZE_2048 (1 << 16)
+#define E1000_RCTL_BSIZE_2048 (0 << 16)
 #define E1000_RCTL_SECRC   (1 << 26)
 
 #define E1000_TCTL_EN      (1 << 1)
 #define E1000_TCTL_PSP     (1 << 3)
-#define E1000_TCTL_CT      (0xF << 4)
-#define E1000_TCTL_COLD    (0x3F << 12)
+#define E1000_TCTL_CT      (0xFF << 4)
+#define E1000_TCTL_COLD    (0x3FF << 12)
 
 #define E1000_ICR_TXDW     (1 << 0)
 #define E1000_ICR_RXT0     (1 << 7)

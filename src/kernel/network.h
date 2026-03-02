@@ -79,6 +79,7 @@ int udp_register_callback(uint16_t port, udp_callback_t callback);
 int network_is_initialized(void);
 int network_has_ip(void);
 int network_get_frames_received(void);
+int network_get_frames_sent(void);
 int network_get_udp_packets_received(void);
 int network_get_udp_callbacks_called(void);
 int network_get_e1000_receive_calls(void);
@@ -86,6 +87,9 @@ int network_get_e1000_receive_empty(void);
 int network_get_process_calls(void);
 int network_dhcp_acquire(void);
 int network_get_gateway_ip(ipv4_address_t* ip);
-int network_get_dns_ip(ipv4_address_t* ip);
+int network_get_dns_ip(ipv4_address_t *ip);
+int network_icmp_single_ping(ipv4_address_t *dest);
+void network_cleanup(void);
+void network_force_unlock(void);
 
 #endif

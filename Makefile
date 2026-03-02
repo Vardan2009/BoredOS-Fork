@@ -17,7 +17,13 @@ ISO_DIR = iso_root
 KERNEL_ELF = $(BUILD_DIR)/boredos.elf
 ISO_IMAGE = boredos.iso
 
-C_SOURCES = $(wildcard $(SRC_DIR)/*.c)
+# Exclude old network stack files
+OLD_NET_SOURCES = $(SRC_DIR)/dns.c $(SRC_DIR)/http.c $(SRC_DIR)/icmp.c $(SRC_DIR)/tcp.c
+C_SOURCES = $(filter-out $(OLD_NET_SOURCES), $(wildcard $(SRC_DIR)/*.c)) \
+            $(wildcard $(SRC_DIR)/lwip/core/*.c) \
+            $(wildcard $(SRC_DIR)/lwip/core/ipv4/*.c) \
+			$(SRC_DIR)/lwip/netif/ethernet.c \
+			$(SRC_DIR)/lwip/netif/bridgeif.c
 
 ASM_SOURCES = $(wildcard $(SRC_DIR)/*.asm)
 OBJ_FILES = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES)) \
@@ -26,7 +32,7 @@ OBJ_FILES = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES)) \
 CFLAGS = -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding \
          -fno-stack-protector -fno-stack-check -fno-lto -fPIE \
          -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
-         -I$(SRC_DIR)
+         -I$(SRC_DIR) -I$(SRC_DIR)/lwip
 
 LDFLAGS = -m elf_x86_64 -nostdlib -static -pie --no-dynamic-linker \
           -z text -z max-page-size=0x1000 -T linker.ld
@@ -62,6 +68,7 @@ limine-setup:
 
 # Compile C Sources
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) limine-setup
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
@@ -139,6 +146,7 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_IMAGE)
+	$(MAKE) -C $(SRC_DIR)/userland clean
 
 run: $(ISO_IMAGE)
 	qemu-system-x86_64 -m 2G -serial stdio -cdrom $< -boot d \

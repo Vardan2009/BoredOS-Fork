@@ -55,7 +55,7 @@ void process_create(void* entry_point, bool is_user) {
     
     // 2. Allocate aligned stack
     void* stack = kmalloc_aligned(4096, 4096);
-    void* kernel_stack = kmalloc_aligned(16384, 16384); // Needed for when user interrupts to Ring 0
+    void* kernel_stack = kmalloc_aligned(32768, 32768); // Needed for when user interrupts to Ring 0
     
     if (is_user) {
         // Map user stack to 0x800000
@@ -69,7 +69,7 @@ void process_create(void* entry_point, bool is_user) {
         
         // Build initial stack frame for iretq
         // Stack grows down, start at top
-        uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 16384);
+        uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 32768);
         
         *(--stack_ptr) = 0x1B;          // SS (User Data)
         *(--stack_ptr) = 0x800000 + 4096; // RSP
@@ -82,7 +82,7 @@ void process_create(void* entry_point, bool is_user) {
         // Push 15 zeros for general purpose registers (r15 -> rax)
         for (int i = 0; i < 15; i++) *(--stack_ptr) = 0;
         
-        new_proc->kernel_stack = (uint64_t)kernel_stack + 16384;
+        new_proc->kernel_stack = (uint64_t)kernel_stack + 32768;
         new_proc->rsp = (uint64_t)stack_ptr;
     } else {
         // Kernel thread
@@ -147,17 +147,19 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     }
 
     // 3. Allocate generic User stack and Kernel stack for interrupts
-    void* stack = kmalloc_aligned(65536, 4096);
-    void* kernel_stack = kmalloc_aligned(16384, 16384); 
+    // Increase to 256KB to prevent stack smashing on heavy networking
+    size_t user_stack_size = 262144;
+    void* stack = kmalloc_aligned(user_stack_size, 4096);
+    void* kernel_stack = kmalloc_aligned(32768, 32768); 
     
-    // Map User stack to 0x800000 (starting from 0x7F0000 for 64KB)
-    for (uint64_t i = 0; i < 16; i++) {
-        paging_map_page(new_proc->pml4_phys, 0x800000 - 65536 + (i * 4096), v2p((uint64_t)stack + (i * 4096)), PT_PRESENT | PT_RW | PT_USER);
+    // Map User stack to 0x800000
+    for (uint64_t i = 0; i < (user_stack_size / 4096); i++) {
+        paging_map_page(new_proc->pml4_phys, 0x800000 - user_stack_size + (i * 4096), v2p((uint64_t)stack + (i * 4096)), PT_PRESENT | PT_RW | PT_USER);
     }
 
  
     int argc = 1;
-    char *args_buf = (char *)stack + 65536;
+    char *args_buf = (char *)stack + user_stack_size;
     uint64_t user_args_buf = 0x800000;
 
     // Copy filepath as argv[0]
@@ -209,7 +211,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     // Align stack to 8 bytes before pushing argv array
     uint64_t current_user_sp = user_args_buf;
     current_user_sp &= ~7ULL;
-    args_buf = (char *)((uint64_t)stack + (current_user_sp - (0x800000 - 65536)));
+    args_buf = (char *)((uint64_t)stack + (current_user_sp - (0x800000 - user_stack_size)));
 
     // Push argv array
     int argv_size = (argc + 1) * sizeof(uint64_t);
@@ -227,7 +229,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     current_user_sp &= ~15ULL;
 
     // 4. Build Stack Frame for context switch via IRETQ
-    uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 16384);
+    uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 32768);
     *(--stack_ptr) = 0x1B;            // SS (User Mode Data)
     *(--stack_ptr) = current_user_sp; // RSP (Updated user stack pointer)
     *(--stack_ptr) = 0x202;           // RFLAGS (Interrupts Enabled)
@@ -253,7 +255,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     *(--stack_ptr) = 0;                // R14
     *(--stack_ptr) = 0;                // R15
 
-    new_proc->kernel_stack = (uint64_t)kernel_stack + 16384;
+    new_proc->kernel_stack = (uint64_t)kernel_stack + 32768;
     new_proc->kernel_stack_alloc = kernel_stack;
     new_proc->user_stack_alloc = stack;
     new_proc->rsp = (uint64_t)stack_ptr;
@@ -325,6 +327,9 @@ uint64_t process_terminate_current(void) {
     
     extern void cmd_process_finished(void);
     cmd_process_finished();
+
+    extern void network_cleanup(void);
+    network_cleanup();
 
     // 2. Find previous process in circular list
     process_t *prev = current_process;

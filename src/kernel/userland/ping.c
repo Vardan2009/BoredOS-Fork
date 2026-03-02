@@ -1,76 +1,70 @@
-// Copyright (c) 2023-2026 Chris (boreddevnl)
-// This software is released under the GNU General Public License v3.0. See LICENSE file for details.
-// This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include <stdlib.h>
 #include <syscall.h>
 
+static int parse_ip(const char* str, net_ipv4_address_t* ip) {
+    int val = 0;
+    int part = 0;
+    const char* p = str;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            val = val * 10 + (*p - '0');
+            if (val > 255) return -1;
+        } else if (*p == '.') {
+            if (part > 3) return -1;
+            ip->bytes[part++] = (uint8_t)val;
+            val = 0;
+        } else {
+            return -1;
+        }
+        p++;
+    }
+    if (part != 3) return -1;
+    ip->bytes[3] = (uint8_t)val;
+    return 0;
+}
+
+static int resolve_host(const char* host, net_ipv4_address_t* ip) {
+    if (parse_ip(host, ip) == 0) return 0;
+    return sys_dns_lookup(host, ip);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: ping a.b.c.d\n");
+        printf("Usage: ping <host>\n");
         return 1;
     }
     
     if (!sys_network_is_initialized()) {
-        printf("Error: Network not initialized. Run 'net init' first.\n");
+        printf("Initializing network...\n");
+        sys_network_init();
+    }
+    
+    const char *host = argv[1];
+    net_ipv4_address_t ip;
+    
+    if (resolve_host(host, &ip) != 0) {
+        printf("Failed to resolve %s\n", host);
         return 1;
     }
     
-    const char *args = argv[1];
+    printf("Pinging %s (%d.%d.%d.%d)...\n", host, ip.bytes[0], ip.bytes[1], ip.bytes[2], ip.bytes[3]);
     
-    net_ipv4_address_t ip = {{0, 0, 0, 0}};
-    int idx = 0;
-    int val = 0;
-    int j = 0;
-    
-    while (args[j]) {
-        char ch = args[j++];
-        if (ch >= '0' && ch <= '9') {
-            val = val * 10 + (ch - '0');
-            if (val > 255) {
-                printf("Invalid IP\n");
-                return 1;
-            }
-        } else if (ch == '.') {
-            if (idx > 3) {
-                printf("Invalid IP\n");
-                return 1;
-            }
-            ip.bytes[idx++] = (uint8_t)val;
-            val = 0;
-        } else if (ch == ' ' || ch == '\t') {
-            // Skip whitespace
-            while (args[j] == ' ' || args[j] == '\t') j++;
-            j--;
-        } else {
-            printf("Invalid IP\n");
-            return 1;
-        }
-    }
-    
-    if (idx != 3) {
-        printf("Invalid IP\n");
-        return 1;
-    }
-    ip.bytes[3] = (uint8_t)val;
-    
-    printf("Pinging ");
+    int successful = 0;
     for (int i = 0; i < 4; i++) {
-        printf("%d", ip.bytes[i]);
-        if (i < 3) printf(".");
-    }
-    printf("...\n");
-    
-    int result = sys_icmp_ping(&ip);
-    
-    if (result == -2) {
-        printf("Error: Network not initialized. Run 'net init' first.\n");
-        return 1;
-    } else if (result < 0) {
-        printf("Error: Failed to send ping request.\n");
-        return 1;
+        int rtt = sys_icmp_ping(&ip);
+        if (rtt >= 0) {
+            printf("64 bytes from %d.%d.%d.%d: icmp_seq=%d time=%dms\n", 
+                   ip.bytes[0], ip.bytes[1], ip.bytes[2], ip.bytes[3], i + 1, rtt);
+            successful++;
+        } else {
+            printf("Request timeout for icmp_seq %d\n", i + 1);
+        }
+        // Small delay between pings
+        for(volatile int d=0; d<1000000; d++);
     }
     
-    printf("Ping complete: %d/%d replies received\n", result, 4);
+    printf("\n--- %s ping statistics ---\n", host);
+    printf("4 packets transmitted, %d received, %d%% packet loss\n", successful, (4-successful)*25);
     
-    return 0;
+    return successful > 0 ? 0 : 1;
 }

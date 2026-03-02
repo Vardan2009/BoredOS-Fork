@@ -11,16 +11,16 @@ extern void serial_print(const char *s);
 extern void serial_print_hex(uint64_t n);
 
 // --- Timer Handler ---
+volatile uint64_t kernel_ticks = 0;
+
 uint64_t timer_handler(registers_t *regs) {
+    outb(0x20, 0x20); // EOI as fast as possible
+    kernel_ticks++;
     wm_timer_tick();
     network_process_frames();
     
     extern uint64_t process_schedule(uint64_t current_rsp);
-    
-    outb(0x20, 0x20); // EOI to Master PIC
-    uint64_t rsp = process_schedule((uint64_t)regs);
-
-    return rsp;
+    return process_schedule((uint64_t)regs);
 }
 
 // --- Keyboard ---

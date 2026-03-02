@@ -61,6 +61,13 @@
 #define SYSTEM_CMD_GET_SHELL_CONFIG 28
 #define SYSTEM_CMD_SET_TEXT_COLOR 29
 #define SYSTEM_CMD_SET_WALLPAPER_PATH 31
+#define SYSTEM_CMD_TCP_CONNECT 33
+#define SYSTEM_CMD_TCP_SEND 34
+#define SYSTEM_CMD_TCP_RECV 35
+#define SYSTEM_CMD_TCP_CLOSE 36
+#define SYSTEM_CMD_DNS_LOOKUP 37
+#define SYSTEM_CMD_SET_DNS 38
+#define SYSTEM_CMD_NET_UNLOCK 39
 
 // Internal assembly entry into Ring 0
 extern uint64_t syscall0(uint64_t sys_num);
@@ -121,6 +128,14 @@ int sys_network_is_initialized(void);
 int sys_network_has_ip(void);
 uint64_t sys_get_shell_config(const char *key);
 void sys_set_text_color(uint32_t color);
+
+int sys_tcp_connect(const net_ipv4_address_t *ip, uint16_t port);
+int sys_tcp_send(const void *data, size_t len);
+int sys_tcp_recv(void *buf, size_t max_len);
+int sys_tcp_close(void);
+int sys_dns_lookup(const char *name, net_ipv4_address_t *out_ip);
+int sys_set_dns_server(const net_ipv4_address_t *ip);
+void sys_network_force_unlock(void);
 
 
 #endif

@@ -195,3 +195,31 @@ void sys_set_text_color(uint32_t color) {
     sys_system(SYSTEM_CMD_SET_TEXT_COLOR, (uint64_t)color, 0, 0, 0);
 }
 
+int sys_tcp_connect(const net_ipv4_address_t *ip, uint16_t port) {
+    return (int)syscall3(SYS_SYSTEM, SYSTEM_CMD_TCP_CONNECT, (uint64_t)ip, (uint64_t)port);
+}
+
+int sys_tcp_send(const void *data, size_t len) {
+    return (int)syscall3(SYS_SYSTEM, SYSTEM_CMD_TCP_SEND, (uint64_t)data, (uint64_t)len);
+}
+
+int sys_tcp_recv(void *buf, size_t max_len) {
+    return (int)syscall3(SYS_SYSTEM, SYSTEM_CMD_TCP_RECV, (uint64_t)buf, (uint64_t)max_len);
+}
+
+int sys_tcp_close(void) {
+    return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_TCP_CLOSE, 0);
+}
+
+int sys_dns_lookup(const char *name, net_ipv4_address_t *out_ip) {
+    return (int)syscall3(SYS_SYSTEM, SYSTEM_CMD_DNS_LOOKUP, (uint64_t)name, (uint64_t)out_ip);
+}
+
+int sys_set_dns_server(const net_ipv4_address_t *ip) {
+    return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_SET_DNS, (uint64_t)ip);
+}
+
+void sys_network_force_unlock(void) {
+    syscall2(SYS_SYSTEM, SYSTEM_CMD_NET_UNLOCK, 0);
+}
+

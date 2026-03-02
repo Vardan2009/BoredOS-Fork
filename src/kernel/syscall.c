@@ -136,7 +136,8 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
     extern void serial_write(const char *str);
     
     if (syscall_num == 1) { // SYS_WRITE
-        cmd_write((const char*)arg2);
+        extern void cmd_write_len(const char *str, size_t len);
+        cmd_write_len((const char*)arg2, (size_t)arg3);
     } else if (syscall_num == 3) { // SYS_GUI
         int cmd = (int)arg1;
         process_t *proc = process_get_current();
@@ -685,7 +686,7 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             switch (stat_type) {
                 case 0: return network_get_frames_received();
                 case 1: return network_get_udp_packets_received();
-                case 2: return network_get_udp_callbacks_called();
+                case 2: return network_get_frames_sent();
                 case 3: return network_get_e1000_receive_calls();
                 case 4: return network_get_e1000_receive_empty();
                 case 5: return network_get_process_calls();
@@ -702,7 +703,8 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
         } else if (cmd == 26) { // SYSTEM_CMD_ICMP_PING
             ipv4_address_t *dest_ip = (ipv4_address_t *)arg2;
             if (!dest_ip) return -1;
-            return cli_cmd_ping_syscall(dest_ip);
+            extern int network_icmp_single_ping(ipv4_address_t *dest);
+            return (uint64_t)network_icmp_single_ping(dest_ip);
         } else if (cmd == 27) { // SYSTEM_CMD_NETWORK_IS_INIT
             return network_is_initialized() ? 1 : 0;
         } else if (cmd == 30) { // SYSTEM_CMD_NETWORK_HAS_IP
@@ -736,6 +738,41 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             if (!dt) return -1;
             extern void rtc_set_datetime(int y, int m, int d, int h, int min, int s);
             rtc_set_datetime(dt[0], dt[1], dt[2], dt[3], dt[4], dt[5]);
+            return 0;
+        } else if (cmd == 33) { // SYSTEM_CMD_TCP_CONNECT
+            ipv4_address_t *ip = (ipv4_address_t *)arg2;
+            uint16_t port = (uint16_t)arg3;
+            extern int network_tcp_connect(const ipv4_address_t *ip, uint16_t port);
+            return (uint64_t)network_tcp_connect(ip, port);
+        } else if (cmd == 34) { // SYSTEM_CMD_TCP_SEND
+            const void *data = (const void *)arg2;
+            size_t len = (size_t)arg3;
+            extern int network_tcp_send(const void *data, size_t len);
+            return (uint64_t)network_tcp_send(data, len);
+        } else if (cmd == 35) { // SYSTEM_CMD_TCP_RECV
+            void *buf = (void *)arg2;
+            size_t max_len = (size_t)arg3;
+            extern int network_tcp_recv(void *buf, size_t max_len);
+            return (uint64_t)network_tcp_recv(buf, max_len);
+        } else if (cmd == 36) { // SYSTEM_CMD_TCP_CLOSE
+            extern int network_tcp_close(void);
+            return (uint64_t)network_tcp_close();
+        } else if (cmd == 37) { // SYSTEM_CMD_DNS_LOOKUP
+            const char *user_name = (const char *)arg2;
+            ipv4_address_t *out_ip = (ipv4_address_t *)arg3;
+            char name_buf[256];
+            int i = 0;
+            while (i < 255 && user_name[i]) { name_buf[i] = user_name[i]; i++; }
+            name_buf[i] = 0;
+            extern int network_dns_lookup(const char *name, ipv4_address_t *out_ip);
+            return (uint64_t)network_dns_lookup(name_buf, out_ip);
+        } else if (cmd == 38) { // SYSTEM_CMD_SET_DNS
+            ipv4_address_t *ip = (ipv4_address_t *)arg2;
+            extern int network_set_dns_server(const ipv4_address_t *ip);
+            return (uint64_t)network_set_dns_server(ip);
+        } else if (cmd == 39) { // SYSTEM_CMD_NET_UNLOCK
+            extern void network_force_unlock(void);
+            network_force_unlock();
             return 0;
         }
         return -1;

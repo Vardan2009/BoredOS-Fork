@@ -207,7 +207,6 @@ void puts(const char *s) {
 }
 
 void printf(const char *fmt, ...) {
-    // Simple printf implementation
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
     char buf[1024];
@@ -216,29 +215,56 @@ void printf(const char *fmt, ...) {
     while (*fmt) {
         if (*fmt == '%') {
             fmt++;
+            // Flush current buffer
+            if (buf_idx > 0) {
+                sys_write(1, buf, buf_idx);
+                buf_idx = 0;
+            }
+
             if (*fmt == 's') {
                 char *s = __builtin_va_arg(args, char *);
-                while (*s) buf[buf_idx++] = *s++;
+                if (s) sys_write(1, s, strlen(s));
+                else sys_write(1, "(null)", 6);
             } else if (*fmt == 'd') {
                 int d = __builtin_va_arg(args, int);
                 char ibuf[32];
                 itoa(d, ibuf);
-                char *s = ibuf;
-                while (*s) buf[buf_idx++] = *s++;
+                sys_write(1, ibuf, strlen(ibuf));
+            } else if (*fmt == 'X' || *fmt == 'x') {
+                uint32_t val = __builtin_va_arg(args, uint32_t);
+                char xbuf[16];
+                int xi = 0;
+                if (val == 0) xbuf[xi++] = '0';
+                else {
+                    while (val > 0) {
+                        uint32_t rem = val % 16;
+                        xbuf[xi++] = (rem < 10) ? (rem + '0') : (rem - 10 + 'A');
+                        val /= 16;
+                    }
+                }
+                while (xi > 0) {
+                    char c = xbuf[--xi];
+                    sys_write(1, &c, 1);
+                }
             } else if (*fmt == 'c') {
                 char c = (char)__builtin_va_arg(args, int);
-                buf[buf_idx++] = c;
+                sys_write(1, &c, 1);
             } else if (*fmt == '%') {
-                buf[buf_idx++] = '%';
+                char c = '%';
+                sys_write(1, &c, 1);
             }
         } else {
             buf[buf_idx++] = *fmt;
+            if (buf_idx >= 1024) {
+                sys_write(1, buf, buf_idx);
+                buf_idx = 0;
+            }
         }
         fmt++;
-        if (buf_idx >= 1022) break; // Simple overflow protection
     }
-    buf[buf_idx] = 0;
-    sys_write(1, buf, buf_idx);
+    if (buf_idx > 0) {
+        sys_write(1, buf, buf_idx);
+    }
     __builtin_va_end(args);
 }
 

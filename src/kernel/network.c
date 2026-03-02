@@ -1,512 +1,484 @@
-// Copyright (c) 2023-2026 Chris (boreddevnl)
-// This software is released under the GNU General Public License v3.0. See LICENSE file for details.
-// This header needs to maintain in any file it is present in, as per the GPL license terms.
-#include <stdint.h>
-#include <stddef.h>
 #include "network.h"
-#include "e1000.h"
+#include "lwip/init.h"
+#include "lwip/timeouts.h"
+#include "lwip/etharp.h"
+#include "lwip/dhcp.h"
+#include "lwip/dns.h"
+#include "lwip/tcp.h"
+#include "lwip/udp.h"
+#include "lwip/stats.h"
+#include "lwip/raw.h"
+#include "lwip/sys.h"
+#include "netif/ethernet.h"
+#include "e1000_netif.h"
+#include "kutils.h"
 #include "pci.h"
-#undef IP_PROTO_UDP // Avoid redefinition warning from net_defs.h
-#include "net_defs.h"
+#include "e1000.h"
 
-static int network_initialized = 0;
-static int has_ip = 0;
-static mac_address_t our_mac;
-static ipv4_address_t ip_address = {{0,0,0,0}};
-static ipv4_address_t gateway_ip = {{0,0,0,0}};
-static ipv4_address_t subnet_mask = {{0,0,0,0}};
-static ipv4_address_t dns_server_ip = {{0,0,0,0}};
-static uint16_t ipv4_id_counter = 0;
+static struct netif e1000_netif;
+static int lwip_initialized = 0;
 
-typedef struct { ipv4_address_t ip; mac_address_t mac; uint32_t timestamp; int valid; } arp_cache_entry_t;
-#define ARP_CACHE_SIZE 16
-static arp_cache_entry_t arp_cache[ARP_CACHE_SIZE];
-static int arp_cache_initialized = 0;
+static struct tcp_pcb *current_tcp_pcb = NULL;
+static struct pbuf *tcp_recv_queue = NULL;
+static int tcp_connect_done = 0;
+static int tcp_connect_error = 0;
+static int tcp_closed = 0;
 
-#define UDP_MAX_CALLBACKS 8
-typedef struct { uint16_t port; udp_callback_t callback; int valid; } udp_callback_entry_t;
-static udp_callback_entry_t udp_callbacks[UDP_MAX_CALLBACKS];
-
-static int frames_received_count = 0;
-static int udp_packets_received_count = 0;
-static int udp_callbacks_called_count = 0;
-static int e1000_receive_calls = 0;
-static int e1000_receive_empty = 0;
-static int network_process_calls = 0;
-
-static void* kmemcpy(void* d, const void* s, size_t n){uint8_t*D=d;const uint8_t*S=s;for(size_t i=0;i<n;i++)D[i]=S[i];return d;}
-static void* kmemset(void* d,int v,size_t n){uint8_t*D=d;for(size_t i=0;i<n;i++)D[i]=(uint8_t)v;return d;}
-static int kmemcmp(const void* a,const void* b,size_t n){const uint8_t*A=a;const uint8_t*B=b;for(size_t i=0;i<n;i++){if(A[i]!=B[i])return (int)A[i]-(int)B[i];}return 0;}
-
-static uint16_t ipv4_checksum(const ipv4_header_t* h){
-    uint32_t sum=0;const uint16_t* w=(const uint16_t*)h;
-    for(int i=0;i<10;i++) sum+=w[i];
-    while(sum>>16) sum=(sum&0xFFFF)+(sum>>16);
-    return (uint16_t)(~sum);
+static err_t tcp_recv_callback(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
+    (void)arg; (void)tpcb; (void)err;
+    if (p == NULL) {
+        // Connection closed
+        tcp_closed = 1;
+        return ERR_OK;
+    }
+    if (tcp_recv_queue == NULL) {
+        tcp_recv_queue = p;
+    } else {
+        pbuf_chain(tcp_recv_queue, p);
+    }
+    return ERR_OK;
 }
 
-static void arp_cache_init(void){ if(arp_cache_initialized) return; kmemset(arp_cache,0,sizeof(arp_cache)); arp_cache_initialized=1; }
-static arp_cache_entry_t* arp_cache_find(const ipv4_address_t* ip){ for(int i=0;i<ARP_CACHE_SIZE;i++){ if(arp_cache[i].valid && kmemcmp(&arp_cache[i].ip, ip, sizeof(ipv4_address_t))==0) return &arp_cache[i]; } return NULL; }
-static void arp_cache_add(const ipv4_address_t* ip,const mac_address_t* mac){ arp_cache_entry_t* e=arp_cache_find(ip); if(e){ kmemcpy(&e->mac,mac,sizeof(mac_address_t)); e->timestamp=0; return;} for(int i=0;i<ARP_CACHE_SIZE;i++){ if(!arp_cache[i].valid){ kmemcpy(&arp_cache[i].ip,ip,sizeof(ipv4_address_t)); kmemcpy(&arp_cache[i].mac,mac,sizeof(mac_address_t)); arp_cache[i].timestamp=0; arp_cache[i].valid=1; return; } } kmemcpy(&arp_cache[0].ip,ip,sizeof(ipv4_address_t)); kmemcpy(&arp_cache[0].mac,mac,sizeof(mac_address_t)); arp_cache[0].timestamp=0; arp_cache[0].valid=1; }
+static void tcp_err_callback(void *arg, err_t err) {
+    (void)arg; (void)err;
+    current_tcp_pcb = NULL;
+    tcp_connect_error = 1;
+}
 
-int network_init(void){
-    if(network_initialized) return 0;
-    pci_device_t device;
-    if(!pci_find_device(E1000_VENDOR_ID,E1000_DEVICE_ID_82540EM,&device)) return -1;
-    if(e1000_init(&device)!=0) return -1;
-    if(network_get_mac_address(&our_mac)!=0) return -1;
-    arp_cache_init();
-    kmemset(udp_callbacks,0,sizeof(udp_callbacks));
-    network_initialized=1;
+static err_t tcp_connected_callback(void *arg, struct tcp_pcb *tpcb, err_t err) {
+    (void)arg; (void)tpcb;
+    if (err == ERR_OK) {
+        tcp_connect_done = 1;
+    } else {
+        tcp_connect_error = 1;
+    }
+    return ERR_OK;
+}
+
+int network_init(void) {
+    if (lwip_initialized) return 0;
+    
+    // First, find and initialize the E1000 device if not already done
+    if (!e1000_get_device()) {
+        pci_device_t pci_dev;
+        if (pci_find_device(E1000_VENDOR_ID, E1000_DEVICE_ID_82540EM, &pci_dev)) {
+            if (e1000_init(&pci_dev) != 0) return -1;
+        } else {
+            return -1; // No E1000 found
+        }
+    }
+
+    lwip_init();
+    dns_init(); // Explicitly init DNS just in case
+    
+    ip4_addr_t ipaddr, netmask, gw;
+    ip4_addr_set_zero(&ipaddr);
+    ip4_addr_set_zero(&netmask);
+    ip4_addr_set_zero(&gw);
+    
+    if (netif_add(&e1000_netif, &ipaddr, &netmask, &gw, NULL, e1000_netif_init, ethernet_input) == NULL) {
+        return -1;
+    }
+    
+    netif_set_default(&e1000_netif);
+    netif_set_up(&e1000_netif);
+    
+    lwip_initialized = 1;
+
+    // Automate DHCP by default and return its result
+    int dhcp_res = network_dhcp_acquire();
+    
+    if (dhcp_res == 0) {
+        ipv4_address_t ip;
+        network_get_ipv4_address(&ip);
+        extern void serial_write(const char *str);
+        serial_write("[NETWORK] IP Assigned: ");
+        char buf[32];
+        k_itoa(ip.bytes[0], buf); serial_write(buf); serial_write(".");
+        k_itoa(ip.bytes[1], buf); serial_write(buf); serial_write(".");
+        k_itoa(ip.bytes[2], buf); serial_write(buf); serial_write(".");
+        k_itoa(ip.bytes[3], buf); serial_write(buf); serial_write("\n");
+    } else {
+        extern void serial_write(const char *str);
+        serial_write("[NETWORK] DHCP Failed during init\n");
+    }
+
+    // Set default DNS server (1.1.1.1)
+    ip_addr_t dns1;
+    IP_ADDR4(&dns1, 1, 1, 1, 1);
+    dns_setserver(0, &dns1);
+
+    return dhcp_res;
+}
+
+int network_get_mac_address(mac_address_t* mac) {
+    if (!lwip_initialized) return -1;
+    for (int i = 0; i < 6; i++) mac->bytes[i] = e1000_netif.hwaddr[i];
     return 0;
 }
 
-int network_get_mac_address(mac_address_t* mac){
-    e1000_device_t* dev=e1000_get_device();
-    if(!dev) return -1;
-    *mac=*(mac_address_t*)&dev->mac_address;
+int network_get_ipv4_address(ipv4_address_t* ip) {
+    if (!lwip_initialized) return -1;
+    u32_t addr = ip4_addr_get_u32(netif_ip4_addr(&e1000_netif));
+    ip->bytes[0] = (addr >> 0) & 0xFF;
+    ip->bytes[1] = (addr >> 8) & 0xFF;
+    ip->bytes[2] = (addr >> 16) & 0xFF;
+    ip->bytes[3] = (addr >> 24) & 0xFF;
     return 0;
 }
 
-int network_get_ipv4_address(ipv4_address_t* ip){ if(!network_initialized) return -1; *ip=ip_address; return 0; }
-int network_set_ipv4_address(const ipv4_address_t* ip){ if(!network_initialized) return -1; ip_address=*ip; has_ip = 1; return 0; }
-int network_has_ip(void) { return has_ip; }
-
-int network_get_gateway_ip(ipv4_address_t* ip){ if(!network_initialized) return -1; *ip=gateway_ip; return 0; }
-int network_get_dns_ip(ipv4_address_t* ip){ if(!network_initialized) return -1; *ip=dns_server_ip; return 0; }
-
-ipv4_address_t get_local_ip(void) {
-    return ip_address;
-}
-ipv4_address_t get_dns_server_ip(void) {
-    return dns_server_ip;
+int network_set_ipv4_address(const ipv4_address_t* ip) {
+    if (!lwip_initialized) return -1;
+    ip4_addr_t ipaddr;
+    IP4_ADDR(&ipaddr, ip->bytes[0], ip->bytes[1], ip->bytes[2], ip->bytes[3]);
+    netif_set_ipaddr(&e1000_netif, &ipaddr);
+    return 0;
 }
 
-int ip_send_packet(ipv4_address_t dst, uint8_t protocol, const void *data, uint16_t len) {
-    return ipv4_send_packet(&dst, protocol, data, len);
+static volatile int network_processing = 0;
+static void network_poll_internal(void) {
+    e1000_netif_poll(&e1000_netif);
+    sys_check_timeouts();
 }
 
-int network_send_frame(const void* data,size_t length){ if(!network_initialized) return -1; if(length>ETH_FRAME_MAX_SIZE) return -1; return e1000_send_packet(data,length); }
-
-int network_receive_frame(void* buffer,size_t buffer_size){
-    if(!network_initialized) return 0;
-    e1000_receive_calls++;
-    int result=e1000_receive_packet(buffer,buffer_size);
-    if(result==0) e1000_receive_empty++;
-    return result;
+void network_process_frames(void) {
+    if (!lwip_initialized || network_processing) return;
+    network_processing = 1;
+    network_poll_internal();
+    network_processing = 0;
 }
 
-void network_process_frames(void){
-    network_process_calls++;
-    if(!network_initialized) return;
-    uint8_t frame_buffer[ETH_FRAME_MAX_SIZE];
-    int frame_length;
-    while((frame_length=network_receive_frame(frame_buffer,sizeof(frame_buffer)))>0){
-        frames_received_count++;
-        if(frame_length<(int)sizeof(eth_header_t)) continue;
-        eth_header_t* eth=(eth_header_t*)frame_buffer;
-        uint16_t ethertype=ntohs(eth->ethertype);
-        int is_broadcast=1; int is_for_us=1;
-        for(int i=0;i<6;i++){ if(eth->dest_mac[i]!=0xFF) is_broadcast=0; if(eth->dest_mac[i]!=our_mac.bytes[i]) is_for_us=0; }
-        if(!is_broadcast && !is_for_us) continue;
-        void* payload=frame_buffer+sizeof(eth_header_t);
-        size_t payload_length=frame_length-sizeof(eth_header_t);
-        if(ethertype==ETH_ETHERTYPE_ARP){
-            if(payload_length>=sizeof(arp_header_t)) arp_process_packet((arp_header_t*)payload,payload_length);
-        } else if(ethertype==ETH_ETHERTYPE_IPV4){
-            if(payload_length>=sizeof(ipv4_header_t)){
-                ipv4_header_t* ip=(ipv4_header_t*)payload;
-                uint16_t checksum=ip->checksum;
-                ip->checksum=0;
-                uint16_t calc=ipv4_checksum(ip);
-                ip->checksum=checksum;
-                if(checksum==calc){
-                    int for_our_ip=1;
-                    for(int i=0;i<4;i++){ if(ip->dest_ip[i]!=ip_address.bytes[i]) { for_our_ip=0; break; } }
-                    if(for_our_ip || ip->dest_ip[0]==255){
-                        mac_address_t src_mac;
-                        kmemcpy(src_mac.bytes,eth->src_mac,6);
-                        
-                        ipv4_address_t src_ip_struct;
-                        kmemcpy(src_ip_struct.bytes, ip->src_ip, 4);
-                        arp_cache_add(&src_ip_struct, &src_mac);
-                        
-                        ipv4_process_packet(ip,&src_mac,payload_length);
-                    }
-                }
-            }
-        }
+void network_force_unlock(void) {
+    network_processing = 0;
+}
+
+void network_cleanup(void) {
+    asm volatile("cli");
+    if (tcp_recv_queue) {
+        pbuf_free(tcp_recv_queue);
+        tcp_recv_queue = NULL;
     }
-}
-
-int arp_send_request(const ipv4_address_t* target_ip){
-    if(!network_initialized) return -1;
-    uint8_t frame[ETH_FRAME_MAX_SIZE];
-    eth_header_t* eth=(eth_header_t*)frame;
-    arp_header_t* arp=(arp_header_t*)(frame+sizeof(eth_header_t));
-    for(int i=0;i<6;i++) eth->dest_mac[i]=0xFF;
-    kmemcpy(eth->src_mac,our_mac.bytes,6);
-    eth->ethertype=htons(ETH_ETHERTYPE_ARP);
-    arp->hw_type=htons(1);
-    arp->proto_type=htons(ETH_ETHERTYPE_IPV4);
-    arp->hw_len=6;
-    arp->proto_len=4;
-    arp->opcode=htons(ARP_OP_REQUEST);
-    kmemcpy(arp->sender_mac,our_mac.bytes,6);
-    kmemcpy(arp->sender_ip,ip_address.bytes,4);
-    for(int i=0;i<6;i++) arp->target_mac[i]=0;
-    kmemcpy(arp->target_ip,target_ip->bytes,4);
-    size_t frame_length=sizeof(eth_header_t)+sizeof(arp_header_t);
-    return network_send_frame(frame,frame_length);
-}
-
-int arp_lookup(const ipv4_address_t* ip,mac_address_t* mac){
-    if(!network_initialized) return -1;
-    arp_cache_entry_t* e=arp_cache_find(ip);
-    if(e && e->valid){ *mac=e->mac; return 0; }
-    arp_send_request(ip);
-    return -1;
-}
-
-void arp_process_packet(const arp_header_t* arp,size_t length){
-    if(length<sizeof(arp_header_t)) return;
-    if(ntohs(arp->hw_type)!=1 || ntohs(arp->proto_type)!=ETH_ETHERTYPE_IPV4) return;
-    uint16_t opcode=ntohs(arp->opcode);
-    ipv4_address_t sender_ip; mac_address_t sender_mac;
-    kmemcpy(sender_ip.bytes,arp->sender_ip,4);
-    kmemcpy(sender_mac.bytes,arp->sender_mac,6);
-    arp_cache_add(&sender_ip,&sender_mac);
-    if(opcode==ARP_OP_REQUEST){
-        int is_for_us=1;
-        for(int i=0;i<4;i++){ if(arp->target_ip[i]!=ip_address.bytes[i]) { is_for_us=0; break; } }
-        if(is_for_us){
-            uint8_t frame[ETH_FRAME_MAX_SIZE];
-            eth_header_t* eth=(eth_header_t*)frame;
-            arp_header_t* r=(arp_header_t*)(frame+sizeof(eth_header_t));
-            kmemcpy(eth->dest_mac,arp->sender_mac,6);
-            kmemcpy(eth->src_mac,our_mac.bytes,6);
-            eth->ethertype=htons(ETH_ETHERTYPE_ARP);
-            r->hw_type=htons(1);
-            r->proto_type=htons(ETH_ETHERTYPE_IPV4);
-            r->hw_len=6;
-            r->proto_len=4;
-            r->opcode=htons(ARP_OP_REPLY);
-            kmemcpy(r->sender_mac,our_mac.bytes,6);
-            kmemcpy(r->sender_ip,ip_address.bytes,4);
-            kmemcpy(r->target_mac,arp->sender_mac,6);
-            kmemcpy(r->target_ip,arp->sender_ip,4);
-            size_t frame_length=sizeof(eth_header_t)+sizeof(arp_header_t);
-            network_send_frame(frame,frame_length);
-        }
+    if (current_tcp_pcb) {
+        tcp_abort(current_tcp_pcb);
+        current_tcp_pcb = NULL;
     }
+    network_processing = 0;
+    asm volatile("sti");
 }
 
-int ipv4_send_packet(const ipv4_address_t* dest_ip,uint8_t protocol,const void* data,size_t data_length){
-    if(!network_initialized) return -1;
-    mac_address_t dest_mac;
-    int is_bcast=(dest_ip->bytes[0]==255 && dest_ip->bytes[1]==255 && dest_ip->bytes[2]==255 && dest_ip->bytes[3]==255);
+int network_dhcp_acquire(void) {
+    if (!lwip_initialized) return -1;
+    if (network_processing) {
+        serial_write("[DHCP] Busy, skipping\n");
+        return -1;
+    }
+    network_processing = 1;
+    serial_write("[DHCP] Starting...\n");
+    dhcp_start(&e1000_netif);
     
-    ipv4_address_t target_ip = *dest_ip;
-    
-    // Routing Logic: If dest is not local, send to Gateway
-    if (!is_bcast && gateway_ip.bytes[0] != 0 && subnet_mask.bytes[0] != 0) {
-        int is_local = 1;
-        for(int i=0; i<4; i++) {
-            if ((dest_ip->bytes[i] & subnet_mask.bytes[i]) != (ip_address.bytes[i] & subnet_mask.bytes[i])) {
-                is_local = 0;
-                break;
-            }
-        }
-        if (!is_local) {
-            target_ip = gateway_ip;
-        }
-    }
-
-    if(is_bcast){ 
-        for(int i=0;i<6;i++) dest_mac.bytes[i]=0xFF; 
-    } else { 
-        int ok=arp_lookup(&target_ip,&dest_mac); 
-        if(ok!=0){ 
-            for(int i=0;i<6;i++) dest_mac.bytes[i]=0xFF; 
-        } 
-    }
-    
-    uint8_t frame[ETH_FRAME_MAX_SIZE];
-    eth_header_t* eth=(eth_header_t*)frame;
-    ipv4_header_t* ip=(ipv4_header_t*)(frame+sizeof(eth_header_t));
-    void* ip_payload=frame+sizeof(eth_header_t)+sizeof(ipv4_header_t);
-    kmemcpy(eth->dest_mac,dest_mac.bytes,6);
-    kmemcpy(eth->src_mac,our_mac.bytes,6);
-    eth->ethertype=htons(ETH_ETHERTYPE_IPV4);
-    ip->version_ihl=(4<<4)|5;
-    ip->tos=0;
-    ip->total_length=htons(sizeof(ipv4_header_t)+data_length);
-    ip->id=htons(ipv4_id_counter++);
-    ip->flags_frag=0;
-    ip->ttl=64;
-    ip->protocol=protocol;
-    ip->checksum=0;
-    kmemcpy(ip->src_ip,ip_address.bytes,4);
-    kmemcpy(ip->dest_ip,dest_ip->bytes,4);
-    ip->checksum=ipv4_checksum(ip);
-    kmemcpy(ip_payload,data,data_length);
-    size_t frame_length=sizeof(eth_header_t)+sizeof(ipv4_header_t)+data_length;
-    return network_send_frame(frame,frame_length);
-}
-
-int ipv4_send_packet_to_mac(const ipv4_address_t* dest_ip,const mac_address_t* dest_mac,uint8_t protocol,const void* data,size_t data_length){
-    if(!network_initialized) return -1;
-    uint8_t frame[ETH_FRAME_MAX_SIZE];
-    eth_header_t* eth=(eth_header_t*)frame;
-    ipv4_header_t* ip=(ipv4_header_t*)(frame+sizeof(eth_header_t));
-    void* ip_payload=frame+sizeof(eth_header_t)+sizeof(ipv4_header_t);
-    kmemcpy(eth->dest_mac,dest_mac->bytes,6);
-    kmemcpy(eth->src_mac,our_mac.bytes,6);
-    eth->ethertype=htons(ETH_ETHERTYPE_IPV4);
-    ip->version_ihl=(4<<4)|5;
-    ip->tos=0;
-    ip->total_length=htons(sizeof(ipv4_header_t)+data_length);
-    ip->id=htons(ipv4_id_counter++);
-    ip->flags_frag=0;
-    ip->ttl=64;
-    ip->protocol=protocol;
-    ip->checksum=0;
-    kmemcpy(ip->src_ip,ip_address.bytes,4);
-    kmemcpy(ip->dest_ip,dest_ip->bytes,4);
-    ip->checksum=ipv4_checksum(ip);
-    kmemcpy(ip_payload,data,data_length);
-    size_t frame_length=sizeof(eth_header_t)+sizeof(ipv4_header_t)+data_length;
-    return network_send_frame(frame,frame_length);
-}
-
-void ipv4_process_packet(const ipv4_header_t* ip,const mac_address_t* src_mac,size_t length){
-    if(length<sizeof(ipv4_header_t)) return;
-    uint8_t ihl=(ip->version_ihl & 0x0F)*4;
-    if(ihl<20 || length<ihl) return;
-    uint16_t total_length=ntohs(ip->total_length);
-    if(total_length>length) return;
-    void* payload=(void*)ip+ihl;
-    size_t payload_length=total_length-ihl;
-    if(ip->protocol==IP_PROTO_UDP){
-        if(payload_length>=sizeof(udp_header_t)){
-            udp_packets_received_count++;
-            ipv4_address_t src_ip;
-            kmemcpy(src_ip.bytes,ip->src_ip,4);
-            udp_header_t* udp=(udp_header_t*)payload;
-            uint16_t dest_port=ntohs(udp->dest_port);
-            uint16_t src_port=ntohs(udp->src_port);
-            uint16_t udp_length=ntohs(udp->length);
-            if(udp_length>payload_length) return;
-            void* udp_payload=(void*)udp+sizeof(udp_header_t);
-            size_t udp_payload_length=udp_length-sizeof(udp_header_t);
-            for(int i=0;i<UDP_MAX_CALLBACKS;i++){
-                if(udp_callbacks[i].valid && udp_callbacks[i].port==dest_port){
-                    udp_callbacks_called_count++;
-                    udp_callbacks[i].callback(&src_ip,src_port,src_mac,udp_payload,udp_payload_length);
-                    return;
-                }
-            }
-        }
-    } else if (ip->protocol == IP_PROTO_ICMP) {
-        ipv4_address_t src_ip;
-        kmemcpy(src_ip.bytes, ip->src_ip, 4);
-        icmp_handle_packet(src_ip, payload, payload_length);
-    } else if (ip->protocol == IP_PROTO_TCP) {
-        ipv4_address_t src_ip;
-        kmemcpy(src_ip.bytes, ip->src_ip, 4);
-        tcp_handle_packet(src_ip, payload, payload_length);
-    }
-}
-
-int udp_send_packet(const ipv4_address_t* dest_ip,uint16_t dest_port,uint16_t src_port,const void* data,size_t data_length){
-    if(!network_initialized) return -1;
-    uint8_t udp_packet[ETH_FRAME_MAX_SIZE];
-    udp_header_t* udp=(udp_header_t*)udp_packet;
-    void* udp_payload=udp_packet+sizeof(udp_header_t);
-    udp->src_port=htons(src_port);
-    udp->dest_port=htons(dest_port);
-    udp->length=htons(sizeof(udp_header_t)+data_length);
-    udp->checksum=0;
-    kmemcpy(udp_payload,data,data_length);
-    size_t udp_packet_length=sizeof(udp_header_t)+data_length;
-    return ipv4_send_packet(dest_ip,IP_PROTO_UDP,udp_packet,udp_packet_length);
-}
-
-int udp_send_packet_to_mac(const ipv4_address_t* dest_ip,const mac_address_t* dest_mac,uint16_t dest_port,uint16_t src_port,const void* data,size_t data_length){
-    if(!network_initialized) return -1;
-    uint8_t udp_packet[ETH_FRAME_MAX_SIZE];
-    udp_header_t* udp=(udp_header_t*)udp_packet;
-    void* udp_payload=udp_packet+sizeof(udp_header_t);
-    udp->src_port=htons(src_port);
-    udp->dest_port=htons(dest_port);
-    udp->length=htons(sizeof(udp_header_t)+data_length);
-    udp->checksum=0;
-    kmemcpy(udp_payload,data,data_length);
-    size_t udp_packet_length=sizeof(udp_header_t)+data_length;
-    return ipv4_send_packet_to_mac(dest_ip,dest_mac,IP_PROTO_UDP,udp_packet,udp_packet_length);
-}
-
-int udp_register_callback(uint16_t port,udp_callback_t callback){
-    if(!network_initialized) return -1;
-    for(int i=0;i<UDP_MAX_CALLBACKS;i++){
-        if(!udp_callbacks[i].valid || udp_callbacks[i].port==port){
-            udp_callbacks[i].port=port;
-            udp_callbacks[i].callback=callback;
-            udp_callbacks[i].valid=1;
+    uint32_t start = sys_now();
+    asm volatile("sti");
+    int loops = 0;
+    while (sys_now() - start < 10000) { // 10 second timeout
+        network_poll_internal();
+        if (dhcp_supplied_address(&e1000_netif)) {
+            asm volatile("cli");
+            serial_write("[DHCP] Bound!\n");
+            network_processing = 0;
             return 0;
         }
+        k_delay(500); // 5ms delay
     }
+    asm volatile("cli");
+    serial_write("[DHCP] Timeout at t=");
+    char buf[32]; k_itoa((int)(sys_now() - start), buf); serial_write(buf); serial_write("\n");
+    network_processing = 0;
     return -1;
 }
 
-int network_is_initialized(void){ return network_initialized; }
-int network_get_frames_received(void){ return frames_received_count; }
-int network_get_udp_packets_received(void){ return udp_packets_received_count; }
-int network_get_udp_callbacks_called(void){ return udp_callbacks_called_count; }
-int network_get_e1000_receive_calls(void){ return e1000_receive_calls; }
-int network_get_e1000_receive_empty(void){ return e1000_receive_empty; }
-int network_get_process_calls(void){ return network_process_calls; }
-
-#define DHCP_CLIENT_PORT 68
-#define DHCP_SERVER_PORT 67
-#define DHCP_MAGIC_COOKIE 0x63825363U
-#define DHCP_OP_BOOTREQUEST 1
-#define DHCP_OP_BOOTREPLY   2
-#define DHCP_HTYPE_ETHERNET 1
-#define DHCP_HLEN_ETHERNET  6
-#define DHCP_MSG_DISCOVER 1
-#define DHCP_MSG_OFFER    2
-#define DHCP_MSG_REQUEST  3
-#define DHCP_MSG_ACK      5
-#define DHCP_MSG_NAK      6
-#define DHCP_OPT_MSG_TYPE 53
-#define DHCP_OPT_SERVER_ID 54
-#define DHCP_OPT_REQ_IP 50
-#define DHCP_OPT_SUBNET_MASK 1
-#define DHCP_OPT_ROUTER 3
-#define DHCP_OPT_DNS 6
-#define DHCP_OPT_PARAM_REQ_LIST 55
-#define DHCP_OPT_END 255
-
-typedef struct {
-    uint8_t  op;
-    uint8_t  htype;
-    uint8_t  hlen;
-    uint8_t  hops;
-    uint32_t xid;
-    uint16_t secs;
-    uint16_t flags;
-    uint32_t ciaddr;
-    uint32_t yiaddr;
-    uint32_t siaddr;
-    uint32_t giaddr;
-    uint8_t  chaddr[16];
-    uint8_t  sname[64];
-    uint8_t  file[128];
-    uint32_t magic_cookie;
-    uint8_t  options[312];
-} __attribute__((packed)) dhcp_packet_t;
-
-static volatile int dhcp_state = 0;
-static uint32_t dhcp_xid = 0;
-static ipv4_address_t dhcp_offered_ip;
-static uint32_t dhcp_server_id = 0;
-
-static uint32_t htonl32(uint32_t v){return ((v&0xFF)<<24)|((v&0xFF00)<<8)|((v>>8)&0xFF00)|((v>>24)&0xFF);}
-static uint32_t ntohl32(uint32_t v){return htonl32(v);}
-static uint16_t htons16(uint16_t v){return (uint16_t)(((v&0xFF)<<8)|((v>>8)&0xFF));}
-
-static void dhcp_build_discover(dhcp_packet_t* pkt){
-    kmemset(pkt,0,sizeof(dhcp_packet_t));
-    pkt->op=DHCP_OP_BOOTREQUEST; pkt->htype=DHCP_HTYPE_ETHERNET; pkt->hlen=DHCP_HLEN_ETHERNET; pkt->xid=htonl32(dhcp_xid); pkt->flags=htons16(0x8000);
-    kmemcpy(pkt->chaddr,our_mac.bytes,6);
-    pkt->magic_cookie=htonl32(DHCP_MAGIC_COOKIE);
-    uint8_t* opt=pkt->options;
-    *opt++=DHCP_OPT_MSG_TYPE; *opt++=1; *opt++=DHCP_MSG_DISCOVER;
-    *opt++=DHCP_OPT_PARAM_REQ_LIST; *opt++=3; *opt++=1; *opt++=3; *opt++=6;
-    *opt++=DHCP_OPT_END;
+int network_tcp_connect(const ipv4_address_t *ip, uint16_t port) {
+    if (!lwip_initialized || network_processing) return -1;
+    network_processing = 1;
+    if (current_tcp_pcb) tcp_abort(current_tcp_pcb);
+    
+    current_tcp_pcb = tcp_new();
+    if (!current_tcp_pcb) { network_processing = 0; return -1; }
+    
+    ip4_addr_t dest_addr;
+    IP4_ADDR(&dest_addr, ip->bytes[0], ip->bytes[1], ip->bytes[2], ip->bytes[3]);
+    
+    tcp_connect_done = 0;
+    tcp_connect_error = 0;
+    tcp_closed = 0;
+    tcp_recv_queue = NULL;
+    
+    tcp_recv(current_tcp_pcb, tcp_recv_callback);
+    tcp_err(current_tcp_pcb, tcp_err_callback);
+    err_t err = tcp_connect(current_tcp_pcb, &dest_addr, port, tcp_connected_callback);
+    if (err != ERR_OK) { network_processing = 0; return -1; }
+    
+    uint32_t start = sys_now();
+    asm volatile("sti");
+    while (sys_now() - start < 5000) { // 5 second timeout
+        network_poll_internal();
+        if (tcp_connect_done) { asm volatile("cli"); network_processing = 0; return 0; }
+        if (tcp_connect_error) { asm volatile("cli"); network_processing = 0; return -1; }
+        k_delay(10);
+    }
+    asm volatile("cli");
+    network_processing = 0;
+    return -1;
 }
 
-static void dhcp_build_request(dhcp_packet_t* pkt){
-    kmemset(pkt,0,sizeof(dhcp_packet_t));
-    pkt->op=DHCP_OP_BOOTREQUEST; pkt->htype=DHCP_HTYPE_ETHERNET; pkt->hlen=DHCP_HLEN_ETHERNET; pkt->xid=htonl32(dhcp_xid); pkt->flags=htons16(0x8000);
-    kmemcpy(pkt->chaddr,our_mac.bytes,6);
-    pkt->magic_cookie=htonl32(DHCP_MAGIC_COOKIE);
-    uint8_t* opt=pkt->options;
-    *opt++=DHCP_OPT_MSG_TYPE; *opt++=1; *opt++=DHCP_MSG_REQUEST;
-    *opt++=DHCP_OPT_REQ_IP; *opt++=4; *opt++=dhcp_offered_ip.bytes[0]; *opt++=dhcp_offered_ip.bytes[1]; *opt++=dhcp_offered_ip.bytes[2]; *opt++=dhcp_offered_ip.bytes[3];
-    *opt++=DHCP_OPT_SERVER_ID; *opt++=4;
-    *opt++=(uint8_t)((dhcp_server_id>>24)&0xFF); *opt++=(uint8_t)((dhcp_server_id>>16)&0xFF); *opt++=(uint8_t)((dhcp_server_id>>8)&0xFF); *opt++=(uint8_t)(dhcp_server_id&0xFF);
-    *opt++=DHCP_OPT_END;
+int network_tcp_send(const void *data, size_t len) {
+    if (!current_tcp_pcb || network_processing) return -1;
+    network_processing = 1;
+    err_t err = tcp_write(current_tcp_pcb, data, len, TCP_WRITE_FLAG_COPY);
+    if (err != ERR_OK) { network_processing = 0; return -1; }
+    tcp_output(current_tcp_pcb);
+    network_processing = 0;
+    return (int)len;
 }
 
-static uint8_t dhcp_get_option(const uint8_t* opts,uint8_t code){
-    const uint8_t* p=opts;
-    while(*p!=DHCP_OPT_END){ uint8_t c=*p++; uint8_t l=*p++; if(c==code) return p[0]; p+=l; }
+int network_tcp_recv(void *buf, size_t max_len) {
+    if (network_processing) return -1;
+    network_processing = 1;
+
+    if (!tcp_recv_queue) {
+        if (tcp_closed) { network_processing = 0; return 0; } // End of stream
+        uint32_t start = sys_now();
+        asm volatile("sti");
+        while (sys_now() - start < 5000) { // 5 second timeout
+            network_poll_internal();
+            if (tcp_recv_queue) break;
+            if (tcp_closed) break;
+            if (tcp_connect_error) { asm volatile("cli"); network_processing = 0; return -1; }
+            k_delay(10);
+        }
+        asm volatile("cli");
+        if (!tcp_recv_queue) { network_processing = 0; return 0; }
+    }
+    
+    // We already have data or we timed out (return 0 handled above)
+    size_t copied = pbuf_copy_partial(tcp_recv_queue, buf, (u16_t)max_len, 0);
+    struct pbuf *remainder = pbuf_free_header(tcp_recv_queue, (u16_t)copied);
+    if (current_tcp_pcb) tcp_recved(current_tcp_pcb, (u16_t)copied);
+    tcp_recv_queue = remainder;
+    network_processing = 0;
+    return (int)copied;
+}
+
+int network_tcp_close(void) {
+    if (!current_tcp_pcb || network_processing) return 0;
+    network_processing = 1;
+    tcp_close(current_tcp_pcb);
+    current_tcp_pcb = NULL;
+    if (tcp_recv_queue) {
+        pbuf_free(tcp_recv_queue);
+        tcp_recv_queue = NULL;
+    }
+    network_processing = 0;
     return 0;
 }
 
-static void dhcp_udp_callback(const ipv4_address_t* src_ip,uint16_t src_port,const mac_address_t* src_mac,const void* payload,size_t payload_length){
-    (void)src_ip; (void)src_mac;
-    if(src_port!=DHCP_SERVER_PORT || payload_length<sizeof(dhcp_packet_t)-312) return;
-    dhcp_packet_t* pkt=(dhcp_packet_t*)payload;
-    if(pkt->op!=DHCP_OP_BOOTREPLY) return;
-    if(ntohl32(pkt->xid)!=dhcp_xid) return;
-    if(ntohl32(pkt->magic_cookie)!=DHCP_MAGIC_COOKIE) return;
-    uint8_t mtype=dhcp_get_option(pkt->options,DHCP_OPT_MSG_TYPE);
-    if(mtype==DHCP_MSG_OFFER){
-        uint32_t yi_host=ntohl32(pkt->yiaddr);
-        dhcp_offered_ip.bytes[0]=(uint8_t)((yi_host>>24)&0xFF);
-        dhcp_offered_ip.bytes[1]=(uint8_t)((yi_host>>16)&0xFF);
-        dhcp_offered_ip.bytes[2]=(uint8_t)((yi_host>>8)&0xFF);
-        dhcp_offered_ip.bytes[3]=(uint8_t)(yi_host&0xFF);
-        const uint8_t* p=pkt->options; dhcp_server_id=0;
-        while(*p!=DHCP_OPT_END){ uint8_t c=*p++; uint8_t l=*p++; if(c==DHCP_OPT_SERVER_ID && l==4){ dhcp_server_id=((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|(uint32_t)p[3]; break; } p+=l; }
-        if(dhcp_server_id!=0) dhcp_state=1;
-    } else if(mtype==DHCP_MSG_ACK){
-        uint32_t yi_host=ntohl32(pkt->yiaddr);
-        ip_address.bytes[0]=(uint8_t)((yi_host>>24)&0xFF);
-        ip_address.bytes[1]=(uint8_t)((yi_host>>16)&0xFF);
-        ip_address.bytes[2]=(uint8_t)((yi_host>>8)&0xFF);
-        ip_address.bytes[3]=(uint8_t)(yi_host&0xFF);
-        
-        // Parse Options for Gateway, Subnet, DNS
-        const uint8_t* p=pkt->options;
-        while(*p!=DHCP_OPT_END){ 
-            uint8_t c=*p++; 
-            uint8_t l=*p++; 
-            if(c==DHCP_OPT_SUBNET_MASK && l==4) {
-                kmemcpy(subnet_mask.bytes, p, 4);
-            } else if(c==DHCP_OPT_ROUTER && l>=4) {
-                // Take first router
-                kmemcpy(gateway_ip.bytes, p, 4);
-            } else if(c==DHCP_OPT_DNS && l>=4) {
-                // Take first DNS
-                kmemcpy(dns_server_ip.bytes, p, 4);
-            }
-            p+=l; 
-        }
-        
-        has_ip = 1;
-        dhcp_state=2;
-    } else if(mtype==DHCP_MSG_NAK){
-        dhcp_state=-1;
+static ip_addr_t dns_resolved_ip;
+static int dns_done = 0;
+static void dns_callback(const char *name, const ip_addr_t *ipaddr, void *callback_arg) {
+    (void)name; (void)callback_arg;
+    serial_write("[DNS] Callback triggered\n");
+    if (ipaddr) {
+        dns_resolved_ip = *ipaddr;
+        dns_done = 1;
+    } else {
+        dns_done = -1;
     }
 }
 
-int network_dhcp_acquire(void){
-    if(!network_initialized) return -1;
-    if(udp_register_callback(DHCP_CLIENT_PORT,dhcp_udp_callback)!=0) return -1;
-    dhcp_xid += 0x12345u + (uint32_t)ipv4_id_counter;
-    dhcp_state=0; dhcp_server_id=0;
-    dhcp_packet_t pkt;
-    dhcp_build_discover(&pkt);
-    ipv4_address_t bcast={{255,255,255,255}};
-    udp_send_packet(&bcast,DHCP_SERVER_PORT,DHCP_CLIENT_PORT,&pkt,sizeof(dhcp_packet_t));
-    for(int i=0;i<500000 && dhcp_state==0;i++){ network_process_frames(); if(i%1000==0){ for(volatile int d=0; d<100000; d++){} } }
-    if(dhcp_state!=1) return -1;
-    dhcp_build_request(&pkt);
-    udp_send_packet(&bcast,DHCP_SERVER_PORT,DHCP_CLIENT_PORT,&pkt,sizeof(dhcp_packet_t));
-    for(int i=0;i<500000 && dhcp_state==1;i++){ network_process_frames(); if(i%1000==0){ for(volatile int d=0; d<100000; d++){} } }
-    return (dhcp_state==2)?0:-1;
+int network_dns_lookup(const char *name, ipv4_address_t *out_ip) {
+    if (network_processing) {
+        // If we are already processing, we can't start a new DNS lookup
+        // because it might deadlock with the caller.
+        return -1;
+    }
+    
+    dns_done = 0;
+    extern void serial_write(const char *str);
+    serial_write("[DNS] Lookup: "); serial_write(name); serial_write("\n");
+
+    network_processing = 1;
+    serial_write("[DNS] Path: Calling lwIP dns_gethostbyname...\n");
+    asm volatile("cli");
+    err_t err = dns_gethostbyname(name, &dns_resolved_ip, dns_callback, NULL);
+    serial_write("[DNS] Path: lwIP returned code: ");
+    char ebuf[32]; k_itoa((int)err, ebuf); serial_write(ebuf); serial_write("\n");
+
+    if (err == ERR_OK) {
+        serial_write("[DNS] Cache Hit\n");
+        u32_t addr = ip4_addr_get_u32(ip_2_ip4(&dns_resolved_ip));
+        out_ip->bytes[0] = (addr >> 0) & 0xFF;
+        out_ip->bytes[1] = (addr >> 8) & 0xFF;
+        out_ip->bytes[2] = (addr >> 16) & 0xFF;
+        out_ip->bytes[3] = (addr >> 24) & 0xFF;
+        network_processing = 0;
+        return 0;
+    } else if (err == ERR_INPROGRESS) {
+        serial_write("[DNS] In Progress...\n");
+        uint32_t start = sys_now();
+        asm volatile("sti");
+        while (sys_now() - start < 10000) { // 10 second timeout
+            network_processing = 0;
+            network_poll_internal();
+            network_processing = 1;
+
+            if (dns_done == 1) {
+                serial_write("[DNS] Success\n");
+                asm volatile("cli");
+                u32_t addr = ip4_addr_get_u32(ip_2_ip4(&dns_resolved_ip));
+                out_ip->bytes[0] = (addr >> 0) & 0xFF;
+                out_ip->bytes[1] = (addr >> 8) & 0xFF;
+                out_ip->bytes[2] = (addr >> 16) & 0xFF;
+                out_ip->bytes[3] = (addr >> 24) & 0xFF;
+                network_processing = 0;
+                return 0;
+            }
+            if (dns_done == -1) { 
+                serial_write("[DNS] Failed (callback)\n");
+                asm volatile("cli"); 
+                network_processing = 0;
+                return -1; 
+            }
+            k_delay(10);
+        }
+        serial_write("[DNS] Timeout!\n");
+        asm volatile("cli");
+    } else {
+        serial_write("[DNS] Error: ");
+        char buf[32];
+        k_itoa((int)err, buf); serial_write(buf); serial_write("\n");
+    }
+    network_processing = 0;
+    return -1;
 }
+
+int network_set_dns_server(const ipv4_address_t *ip) {
+    ip_addr_t addr;
+    IP4_ADDR(ip_2_ip4(&addr), ip->bytes[0], ip->bytes[1], ip->bytes[2], ip->bytes[3]);
+    dns_setserver(0, &addr);
+    return 0;
+}
+
+int network_get_gateway_ip(ipv4_address_t *ip) {
+    if (!lwip_initialized) return -1;
+    u32_t addr = ip4_addr_get_u32(netif_ip4_gw(&e1000_netif));
+    ip->bytes[0] = (addr >> 0) & 0xFF;
+    ip->bytes[1] = (addr >> 8) & 0xFF;
+    ip->bytes[2] = (addr >> 16) & 0xFF;
+    ip->bytes[3] = (addr >> 24) & 0xFF;
+    return 0;
+}
+
+int network_get_dns_ip(ipv4_address_t *ip) {
+    const ip_addr_t *dns = dns_getserver(0);
+    u32_t addr = ip4_addr_get_u32(ip_2_ip4(dns));
+    ip->bytes[0] = (addr >> 0) & 0xFF;
+    ip->bytes[1] = (addr >> 8) & 0xFF;
+    ip->bytes[2] = (addr >> 16) & 0xFF;
+    ip->bytes[3] = (addr >> 24) & 0xFF;
+    return 0;
+}
+
+int network_is_initialized(void) { return lwip_initialized; }
+int network_has_ip(void) { return lwip_initialized && !ip4_addr_isany_val(*netif_ip4_addr(&e1000_netif)); }
+
+int network_send_frame(const void* data, size_t length) { return e1000_send_packet(data, length); }
+int network_receive_frame(void* buffer, size_t buffer_size) { return e1000_receive_packet(buffer, buffer_size); }
+
+static u16_t icmp_cksum(void *data, int len) {
+    u32_t sum = 0;
+    u16_t *p = (u16_t *)data;
+    while (len > 1) {
+        sum += *p++;
+        len -= 2;
+    }
+    if (len == 1) {
+        sum += *(u8_t *)p;
+    }
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+    return (u16_t)(~sum);
+}
+
+int udp_send_packet(const ipv4_address_t* dest_ip, uint16_t dest_port, uint16_t src_port, const void* data, size_t data_length) {
+    (void)dest_ip; (void)dest_port; (void)src_port; (void)data; (void)data_length;
+    return -1; 
+}
+
+static int ping_replies = 0;
+static u16_t ping_seq = 0;
+static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr) {
+    (void)arg; (void)pcb; (void)addr;
+    if (p->tot_len >= 8) {
+        u8_t *data = (u8_t *)p->payload;
+        // Raw PCBs for ICMP usually include the IP header.
+        // Check for ICMP Echo Reply (Type 0) at offset 0 (no IP header) or offset 20 (standard IP header)
+        if (data[0] == 0) {
+            ping_replies++;
+        } else if (p->tot_len >= 28 && data[0] == 0x45 && data[20] == 0) {
+            ping_replies++;
+        }
+    }
+    pbuf_free(p);
+    return 1;
+}
+
+int network_icmp_single_ping(ipv4_address_t *dest) {
+    if (!lwip_initialized || network_processing) return -2;
+    network_processing = 1;
+    struct raw_pcb *pcb = raw_new(IP_PROTO_ICMP);
+    if (!pcb) { network_processing = 0; return -1; }
+    raw_recv(pcb, ping_recv, NULL);
+    raw_bind(pcb, IP_ADDR_ANY);
+    ip_addr_t dest_addr;
+    IP4_ADDR(ip_2_ip4(&dest_addr), dest->bytes[0], dest->bytes[1], dest->bytes[2], dest->bytes[3]);
+    
+    struct pbuf *p = pbuf_alloc(PBUF_IP, 8 + 56, PBUF_RAM); // 64 bytes total
+    if (!p) { raw_remove(pcb); network_processing = 0; return -1; }
+    u8_t *data = (u8_t *)p->payload;
+    data[0] = 8; data[1] = 0; data[2] = 0; data[3] = 0;
+    data[4] = 0; data[5] = 1; data[6] = (u8_t)(ping_seq >> 8); data[7] = (u8_t)(ping_seq & 0xFF);
+    ping_seq++;
+    for (int j = 0; j < 56; j++) data[8+j] = (u8_t)('a' + (j % 26));
+    
+    // Calculate ICMP Checksum
+    u16_t chk = icmp_cksum(data, 8 + 56);
+    data[2] = (u8_t)(chk & 0xFF);
+    data[3] = (u8_t)(chk >> 8);
+    
+    ping_replies = 0;
+    uint32_t start = sys_now();
+    raw_sendto(pcb, p, &dest_addr);
+    pbuf_free(p);
+    
+    asm volatile("sti");
+    int rtt = -1;
+    while (sys_now() - start < 1000) {
+        network_poll_internal();
+        if (ping_replies > 0) {
+            rtt = (int)(sys_now() - start);
+            break;
+        }
+        k_delay(10);
+    }
+    asm volatile("cli");
+    raw_remove(pcb);
+    network_processing = 0;
+    return rtt;
+}
+
+int network_get_frames_received(void) { return (int)lwip_stats.link.recv; }
+int network_get_udp_packets_received(void) { return (int)lwip_stats.udp.recv; }
+int network_get_frames_sent(void) { return (int)lwip_stats.link.xmit; }
+int network_get_udp_callbacks_called(void) { return 0; }
+int network_get_e1000_receive_calls(void) { return 0; }
+int network_get_e1000_receive_empty(void) { return 0; }
+int network_get_process_calls(void) { return (int)lwip_stats.link.drop; }

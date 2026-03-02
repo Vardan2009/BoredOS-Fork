@@ -585,23 +585,27 @@ void cmd_putchar(char c) {
     wm_mark_dirty(win_cmd.x, win_cmd.y, win_cmd.w, win_cmd.h);
 }
 
+void cmd_write_len(const char *str, size_t len);
+
 // Public for CLI apps to use
 void cmd_write(const char *str) {
-    // If pipe capture mode is enabled, write to pipe buffer
+    if (!str) return;
+    cmd_write_len(str, cmd_strlen(str));
+}
+
+void cmd_write_len(const char *str, size_t len) {
     if (pipe_capture_mode) {
-        while (*str && pipe_buffer_pos < (int)sizeof(pipe_buffer) - 1) {
-            pipe_buffer[pipe_buffer_pos++] = *str++;
+        for (size_t i = 0; i < len && pipe_buffer_pos < (int)sizeof(pipe_buffer) - 1; i++) {
+            pipe_buffer[pipe_buffer_pos++] = str[i];
         }
         return;
     }
     
-    // If output is being redirected to a file, write there instead
     if (redirect_file && redirect_mode) {
-        fat32_write(redirect_file, (void *)str, cmd_strlen(str));
+        fat32_write(redirect_file, (void *)str, len);
     } else {
-        // Normal output to screen
-        while (*str) {
-            cmd_putchar(*str++);
+        for (size_t i = 0; i < len; i++) {
+            cmd_putchar(str[i]);
         }
     }
 }
