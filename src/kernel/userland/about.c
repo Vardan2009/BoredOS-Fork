@@ -40,8 +40,8 @@ static void draw_ansi_string(ui_window_t win, int x, int y, const char *str) {
         if (*str == '\033' && *(str + 1) == '[') {
             if (seg_idx > 0) {
                 segment[seg_idx] = 0;
-                ui_draw_string(win, current_x, y, segment, current_color);
-                current_x += seg_idx * 8;
+                ui_draw_string_bitmap(win, current_x, y, segment, current_color);
+                current_x += seg_idx * 8; // Bitmap font is exactly 8px wide
                 seg_idx = 0;
             }
 
@@ -62,7 +62,7 @@ static void draw_ansi_string(ui_window_t win, int x, int y, const char *str) {
 
     if (seg_idx > 0) {
         segment[seg_idx] = 0;
-        ui_draw_string(win, current_x, y, segment, current_color);
+        ui_draw_string_bitmap(win, current_x, y, segment, current_color);
     }
 }
 
@@ -78,7 +78,7 @@ static void draw_ascii_logo(ui_window_t win, int x, int y) {
     };
 
     for (int i = 0; logo[i] != NULL; i++) {
-        draw_ansi_string(win, x, y + (i * 10), logo[i]);
+        draw_ansi_string(win, x, y + (i * 10), logo[i]); // Bitmap line height is 10px
     }
 }
 
@@ -86,20 +86,22 @@ static void about_paint(ui_window_t win) {
     int w = 340;
     int h = 240;
     
+    // Clear background to prevent alpha-blended text from accumulating on repaints
+    ui_draw_rect(win, 0, 0, w, h, 0xFF1E1E1E);
     
     int offset_x = 15;
     int offset_y = 35;
     
     draw_ascii_logo(win, 14, offset_y);
     
-    // Version info
+    int fh = ui_get_font_height();
     ui_draw_string(win, offset_x, offset_y + 105, "BoredOS 'Retrowave'", 0xFFFFFFFF);
-    ui_draw_string(win, offset_x, offset_y + 120, "BoredOS Version 1.65", 0xFFFFFFFF);
-    ui_draw_string(win, offset_x, offset_y + 135, "Kernel Version 3.0.1", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh, "BoredOS Version 1.65", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh*2, "Kernel Version 3.0.1", 0xFFFFFFFF);
     
     // Copyright
-    ui_draw_string(win, offset_x, offset_y + 150, "(C) 2026 boreddevnl.", 0xFFFFFFFF);
-    ui_draw_string(win, offset_x, offset_y + 165, "All rights reserved.", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh*3, "(C) 2026 boreddevnl.", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh*4, "All rights reserved.", 0xFFFFFFFF);
     
     ui_mark_dirty(win, 0, 0, w, h);
 }

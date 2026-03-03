@@ -11,7 +11,7 @@
 
 
 #define MAX_FILES 256
-#define MAX_CLUSTERS 1024
+#define MAX_CLUSTERS 8192
 #define MAX_OPEN_HANDLES 32
 
 // In-memory FAT table

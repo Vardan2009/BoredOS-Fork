@@ -5,9 +5,12 @@
 #include "graphics.h"
 #include "font.h"
 #include "io.h"
+#include "font_manager.h"
 
 static struct limine_framebuffer *g_fb = NULL;
 static uint32_t g_bg_color = 0xFF696969;
+
+extern void serial_write(const char *str);
 
 #define PATTERN_SIZE 128
 static uint32_t g_bg_pattern[PATTERN_SIZE * PATTERN_SIZE];
@@ -32,12 +35,33 @@ static uint32_t *g_render_target = NULL;
 static int g_rt_width = 0;
 static int g_rt_height = 0;
 
+static ttf_font_t *g_current_ttf = NULL;
+
 void graphics_init(struct limine_framebuffer *fb) {
     g_fb = fb;
     g_dirty.active = false;
     // Initialize back buffer to black
     for (int i = 0; i < MAX_FB_WIDTH * MAX_FB_HEIGHT; i++) {
         g_back_buffer[i] = 0;
+    }
+}
+
+void graphics_init_fonts(void) {
+    font_manager_init();
+    g_current_ttf = font_manager_load("/Library/Fonts/firamono.ttf", 15.0f);
+    if (!g_current_ttf) {
+        serial_write("[FONT] Falling back to bitmap font\n");
+    }
+}
+
+void graphics_set_font(const char *path) {
+    ttf_font_t *new_font = font_manager_load(path, 15.0f);
+    if (new_font) {
+        // TODO: free old font data if needed
+        g_current_ttf = new_font;
+        serial_write("[FONT] Switched to: ");
+        serial_write(path);
+        serial_write("\n");
     }
 }
 
@@ -133,7 +157,6 @@ void graphics_set_render_target(uint32_t *buffer, int w, int h) {
 void put_pixel(int x, int y, uint32_t color) {
     if (g_render_target) {
         if (x >= 0 && x < g_rt_width && y >= 0 && y < g_rt_height) {
-            // No clipping in custom render targets yet, just bounding box
             g_render_target[y * g_rt_width + x] = color;
         }
         return;
@@ -149,9 +172,22 @@ void put_pixel(int x, int y, uint32_t color) {
         }
     }
     
-    // Draw to back buffer
     uint32_t pixel_offset = y * g_fb->width + x;
     g_back_buffer[pixel_offset] = color;
+}
+
+uint32_t graphics_get_pixel(int x, int y) {
+    if (g_render_target) {
+        if (x >= 0 && x < g_rt_width && y >= 0 && y < g_rt_height) {
+            return g_render_target[y * g_rt_width + x];
+        }
+        return 0;
+    }
+
+    if (!g_fb) return 0;
+    if (x < 0 || x >= (int)g_fb->width || y < 0 || y >= (int)g_fb->height) return 0;
+    
+    return g_back_buffer[y * g_fb->width + x];
 }
 
 void draw_rect(int x, int y, int w, int h, uint32_t color) {
@@ -268,6 +304,11 @@ void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t c
 }
 
 void draw_char(int x, int y, char c, uint32_t color) {
+    if (g_current_ttf) {
+        font_manager_render_char(g_current_ttf, x, y, c, color, put_pixel);
+        return;
+    }
+
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return;
 
@@ -289,9 +330,80 @@ void draw_char(int x, int y, char c, uint32_t color) {
     }
 }
 
+// Bitmap-only version for terminal — always uses 8x8 bitmap font regardless of TTF
+void draw_char_bitmap(int x, int y, char c, uint32_t color) {
+    unsigned char uc = (unsigned char)c;
+    if (uc > 127) return;
+
+    if (g_clip_enabled && !g_render_target) {
+        if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
+            y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
+            return;
+        }
+    }
+
+    const uint8_t *glyph = font8x8_basic[uc];
+    for (int row = 0; row < 8; row++) {
+        for (int col = 0; col < 8; col++) {
+            if ((glyph[row] >> (7 - col)) & 1) {
+                put_pixel(x + col, y + row, color);
+            }
+        }
+    }
+}
+
+ttf_font_t *graphics_get_current_ttf(void) {
+    return g_current_ttf;
+}
+
+void draw_string_bitmap(int x, int y, const char *str, uint32_t color) {
+    const char *s = str;
+    int cur_x = x;
+    int cur_y = y;
+    while (*s) {
+        if (*s == '\n') {
+            cur_x = x;
+            cur_y += 10;
+        } else {
+            draw_char_bitmap(cur_x, cur_y, *s, color);
+            cur_x += 8;
+        }
+        s++;
+    }
+}
+
+int graphics_get_font_height(void) {
+    if (g_current_ttf) {
+        return (int)((g_current_ttf->ascent - g_current_ttf->descent) * g_current_ttf->scale);
+    }
+    return 10; // Fallback bitmap height
+}
+
 void draw_string(int x, int y, const char *s, uint32_t color) {
     if (!s) return;
     int cur_x = x;
+    
+    if (g_current_ttf) {
+        float scale = g_current_ttf->scale;
+        // Shift baseline up by roughly 2 pixels for better vertical centering in bars/inputs
+        int baseline = y + (int)(g_current_ttf->ascent * scale) - 2;
+        int line_height = (int)((g_current_ttf->ascent - g_current_ttf->descent + g_current_ttf->line_gap) * scale);
+        
+        while (*s) {
+            if (*s == '\n') {
+                cur_x = x;
+                baseline += line_height;
+            } else {
+                font_manager_render_char(g_current_ttf, cur_x, baseline, *s, color, put_pixel);
+                // Advance by same rounded width that font_manager_get_string_width uses
+                char buf[2] = {*s, 0};
+                cur_x += font_manager_get_string_width(g_current_ttf, buf);
+            }
+            s++;
+        }
+        return;
+    }
+
     int cur_y = y;
     while (*s) {
         if (*s == '\n') {

@@ -452,7 +452,7 @@ static void parse_html(const char *html) {
                         while(ph[l] && ph[l] != '\"' && l < 255) { el->attr_value[l] = ph[l]; l++; }
                         el->attr_value[l] = 0;
                     } else el->attr_value[0] = 0;
-                    if (el->tag == TAG_BUTTON) el->w = (int)strlen(el->attr_value) * 8 + 20;
+                    if (el->tag == TAG_BUTTON) el->w = ui_get_string_width(el->attr_value) + 20;
                     line_elements[line_element_count++] = element_count - 1;
                     if (is_centered || cur_line_x + el->w > WIN_W - SCROLL_BAR_W - 20) flush_line(is_centered);
                     else cur_line_x += el->w;
@@ -471,14 +471,14 @@ static void parse_html(const char *html) {
                     word[w_idx] = 0;
                     if (w_idx > 0) {
                         if (element_count >= MAX_ELEMENTS) break;
-                        int word_w = w_idx * 8;
+                        int word_w = ui_get_string_width(word);
                         if (cur_line_x + word_w > WIN_W - SCROLL_BAR_W - 20) flush_line(is_centered);
                         
                         RenderElement *el = &elements[element_count++];
                         for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0;
                         int k=0; while(word[k]) { el->content[k] = word[k]; k++; } 
                         el->content[k++] = ' '; el->content[k] = 0;
-                        el->w = (w_idx + 1) * 8; el->h = 16;
+                        el->w = ui_get_string_width(el->content); el->h = 16;
                         el->tag = TAG_NONE; el->color = current_link[0] ? COLOR_LINK : current_color;
                         el->centered = is_centered; el->bold = is_bold;
                         if (current_link[0]) { int k=0; while(current_link[k]) { el->link_url[k] = current_link[k]; k++; } el->link_url[k] = 0; }
@@ -526,7 +526,12 @@ static void browser_paint(void) {
             if (focused_element == i) {
                 int cursor_pos = el->input_cursor - el->input_scroll;
                 if (cursor_pos >= 0 && cursor_pos < max_v) {
-                    ui_draw_rect(win_browser, el->x + 5 + cursor_pos * 8, draw_y + 16, 8, 2, 0xFF000000);
+                    char sub[64];
+                    int k;
+                    for (k = 0; k < cursor_pos && visible[k]; k++) sub[k] = visible[k];
+                    sub[k] = 0;
+                    int cx = ui_get_string_width(sub);
+                    ui_draw_rect(win_browser, el->x + 5 + cx, draw_y + 16, 8, 2, 0xFF000000);
                 }
             }
         } else if (el->tag == TAG_BUTTON) {
@@ -545,7 +550,12 @@ static void browser_paint(void) {
     ui_draw_rect(win_browser, 0, 0, WIN_W, URL_BAR_H, COLOR_URL_BAR);
     ui_draw_string(win_browser, 10, 8, url_input_buffer, COLOR_URL_TEXT);
     if (focused_element == -1) {
-        ui_draw_rect(win_browser, 10 + url_cursor * 8, 22, 8, 2, COLOR_URL_TEXT);
+        char sub[512];
+        int k;
+        for (k = 0; k < url_cursor && url_input_buffer[k]; k++) sub[k] = url_input_buffer[k];
+        sub[k] = 0;
+        int cx = ui_get_string_width(sub);
+        ui_draw_rect(win_browser, 10 + cx, 22, 8, 2, COLOR_URL_TEXT);
     }
     
     // Scroll bar

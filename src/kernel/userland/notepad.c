@@ -16,7 +16,9 @@ static int cursor_pos = 0;
 static int notepad_scroll_line = 0;
 
 static void notepad_ensure_cursor_visible(int h) {
-    int visible_lines = (h - 10) / 10; 
+    int fh = (int)ui_get_font_height();
+    if (fh < 8) fh = 8;
+    int visible_lines = (h - 10) / fh;
     if (visible_lines < 1) visible_lines = 1;
     
     int cursor_line = 0;
@@ -58,6 +60,9 @@ static void notepad_save_state() {
 static void notepad_paint(ui_window_t win, int w, int h) {
     ui_draw_rect(win, 0, 0, w, h, COLOR_NOTEPAD_BG);
 
+    int fh = (int)ui_get_font_height();
+    if (fh < 8) fh = 8;
+
     int visual_line = 0; 
     int current_x = 4;
     int current_y = 4;
@@ -70,38 +75,43 @@ static void notepad_paint(ui_window_t win, int w, int h) {
                 current_x = 4;
                 current_y = 4;
             } else {
-                if (current_x >= window_right) {
+                char ch[2] = {buffer[i], 0};
+                int cw = (int)ui_get_string_width(ch);
+                if (cw < 1) cw = 8;
+                if (current_x + cw >= window_right) {
                     visual_line++;
                     current_x = 4;
-                    current_y += 10;
+                    current_y += fh;
                 }
-                current_x += 8;
+                current_x += cw;
             }
             continue;
         }
         
-        if (visual_line >= notepad_scroll_line + (h - 8) / 10) {
+        if (visual_line >= notepad_scroll_line + (h - 8) / fh) {
             break;
         }
         
         if (buffer[i] == '\n') {
             current_x = 4;
-            current_y += 10;
+            current_y += fh;
             visual_line++;
         } else {
-            if (current_x >= window_right) {
+            char ch[2] = {buffer[i], 0};
+            int cw = (int)ui_get_string_width(ch);
+            if (cw < 1) cw = 8;
+            if (current_x + cw >= window_right) {
                 current_x = 4;
-                current_y += 10;
+                current_y += fh;
                 visual_line++;
                 
-                if (visual_line >= notepad_scroll_line + (h - 8) / 10) {
+                if (visual_line >= notepad_scroll_line + (h - 8) / fh) {
                     break;
                 }
             }
             
-            char ch[2] = {buffer[i], 0};
             ui_draw_string(win, current_x, current_y, ch, COLOR_BLACK);
-            current_x += 8;
+            current_x += cw;
         }
     }
     
@@ -113,21 +123,24 @@ static void notepad_paint(ui_window_t win, int w, int h) {
     for (int i = 0; i < cursor_pos; i++) {
         if (buffer[i] == '\n') {
             cx = 4;
-            cy += 10;
+            cy += fh;
             c_visual_line++;
         } else {
-            if (cx >= window_right) {
+            char ch[2] = {buffer[i], 0};
+            int cw = (int)ui_get_string_width(ch);
+            if (cw < 1) cw = 8;
+            if (cx + cw >= window_right) {
                 cx = 4;
-                cy += 10;
+                cy += fh;
                 c_visual_line++;
             }
-            cx += 8;
+            cx += cw;
         }
     }
     
     if (c_visual_line >= notepad_scroll_line && 
-        c_visual_line < notepad_scroll_line + (h - 8) / 10) {
-        ui_draw_rect(win, cx, cy, 2, 8, COLOR_BLACK);
+        c_visual_line < notepad_scroll_line + (h - 8) / fh) {
+        ui_draw_rect(win, cx, cy, 2, fh - 2, COLOR_BLACK);
     }
     
     ui_mark_dirty(win, 0, 0, w, h);

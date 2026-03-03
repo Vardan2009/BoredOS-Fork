@@ -155,6 +155,7 @@ void kmain(void) {
     fat32_mkdir("/Library");
     fat32_mkdir("/Library/images");
     fat32_mkdir("/Library/images/Wallpapers");
+    fat32_mkdir("/Library/Fonts");
 
     if (module_request.response == NULL) {
         serial_write("[DEBUG] ERROR: Limine Module Response is NULL!\n");
@@ -165,26 +166,27 @@ void kmain(void) {
         for (uint64_t i = 0; i < module_request.response->module_count; i++) {
             struct limine_file *mod = module_request.response->modules[i];
 
-
             const char *clean_path = mod->path;
-            // Strip boot():/ or boot:/// prefixes common in different Limine versions
             if (fs_starts_with(clean_path, "boot():")) clean_path += 7;
             else if (fs_starts_with(clean_path, "boot:///")) clean_path += 8;
             
-
-
             FAT32_FileHandle *fh = fat32_open(clean_path, "w");
             if (fh && fh->valid) {
-                int written = fat32_write(fh, mod->address, mod->size);
+                fat32_write(fh, mod->address, mod->size);
                 fat32_close(fh);
-            } else {
-                serial_write("[DEBUG] ERROR: Failed to create file in RAMFS for module: ");
-                serial_write(clean_path);
-                serial_write("\n");
             }
         }
     }
     
+    // Initialize fonts now that FAT32 and modules are loaded
+    uint64_t current_rsp;
+    asm volatile("mov %%rsp, %0" : "=r"(current_rsp));
+    serial_write("[DEBUG] Stack Alignment: 0x");
+    serial_write_hex(current_rsp);
+    serial_write("\n");
+
+    graphics_init_fonts();
+
     asm("cli");
     ps2_init();
     asm("sti");

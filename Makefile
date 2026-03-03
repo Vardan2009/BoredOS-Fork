@@ -31,7 +31,7 @@ OBJ_FILES = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SOURCES)) \
 
 CFLAGS = -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding \
          -fno-stack-protector -fno-stack-check -fno-lto -fPIE \
-         -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone \
+         -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone \
          -I$(SRC_DIR) -I$(SRC_DIR)/lwip
 
 LDFLAGS = -m elf_x86_64 -nostdlib -static -pie --no-dynamic-linker \
@@ -133,6 +133,16 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 	# Create EFI Boot Files
 	cp limine/BOOTX64.EFI $(ISO_DIR)/EFI/BOOT/
 	cp limine/BOOTIA32.EFI $(ISO_DIR)/EFI/BOOT/
+
+	# Copy Fonts
+	mkdir -p $(ISO_DIR)/Library/Fonts
+	@for f in $(SRC_DIR)/fonts/*.ttf; do \
+		if [ -f "$$f" ]; then \
+			basename=$$(basename "$$f"); \
+			cp "$$f" $(ISO_DIR)/Library/Fonts/; \
+			echo "    module_path: boot():/Library/Fonts/$$basename" >> $(ISO_DIR)/limine.conf; \
+		fi \
+	done
 	
 	# Generate ISO
 	$(XORRISO) -as mkisofs -b limine-bios-cd.bin \
@@ -152,6 +162,6 @@ run: $(ISO_IMAGE)
 	qemu-system-x86_64 -m 2G -serial stdio -cdrom $< -boot d \
 	    -m 4G \
 		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
-		-netdev user,id=net0,hostfwd=udp::12345-:12345 -device e1000,netdev=net0 \
+		-netdev user,id=net0,hostfwd=udp::12346-:12345 -device e1000,netdev=net0 \
 		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
         -drive file=disk.img,format=raw,file.locking=off

@@ -16,6 +16,8 @@
 #include "network.h"
 #include "icmp.h"
 #include "cmd.h"
+#include "font_manager.h"
+#include "graphics.h"
 
 // Read MSR
 static inline uint64_t rdmsr(uint32_t msr) {
@@ -350,6 +352,41 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                 
                 asm volatile("push %0; popfq" : : "r"(rflags));
             }
+        } else if (cmd == 10) { // GUI_CMD_DRAW_STRING_BITMAP
+            Window *win = (Window *)arg2;
+            uint64_t coords = arg3;
+            int ux = coords & 0xFFFFFFFF;
+            int uy = coords >> 32;
+            const char *user_str = (const char *)arg4;
+            uint32_t color = (uint32_t)arg5;
+            if (win && user_str) {
+                extern void draw_string_bitmap(int x, int y, const char *str, uint32_t color);
+                extern void graphics_set_render_target(uint32_t *buffer, int w, int h);
+                
+                // Copy string safely to kernel stack buffer
+                char kernel_str[256];
+                int i = 0;
+                while (i < 255 && user_str[i]) {
+                    kernel_str[i] = user_str[i];
+                    i++;
+                }
+                kernel_str[i] = 0;
+
+                uint64_t rflags;
+                asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
+                
+                if (win->pixels) {
+                    if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
+                        graphics_set_render_target(win->pixels, win->w, win->h - 20);
+                        draw_string_bitmap(ux, uy, kernel_str, color);
+                        graphics_set_render_target(NULL, 0, 0);
+                    }
+                } else {
+                    draw_string_bitmap(win->x + ux, win->y + uy, kernel_str, color);
+                }
+                
+                asm volatile("push %0; popfq" : : "r"(rflags));
+            }
         } else if (cmd == GUI_CMD_DRAW_IMAGE) {
             Window *win = (Window *)arg2;
             uint64_t *u_params = (uint64_t *)arg3;
@@ -409,6 +446,27 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                 return 1;
             }
             return 0;
+        } else if (cmd == GUI_CMD_GET_STRING_WIDTH) {
+            const char *user_str = (const char *)arg2;
+            if (!user_str) return 0;
+            
+            char kernel_str[256];
+            int i = 0;
+            while (i < 255 && user_str[i]) {
+                kernel_str[i] = user_str[i];
+                i++;
+            }
+            kernel_str[i] = 0;
+            
+            ttf_font_t *font = graphics_get_current_ttf();
+            if (font) {
+                return (uint64_t)font_manager_get_string_width(font, kernel_str);
+            } else {
+                return (uint64_t)i * 8; // Fallback bitmap width
+            }
+        } else if (cmd == GUI_CMD_GET_FONT_HEIGHT) {
+            extern int graphics_get_font_height(void);
+            return (uint64_t)graphics_get_font_height();
         }
     } else if (syscall_num == SYS_FS) {
         int cmd = (int)arg1;
@@ -548,14 +606,12 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
         } else if (cmd == 2) { // SYSTEM_CMD_SET_BG_PATTERN
             uint32_t *user_pat = (uint32_t *)arg2;
             if (!user_pat) {
-                extern void graphics_set_bg_pattern(uint32_t *pattern);
                 graphics_set_bg_pattern(NULL);
             } else {
                 static uint32_t global_bg_pattern[128*128];
                 for (int i=0; i<128*128; i++) {
                     global_bg_pattern[i] = user_pat[i];
                 }
-                extern void graphics_set_bg_pattern(uint32_t *pattern);
                 graphics_set_bg_pattern(global_bg_pattern);
             }
             extern void wm_refresh(void);
@@ -777,6 +833,18 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
         } else if (cmd == 39) { // SYSTEM_CMD_NET_UNLOCK
             extern void network_force_unlock(void);
             network_force_unlock();
+            return 0;
+        } else if (cmd == 40) { // SYSTEM_CMD_SET_FONT
+            const char *user_path = (const char *)arg2;
+            if (!user_path) return -1;
+            // Copy font path from userland
+            char path[128];
+            int i;
+            for (i = 0; i < 127 && user_path[i]; i++) {
+                path[i] = user_path[i];
+            }
+            path[i] = 0;
+            graphics_set_font(path);
             return 0;
         }
         return -1;

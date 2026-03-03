@@ -15,11 +15,14 @@ typedef struct {
 } DirtyRect;
 
 void graphics_init(struct limine_framebuffer *fb);
+void graphics_init_fonts(void);
 void put_pixel(int x, int y, uint32_t color);
+uint32_t graphics_get_pixel(int x, int y);
 void draw_rect(int x, int y, int w, int h, uint32_t color);
 void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color);
 void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t color);
 void draw_char(int x, int y, char c, uint32_t color);
+void draw_char_bitmap(int x, int y, char c, uint32_t color);
 void draw_string(int x, int y, const char *s, uint32_t color);
 void draw_desktop_background(void);
 void graphics_set_bg_color(uint32_t color);
@@ -48,5 +51,11 @@ void graphics_clear_back_buffer(uint32_t color);
 // Clipping
 void graphics_set_clipping(int x, int y, int w, int h);
 void graphics_clear_clipping(void);
+
+// Font access (requires font_manager.h for ttf_font_t)
+#include "font_manager.h"
+ttf_font_t *graphics_get_current_ttf(void);
+int graphics_get_font_height(void);
+void graphics_set_font(const char *path);
 
 #endif

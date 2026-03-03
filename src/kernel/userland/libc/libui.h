@@ -12,6 +12,9 @@
 #define GUI_CMD_GET_EVENT     5
 #define GUI_CMD_DRAW_ROUNDED_RECT_FILLED 6
 #define GUI_CMD_DRAW_IMAGE    7
+#define GUI_CMD_GET_STRING_WIDTH 8
+#define GUI_CMD_GET_FONT_HEIGHT  9
+#define GUI_CMD_DRAW_STRING_BITMAP 10
 
 // Event Types
 #define GUI_EVENT_NONE        0
@@ -45,5 +48,8 @@ void ui_draw_rounded_rect_filled(ui_window_t win, int x, int y, int w, int h, in
 void ui_draw_string(ui_window_t win, int x, int y, const char *str, uint32_t color);
 void ui_mark_dirty(ui_window_t win, int x, int y, int w, int h);
 void ui_draw_image(ui_window_t win, int x, int y, int w, int h, uint32_t *image_data);
+uint32_t ui_get_string_width(const char *str);
+uint32_t ui_get_font_height(void);
+void ui_draw_string_bitmap(ui_window_t win, int x, int y, const char *str, uint32_t color);
 
 #endif

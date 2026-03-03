@@ -41,10 +41,13 @@ typedef struct process {
     void *kernel_stack_alloc; // Original pointer from kmalloc for freeing
     void *user_stack_alloc;   // Original pointer from kmalloc for freeing
 
-    bool is_terminal_proc;     // Was this process started from the shell?
+    bool is_terminal_proc;   
 
     struct process *next;
-} process_t;
+
+    uint8_t fpu_state[512] __attribute__((aligned(16)));
+    bool fpu_initialized;
+} __attribute__((aligned(16))) process_t;
 
 void process_init(void);
 void process_create(void* entry_point, bool is_user);

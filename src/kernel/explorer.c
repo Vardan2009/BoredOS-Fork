@@ -3,6 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "explorer.h"
 #include "graphics.h"
+#include "font_manager.h"
 #include "fat32.h"
 #include "disk.h"
 #include "wm.h"
@@ -189,13 +190,13 @@ static void explorer_draw_icon_label(int x, int y, const char *label, uint32_t c
     }
     
     // Center in EXPLORER_ITEM_WIDTH
-    int l1_len = 0; while(line1[l1_len]) l1_len++;
-    int l1_w = l1_len * 8;
+    ttf_font_t *font = graphics_get_current_ttf();
+
+    int l1_w = font_manager_get_string_width(font, line1);
     draw_string(x + (EXPLORER_ITEM_WIDTH - l1_w)/2, y + 56, line1, color);
     
     if (line2[0]) {
-        int l2_len = 0; while(line2[l2_len]) l2_len++;
-        int l2_w = l2_len * 8;
+        int l2_w = font_manager_get_string_width(font, line2);
         draw_string(x + (EXPLORER_ITEM_WIDTH - l2_w)/2, y + 66, line2, color);
     }
 }
@@ -926,7 +927,7 @@ static void explorer_paint(Window *win) {
     draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_DARK_BG);
     
     // Draw Drive Button (modern rounded style)
-    char drive_label[9]; // 8 chars + null
+    char drive_label[20];
     // Extract drive from the window's current_path instead of using global current_drive
     char current_drv = 'A';
     if (state->current_path[0] && state->current_path[1] == ':') {
@@ -935,27 +936,48 @@ static void explorer_paint(Window *win) {
         current_drv = state->current_path[0];
     }
     
-    drive_label[0] = '[';
-    drive_label[1] = ' ';
-    drive_label[2] = current_drv;
-    drive_label[3] = ':';
-    drive_label[4] = ' ';
-    drive_label[5] = 'v';
-    drive_label[6] = ' ';
-    drive_label[7] = ']';
-    drive_label[8] = 0;
+    // Look up drive type
+    const char *type_str = "RAM";
+    Disk *drv = disk_get_by_letter(current_drv);
+    if (drv) {
+        switch (drv->type) {
+            case DISK_TYPE_RAM:  type_str = "RAM";  break;
+            case DISK_TYPE_IDE:  type_str = "IDE";  break;
+            case DISK_TYPE_SATA: type_str = "SATA"; break;
+            case DISK_TYPE_USB:  type_str = "USB";  break;
+            default:             type_str = "???";  break;
+        }
+    }
     
-    // Button at x+4, y+3, w=60 (rounded)
-    draw_rounded_rect_filled(win->x + 4, offset_y + 3, 60, 22, 5, COLOR_DARK_PANEL);
+    // Build label: "[ A:TYPE v ]"
+    int di = 0;
+    drive_label[di++] = '[';
+    drive_label[di++] = ' ';
+    drive_label[di++] = current_drv;
+    drive_label[di++] = ':';
+    const char *ts = type_str;
+    while (*ts) drive_label[di++] = *ts++;
+    drive_label[di++] = ' ';
+    drive_label[di++] = 'v';
+    drive_label[di++] = ' ';
+    drive_label[di++] = ']';
+    drive_label[di] = 0;
+    
+    // Button at x+4, y+3, sized to fit label (rounded)
+    ttf_font_t *ttf_ = graphics_get_current_ttf();
+    int drive_label_w = ttf_ ? font_manager_get_string_width(ttf_, drive_label) + 16 : 80;
+    if (drive_label_w < 60) drive_label_w = 60;
+    draw_rounded_rect_filled(win->x + 4, offset_y + 3, drive_label_w, 22, 5, COLOR_DARK_PANEL);
     draw_string(win->x + 12, offset_y + 8, drive_label, COLOR_DARK_TEXT);
 
-    // Draw path bar (shifted right, rounded, dark mode)
+    // Draw path bar (shifted right after drive button, rounded, dark mode)
     int path_height = 22;
-    int path_x = offset_x + 64;
-    int path_w = win->w - 16 - 64;
+    int path_x = offset_x + drive_label_w + 8;
+    int path_w = win->w - 16 - drive_label_w - 8;
     draw_rounded_rect_filled(path_x, offset_y + 3, path_w, path_height, 5, COLOR_DARK_PANEL);
-    draw_string(path_x + 6, offset_y + 8, "Path", COLOR_DARK_TEXT);
-    draw_string(path_x + 46, offset_y + 8, state->current_path, COLOR_DARK_TEXT);
+    draw_string(path_x + 6, offset_y + 8, "Path:", COLOR_DARK_TEXT);
+    int path_label_w = ttf_ ? font_manager_get_string_width(ttf_, "Path:") : 40;
+    draw_string(path_x + 6 + path_label_w + 6, offset_y + 8, state->current_path, COLOR_DARK_TEXT);
     
     // Draw dropdown menu button (right-aligned, before back button, rounded)
     int dropdown_btn_x = win->x + win->w - 90;
@@ -1073,7 +1095,19 @@ static void explorer_paint(Window *win) {
         // Input field (rounded dark)
         draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
         draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
+                // Dynamic cursor — find start offset so text doesn't overflow the input box
+        { int max_w = 265; /* input box is 280px wide with 15px left pad */
+          ttf_font_t *ttf_ = graphics_get_current_ttf();
+          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
+          int scroll_x = 0;
+          if (total_w > max_w) scroll_x = total_w - max_w;
+          char sub_[128]; int k_=0;
+          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
+          sub_[k_]=0;
+          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
+          if (cx_ < 0) cx_ = 0;
+          if (cx_ > max_w) cx_ = max_w;
+          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
         
         // Buttons (rounded)
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
@@ -1093,7 +1127,19 @@ static void explorer_paint(Window *win) {
         // Input field (rounded dark)
         draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
         draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
+                // Dynamic cursor — find start offset so text doesn't overflow the input box
+        { int max_w = 265; /* input box is 280px wide with 15px left pad */
+          ttf_font_t *ttf_ = graphics_get_current_ttf();
+          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
+          int scroll_x = 0;
+          if (total_w > max_w) scroll_x = total_w - max_w;
+          char sub_[128]; int k_=0;
+          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
+          sub_[k_]=0;
+          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
+          if (cx_ < 0) cx_ = 0;
+          if (cx_ > max_w) cx_ = max_w;
+          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
         
         // Buttons (rounded)
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
@@ -1203,7 +1249,19 @@ static void explorer_paint(Window *win) {
         draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_WHITE);
         draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
         draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        draw_rect(dlg_x + 15 + state->dialog_input_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
+                // Dynamic cursor — find start offset so text doesn't overflow the input box
+        { int max_w = 265; /* input box is 280px wide with 15px left pad */
+          ttf_font_t *ttf_ = graphics_get_current_ttf();
+          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
+          int scroll_x = 0;
+          if (total_w > max_w) scroll_x = total_w - max_w;
+          char sub_[128]; int k_=0;
+          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
+          sub_[k_]=0;
+          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
+          if (cx_ < 0) cx_ = 0;
+          if (cx_ > max_w) cx_ = max_w;
+          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
         draw_string(dlg_x + 68, dlg_y + 72, "Rename", COLOR_WHITE);
         draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);

@@ -25,8 +25,9 @@
 #define DEFAULT_CMD_COLS 116
 #define DEFAULT_CMD_ROWS 41
 #define MAX_CMD_COLS 256
+// Terminal cell dimensions — fixed to match the 8x8 bitmap font
 #define LINE_HEIGHT 10
-#define CHAR_WIDTH 8
+#define CHAR_WIDTH  8
 
 #define COLOR_RED 0xFFFF0000
 
@@ -1801,7 +1802,7 @@ static void cmd_paint(Window *win) {
                     if (r == cursor_row && c == cursor_col && win->focused) {
                         color = shell_config.bg_color;
                     }
-                    draw_char(start_x + (c * CHAR_WIDTH), start_y + (r * LINE_HEIGHT), ch, color);
+                    draw_char_bitmap(start_x + (c * CHAR_WIDTH), start_y + (r * LINE_HEIGHT), ch, color);
                 }
             }
         }

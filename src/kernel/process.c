@@ -15,7 +15,7 @@ extern void cmd_write(const char *str);
 extern void serial_write(const char *str);
 
 #define MAX_PROCESSES 16
-static process_t processes[MAX_PROCESSES];
+static process_t processes[MAX_PROCESSES] __attribute__((aligned(16)));
 static int process_count = 0;
 static process_t* current_process = NULL;
 static uint32_t next_pid = 0;
@@ -31,6 +31,10 @@ void process_init(void) {
     kernel_proc->pml4_phys = paging_get_pml4_phys();
     kernel_proc->kernel_stack = 0;
     
+    // Initialize FPU state for kernel
+    asm volatile("fxsave %0" : "=m"(kernel_proc->fpu_state));
+    kernel_proc->fpu_initialized = true;
+
     for (int i = 0; i < MAX_PROCESS_FDS; i++) kernel_proc->fds[i] = NULL;
     
     kernel_proc->next = kernel_proc; // Circular linked list
@@ -101,6 +105,11 @@ void process_create(void* entry_point, bool is_user) {
         new_proc->kernel_stack = 0;
         new_proc->rsp = (uint64_t)stack_ptr;
     }
+
+    // Initialize FPU state for new process
+    asm volatile("fninit");
+    asm volatile("fxsave %0" : "=m"(new_proc->fpu_state));
+    new_proc->fpu_initialized = true;
     
     // Add to linked list
     new_proc->next = current_process->next;
@@ -260,6 +269,11 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     new_proc->user_stack_alloc = stack;
     new_proc->rsp = (uint64_t)stack_ptr;
 
+    // Initialize FPU state for new process
+    asm volatile("fninit");
+    asm volatile("fxsave %0" : "=m"(new_proc->fpu_state));
+    new_proc->fpu_initialized = true;
+
     // Slot is already counted in process_count if new, or reused.
 
     // Add to linked list
@@ -285,8 +299,18 @@ uint64_t process_schedule(uint64_t current_rsp) {
     // Save context
     current_process->rsp = current_rsp;
     
+    // Save FPU state
+    if (current_process->fpu_initialized) {
+        asm volatile("fxsave %0" : "=m"(current_process->fpu_state));
+    }
+
     // Switch process
     current_process = current_process->next;
+
+    // Restore FPU state
+    if (current_process->fpu_initialized) {
+        asm volatile("fxrstor %0" : : "m"(current_process->fpu_state));
+    }
     
     // Update Kernel Stack for User Mode interrupts and System Calls
     if (current_process->is_user && current_process->kernel_stack) {

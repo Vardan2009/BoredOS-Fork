@@ -35,6 +35,11 @@ void ui_draw_string(ui_window_t win, int x, int y, const char *str, uint32_t col
     syscall5(SYS_GUI, GUI_CMD_DRAW_STRING, (uint64_t)win, coords, (uint64_t)str, (uint64_t)color);
 }
 
+void ui_draw_string_bitmap(ui_window_t win, int x, int y, const char *str, uint32_t color) {
+    uint64_t coords = ((uint64_t)x & 0xFFFFFFFF) | ((uint64_t)y << 32);
+    syscall5(SYS_GUI, GUI_CMD_DRAW_STRING_BITMAP, (uint64_t)win, coords, (uint64_t)str, (uint64_t)color);
+}
+
 void ui_mark_dirty(ui_window_t win, int x, int y, int w, int h) {
     uint64_t params[4] = { (uint64_t)x, (uint64_t)y, (uint64_t)w, (uint64_t)h };
     syscall3(SYS_GUI, GUI_CMD_MARK_DIRTY, (uint64_t)win, (uint64_t)params);
@@ -43,4 +48,12 @@ void ui_mark_dirty(ui_window_t win, int x, int y, int w, int h) {
 void ui_draw_image(ui_window_t win, int x, int y, int w, int h, uint32_t *image_data) {
     uint64_t params[4] = { (uint64_t)x, (uint64_t)y, (uint64_t)w, (uint64_t)h };
     syscall4(SYS_GUI, GUI_CMD_DRAW_IMAGE, (uint64_t)win, (uint64_t)params, (uint64_t)image_data);
+}
+
+uint32_t ui_get_string_width(const char *str) {
+    return (uint32_t)syscall3(SYS_GUI, GUI_CMD_GET_STRING_WIDTH, (uint64_t)str, 0);
+}
+
+uint32_t ui_get_font_height(void) {
+    return (uint32_t)syscall3(SYS_GUI, GUI_CMD_GET_FONT_HEIGHT, 0, 0);
 }

@@ -23,6 +23,23 @@ void platform_init(void) {
         kernel_phys_base = kernel_addr_request.response->physical_base;
         kernel_virt_base = kernel_addr_request.response->virtual_base;
     }
+
+    // Enable FPU and SSE
+    uint64_t cr0;
+    asm volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 &= ~(1ULL << 2); // Clear EM (Emulation)
+    cr0 |= (1ULL << 1);  // Set MP (Monitor Coprocessor)
+    cr0 |= (1ULL << 5);  // Set NE (Numeric Error)
+    asm volatile("mov %0, %%cr0" : : "r"(cr0));
+
+    uint64_t cr4;
+    asm volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (1ULL << 9);  // Set OSFXSR (FXSAVE/FXRSTOR support)
+    cr4 |= (1ULL << 10); // Set OSXMMEXCPT (SIMD exception support)
+    asm volatile("mov %0, %%cr4" : : "r"(cr4));
+
+    // Initialize FPU
+    asm volatile("fninit");
 }
 uint64_t p2v(uint64_t phys) { return phys + hhdm_offset; }
 uint64_t v2p(uint64_t virt) {

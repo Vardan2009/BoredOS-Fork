@@ -1046,7 +1046,7 @@ void draw_window(Window *win) {
     // Title Bar (rounded at top only - overdraw bottom to hide rounding)
     draw_rounded_rect_filled(win->x, win->y, win->w, 20, 8, COLOR_DARK_TITLEBAR);
     draw_rect(win->x, win->y + 12, win->w, 8, COLOR_DARK_TITLEBAR);  // Cover bottom rounded corners
-    draw_string(win->x + 28, win->y + 5, win->title, COLOR_DARK_TEXT);
+    draw_string(win->x + 28, win->y + 4, win->title, COLOR_DARK_TEXT);
     
     // Traffic Light (close button - red)
     draw_traffic_light(win->x + 8, win->y + 2);
@@ -1059,6 +1059,23 @@ void draw_window(Window *win) {
         graphics_blit_buffer(win->comp_pixels, win->x, win->y + 20, win->w, win->h - 20);
     } else if (win->pixels) {
         graphics_blit_buffer(win->pixels, win->x, win->y + 20, win->w, win->h - 20);
+    }
+    
+    // Mask bottom corners: clear pixels outside the rounded boundary
+    {
+        int radius = 8;
+        int bx = win->x;
+        int by = win->y + win->h - radius;
+        for (int dy = 0; dy < radius; dy++) {
+            int dx = isqrt(radius*radius - dy*dy);
+            int fill_w = radius - dx;
+            if (fill_w > 0) {
+                // Bottom-left corner
+                draw_rect(bx, by + dy, fill_w, 1, 0xFF000000);
+                // Bottom-right corner
+                draw_rect(bx + win->w - fill_w, by + dy, fill_w, 1, 0xFF000000);
+            }
+        }
     }
     
     if (win->paint) {
@@ -1332,7 +1349,12 @@ void wm_paint(void) {
         draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
         draw_string(dlg_x + 15, dlg_y + 40, desktop_dialog_input, COLOR_WHITE);
         // Cursor
-        draw_rect(dlg_x + 15 + desktop_dialog_cursor * 8, dlg_y + 39, 2, 12, COLOR_WHITE);
+        char sub[64];
+        int k;
+        for (k = 0; k < desktop_dialog_cursor && desktop_dialog_input[k]; k++) sub[k] = desktop_dialog_input[k];
+        sub[k] = 0;
+        int cx = font_manager_get_string_width(graphics_get_current_ttf(), sub);
+        draw_rect(dlg_x + 15 + cx, dlg_y + 39, 2, 12, COLOR_WHITE);
         
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 4, COLOR_DARK_BORDER);
         draw_string(dlg_x + 70, dlg_y + 72, btn_text, COLOR_WHITE);

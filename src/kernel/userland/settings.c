@@ -28,6 +28,7 @@
 #define VIEW_NETWORK 2
 #define VIEW_DESKTOP 3
 #define VIEW_MOUSE 4
+#define VIEW_FONTS 5
 
 static int current_view = VIEW_MAIN;
 static char rgb_r[4] = "";
@@ -62,6 +63,16 @@ static _Bool desktop_auto_align = 1;
 static int desktop_max_rows_per_col = 10;
 static int desktop_max_cols = 10;
 static int mouse_speed = 10;
+
+// Font selection
+#define MAX_FONTS 16
+typedef struct {
+    char path[128];
+    char name[48];
+} font_entry_t;
+static font_entry_t fonts[MAX_FONTS];
+static int font_count = 0;
+static int selected_font = -1;
 
 static void cli_itoa(int num, char *str) {
     if (num == 0) {
@@ -224,6 +235,14 @@ static void control_panel_paint_main(ui_window_t win) {
     ui_draw_rect(win, offset_x + 20, offset_y + item_y + 10, 16, 10, 0xFFB0B0B0);
     ui_draw_string(win, offset_x + 60, offset_y + item_y + 15, "Mouse", COLOR_DARK_TEXT);
     ui_draw_string(win, offset_x + 60, offset_y + item_y + 35, "Pointer settings", COLOR_DKGRAY);
+    
+    // Fonts
+    item_y += item_h + item_spacing;
+    ui_draw_rounded_rect_filled(win, offset_x, offset_y + item_y, win_w - 16, item_h, 8, COLOR_DARK_PANEL);
+    // Font icon: "Aa" stylized
+    ui_draw_string(win, offset_x + 14, offset_y + item_y + 10, "Aa", 0xFF6A9EF5);
+    ui_draw_string(win, offset_x + 60, offset_y + item_y + 15, "Fonts", COLOR_DARK_TEXT);
+    ui_draw_string(win, offset_x + 60, offset_y + item_y + 35, "Choose system font", COLOR_DKGRAY);
 }
 
 static void control_panel_paint_wallpaper(ui_window_t win) {
@@ -429,6 +448,60 @@ static void control_panel_paint_mouse(ui_window_t win) {
     ui_draw_string(win, offset_x + 280, section_y + 4, speed_str, COLOR_DARK_TEXT);
 }
 
+static void load_fonts(void) {
+    font_count = 0;
+    FAT32_FileInfo info[MAX_FONTS];
+    int count = sys_list("/Library/Fonts", info, MAX_FONTS);
+    if (count < 0) return;
+
+    for (int i = 0; i < count && font_count < MAX_FONTS; i++) {
+        if (info[i].is_directory) continue;
+        // check if .ttf (case-insensitive)
+        int len = 0; while (info[i].name[len]) len++;
+        if (len < 4) continue;
+        char c1 = info[i].name[len-1]; if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+        char c2 = info[i].name[len-2]; if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+        char c3 = info[i].name[len-3]; if (c3 >= 'A' && c3 <= 'Z') c3 += 32;
+        char c4 = info[i].name[len-4]; if (c4 >= 'A' && c4 <= 'Z') c4 += 32;
+        if (c4 != '.' || c3 != 't' || c2 != 't' || c1 != 'f') continue;
+
+        font_entry_t *fe = &fonts[font_count];
+        // Build full path
+        char *pref = "/Library/Fonts/";
+        int pl = 0; while (pref[pl]) { fe->path[pl] = pref[pl]; pl++; }
+        int nl = 0; while (info[i].name[nl]) { fe->path[pl+nl] = info[i].name[nl]; nl++; }
+        fe->path[pl+nl] = 0;
+        // Store display name (strip .ttf)
+        for (int j = 0; j < nl - 4 && j < 47; j++) fe->name[j] = info[i].name[j];
+        fe->name[(nl-4 < 47) ? nl-4 : 47] = 0;
+        font_count++;
+    }
+}
+
+static void control_panel_paint_fonts(ui_window_t win) {
+    int offset_x = 8;
+    int offset_y = 6;
+    
+    ui_draw_rounded_rect_filled(win, offset_x, offset_y + 5, 80, 25, 6, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 10, offset_y + 13, "< Back", COLOR_DARK_TEXT);
+    
+    ui_draw_string(win, offset_x, offset_y + 40, "System Font:", COLOR_DARK_TEXT);
+    
+    int item_y = offset_y + 60;
+    for (int i = 0; i < font_count; i++) {
+        uint32_t bg_color = (i == selected_font) ? 0xFF3D5A80 : COLOR_DARK_PANEL;
+        ui_draw_rounded_rect_filled(win, offset_x, item_y, 330, 35, 6, bg_color);
+        // Font icon
+        ui_draw_string(win, offset_x + 10, item_y + 9, "Aa", 0xFF6A9EF5);
+        // Font name
+        ui_draw_string(win, offset_x + 40, item_y + 9, fonts[i].name, COLOR_DARK_TEXT);
+        if (i == selected_font) {
+            ui_draw_string(win, offset_x + 290, item_y + 9, "*", 0xFF90EE90);
+        }
+        item_y += 40;
+    }
+}
+
 static void control_panel_paint(ui_window_t win) {
     // Fill background
     ui_draw_rect(win, 0, 0, 350, 500, COLOR_DARK_BG);
@@ -443,6 +516,8 @@ static void control_panel_paint(ui_window_t win) {
         control_panel_paint_desktop(win);
     } else if (current_view == VIEW_MOUSE) {
         control_panel_paint_mouse(win);
+    } else if (current_view == VIEW_FONTS) {
+        control_panel_paint_fonts(win);
     }
 }
 
@@ -493,6 +568,11 @@ static void control_panel_handle_click(int x, int y) {
         item_y += item_h + item_spacing;
         if (x >= offset_x && x < win_w - 8 && y >= item_y && y < item_y + item_h) {
             current_view = VIEW_MOUSE;
+        }
+        item_y += item_h + item_spacing;
+        if (x >= offset_x && x < win_w - 8 && y >= item_y && y < item_y + item_h) {
+            current_view = VIEW_FONTS;
+            if (font_count == 0) load_fonts();
         }
     } else if (current_view == VIEW_WALLPAPER) {
         int offset_x = 8;
@@ -656,6 +736,26 @@ static void control_panel_handle_click(int x, int y) {
             mouse_speed = new_speed;
             save_mouse_config();
             return;
+        }
+    } else if (current_view == VIEW_FONTS) {
+        int offset_x = 8;
+        int offset_y = 6;
+        
+        // Back button
+        if (x >= offset_x && x < offset_x + 80 && y >= offset_y + 5 && y < offset_y + 30) {
+            current_view = VIEW_MAIN;
+            return;
+        }
+        
+        // Font items
+        int item_y = offset_y + 60;
+        for (int i = 0; i < font_count; i++) {
+            if (x >= offset_x && x < offset_x + 330 && y >= item_y && y < item_y + 35) {
+                selected_font = i;
+                sys_system(40 /*SET_FONT*/, (uint64_t)fonts[i].path, 0, 0, 0);
+                return;
+            }
+            item_y += 40;
         }
     }
 }
