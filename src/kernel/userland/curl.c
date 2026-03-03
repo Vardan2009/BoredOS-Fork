@@ -1,9 +1,32 @@
 #include <stdlib.h>
 #include <syscall.h>
+#include <stdint.h> // Added for uint8_t
+
+static int parse_ip(const char* str, net_ipv4_address_t* ip) {
+    int val = 0;
+    int part = 0;
+    const char* p = str;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            val = val * 10 + (*p - '0');
+            if (val > 255) return -1;
+        } else if (*p == '.') {
+            if (part > 3) return -1;
+            ip->bytes[part++] = (uint8_t)val;
+            val = 0;
+        } else {
+            return -1;
+        }
+        p++;
+    }
+    if (part != 3) return -1;
+    ip->bytes[3] = (uint8_t)val;
+    return 0;
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        printf("Usage: curl http://a.b.c.d/path\n");
+        printf("Usage: curl http://a.b.c.d[:port]/path\n");
         return 1;
     }
 
@@ -26,22 +49,34 @@ int main(int argc, char** argv) {
     }
 
     char hostname[256];
+    int port = 80;
     int i = 0;
-    while (host_start[i] && host_start[i] != '/' && i < 255) {
+    while (host_start[i] && host_start[i] != '/' && host_start[i] != ':' && i < 255) {
         hostname[i] = host_start[i];
         i++;
     }
     hostname[i] = 0;
-    
-    net_ipv4_address_t ip;
-    if (sys_dns_lookup(hostname, &ip) != 0) {
-        printf("Failed to resolve %s\n", hostname);
-        return 1;
+
+    int host_len = i;
+    if (host_start[i] == ':') {
+        i++;
+        char port_str[10];
+        int j = 0;
+        while (host_start[i] && host_start[i] != '/' && j < 9) {
+            port_str[j++] = host_start[i++];
+        }
+        port_str[j] = 0;
+        port = atoi(port_str);
     }
     
-    // Default to port 80 for HTTP
-    int port = 80;
-
+    net_ipv4_address_t ip;
+    if (parse_ip(hostname, &ip) != 0) {
+        if (sys_dns_lookup(hostname, &ip) != 0) {
+            printf("Failed to resolve %s\n", hostname);
+            return 1;
+        }
+    }
+    
     printf("Connecting to %s (", hostname);
     printf("%d.%d.%d.%d", ip.bytes[0], ip.bytes[1], ip.bytes[2], ip.bytes[3]);
     printf("):%d...\n", port);

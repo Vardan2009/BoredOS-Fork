@@ -94,6 +94,9 @@ static int element_count = 0;
 static char url_input_buffer[512] = "http://frogfind.com";
 static int url_cursor = 19;
 static char current_host[256] = "frogfind.com";
+static int current_port = 80;
+static char current_form_action[256] = "";
+static char current_input_name[64] = "q";
 
 static ui_window_t win_browser;
 static int scroll_y = 0;
@@ -119,27 +122,66 @@ static bool str_istarts_with(const char *str, const char *prefix) {
     return true;
 }
 
+static int parse_ip(const char* str, net_ipv4_address_t* ip) {
+    int val = 0;
+    int part = 0;
+    const char* p = str;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            val = val * 10 + (*p - '0');
+            if (val > 255) return -1;
+        } else if (*p == '.') {
+            if (part > 3) return -1;
+            ip->bytes[part++] = (uint8_t)val;
+            val = 0;
+        } else {
+            return -1;
+        }
+        p++;
+    }
+    if (part != 3) return -1;
+    ip->bytes[3] = (uint8_t)val;
+    return 0;
+}
+
 static int fetch_content(const char *url, char *dest_buf, int max_len) {
     const char* host_start = url;
     if (url[0] == 'h' && url[1] == 't' && url[2] == 't' && url[3] == 'p') {
-        if (url[4] == 's') host_start = url + 8;
-        else host_start = url + 7;
+        if (url[4] == 's' && url[5] == ':') host_start = url + 8;
+        else if (url[4] == ':') host_start = url + 7;
     }
 
     char hostname[256];
+    int port = 80;
     int i = 0;
-    while (host_start[i] && host_start[i] != '/' && i < 255) {
+    while (host_start[i] && host_start[i] != '/' && host_start[i] != ':' && i < 255) {
         hostname[i] = host_start[i];
         i++;
     }
     hostname[i] = 0;
-    if (i > 0) {
+
+    if (host_start[i] == ':') {
+        i++;
+        char port_str[10];
+        int j = 0;
+        while (host_start[i] && host_start[i] != '/' && j < 9) {
+            port_str[j++] = host_start[i++];
+        }
+        port_str[j] = 0;
+        port = atoi(port_str);
+    }
+    current_port = port;
+
+    if (hostname[0]) {
         int k=0; while(hostname[k]) { current_host[k] = hostname[k]; k++; } current_host[k] = 0;
     }
     
     net_ipv4_address_t ip;
-    if (sys_dns_lookup(hostname, &ip) != 0) return 0;
-    if (sys_tcp_connect(&ip, 80) != 0) return 0;
+    if (parse_ip(hostname, &ip) != 0) {
+        if (sys_dns_lookup(hostname, &ip) != 0) return 0;
+    }
+    
+    if (sys_tcp_connect(&ip, port) != 0) return 0;
     
     const char* path = host_start + i;
     if (*path == 0) path = "/";
@@ -151,6 +193,11 @@ static int fetch_content(const char *url, char *dest_buf, int max_len) {
     s = path; while(*s) *r++ = *s++;
     s = " HTTP/1.1\r\nHost: "; while(*s) *r++ = *s++;
     s = hostname; while(*s) *r++ = *s++;
+    if (current_port != 80) {
+        *r++ = ':';
+        char pbuf[10]; itoa(current_port, pbuf);
+        s = pbuf; while(*s) *r++ = *s++;
+    }
     s = "\r\nUser-Agent: BoredOS/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n"; while(*s) *r++ = *s++;
     
     sys_tcp_send(request, r - request);
@@ -308,7 +355,16 @@ static void parse_html(const char *html) {
                 if (str_istarts_with(tag_name, "center")) { flush_line(is_centered); is_centered = true; }
                 else if (tag_name[0] == 'h' && tag_name[1] >= '1' && tag_name[1] <= '6') { flush_line(is_centered); cur_line_y += 10; is_bold = true; }
                 else if (str_istarts_with(tag_name, "br")) flush_line(is_centered);
-                else if (str_istarts_with(tag_name, "h") || str_istarts_with(tag_name, "p") || str_istarts_with(tag_name, "hr") || str_istarts_with(tag_name, "li") || str_istarts_with(tag_name, "ol") || str_istarts_with(tag_name, "form") || str_istarts_with(tag_name, "div")) flush_line(is_centered);
+                else if (str_istarts_with(tag_name, "h") || str_istarts_with(tag_name, "p") || str_istarts_with(tag_name, "hr") || str_istarts_with(tag_name, "li") || str_istarts_with(tag_name, "ol") || str_istarts_with(tag_name, "div")) flush_line(is_centered);
+                else if (str_istarts_with(tag_name, "form")) {
+                    flush_line(is_centered);
+                    char *action = str_istrstr(attr_buf, "action=\"");
+                    if (action) {
+                        action += 8; int l = 0;
+                        while(action[l] && action[l] != '\"' && l < 255) { current_form_action[l] = action[l]; l++; }
+                        current_form_action[l] = 0;
+                    } else current_form_action[0] = 0;
+                }
                 else if (str_istarts_with(tag_name, "head") || str_istarts_with(tag_name, "script") || str_istarts_with(tag_name, "style") || str_istarts_with(tag_name, "title") || str_istarts_with(tag_name, "noscript") || str_istarts_with(tag_name, "meta") || str_istarts_with(tag_name, "link") || str_istarts_with(tag_name, "!doctype")) skip_content = true;
                 else if (str_istarts_with(tag_name, "body")) skip_content = false;
                 else if (str_istarts_with(tag_name, "a")) {
@@ -341,6 +397,12 @@ static void parse_html(const char *html) {
                     char *val = str_istrstr(attr_buf, "value=\"");
                     char *ph = str_istrstr(attr_buf, "placeholder=\"");
                     char *type = str_istrstr(attr_buf, "type=\"");
+                    char *name = str_istrstr(attr_buf, "name=\"");
+                    if (name) {
+                        name += 6; int l = 0;
+                        while(name[l] && name[l] != '\"' && l < 63) { current_input_name[l] = name[l]; l++; }
+                        current_input_name[l] = 0;
+                    }
                     if (type && str_istarts_with(type+6, "submit")) el->tag = TAG_BUTTON;
                     
                     if (val) {
@@ -465,7 +527,7 @@ static void net_init_if_needed(void) {
 }
 
 int main(int argc, char **argv) {
-    win_browser = ui_window_create("Web Browser", 50, 50, WIN_W, WIN_H);
+    win_browser = ui_window_create("Boredweb", 50, 50, WIN_W, WIN_H);
     net_init_if_needed();
     if (argc > 1) { int k=0; while(argv[1][k]) { url_input_buffer[k] = argv[1][k]; k++; } url_input_buffer[k] = 0; url_cursor = k; }
     navigate(url_input_buffer);
@@ -493,19 +555,46 @@ int main(int argc, char **argv) {
                             focused_element = i; found = true; browser_paint(); ui_mark_dirty(win_browser, 0, 0, WIN_W, WIN_H); break;
                         }
                         if (el->tag == TAG_BUTTON) {
-                            // Find the first input in the page and use its value for search?
-                            // For simplicity, find the first focused-style input or just search frogfind
                             int search_idx = -1;
                             for (int k=0; k<element_count; k++) if (elements[k].tag == TAG_INPUT) { search_idx = k; break; }
                             if (search_idx >= 0) {
-                                char search_url[1024] = "http://frogfind.com/?q=";
-                                int k = 23;
-                                for (int m=0; elements[search_idx].attr_value[m] && k < 1020; m++) {
-                                    char sc = elements[search_idx].attr_value[m];
-                                    if (sc == ' ') search_url[k++] = '+';
-                                    else search_url[k++] = sc;
+                                char search_url[1024];
+                                char *u = search_url;
+                                const char *s;
+                                if (current_form_action[0] == '/') {
+                                    s = "http://"; while(*s) *u++ = *s++;
+                                    s = current_host; while(*s) *u++ = *s++;
+                                    if (current_port != 80) {
+                                        *u++ = ':';
+                                        char pbuf[10]; itoa(current_port, pbuf);
+                                        const char* ps = pbuf; while(*ps) *u++ = *ps++;
+                                    }
+                                    s = current_form_action; while(*s) *u++ = *s++;
+                                } else if (str_istarts_with(current_form_action, "http")) {
+                                    s = current_form_action; while(*s) *u++ = *s++;
+                                } else {
+                                    s = "http://"; while(*s) *u++ = *s++;
+                                    s = current_host; while(*s) *u++ = *s++;
+                                    if (current_port != 80) {
+                                        *u++ = ':';
+                                        char pbuf[10]; itoa(current_port, pbuf);
+                                        const char* ps = pbuf; while(*ps) *u++ = *ps++;
+                                    }
+                                    if (current_host[0] && current_host[0] != '/') *u++ = '/';
+                                    if (current_form_action[0]) { s = current_form_action; while(*s) *u++ = *s++; }
                                 }
-                                search_url[k] = 0;
+                                
+                                s = (strstr(search_url, "?") ? "&" : "?");
+                                while(*s) *u++ = *s++;
+                                s = current_input_name; while(*s) *u++ = *s++;
+                                *u++ = '=';
+                                
+                                for (int m=0; elements[search_idx].attr_value[m] && (u - search_url) < 1020; m++) {
+                                    char sc = elements[search_idx].attr_value[m];
+                                    if (sc == ' ') *u++ = '+';
+                                    else *u++ = sc;
+                                }
+                                *u = 0;
                                 int j=0; while(search_url[j]) { url_input_buffer[j] = search_url[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
                                 navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
                                 browser_paint(); ui_mark_dirty(win_browser, 0, 0, WIN_W, WIN_H);
@@ -517,12 +606,23 @@ int main(int argc, char **argv) {
                             if (el->link_url[0] == '/') {
                                 char *u = new_url; const char *s = "http://"; while(*s) *u++ = *s++;
                                 s = current_host; while(*s) *u++ = *s++;
+                                if (current_port != 80) {
+                                    *u++ = ':';
+                                    char pbuf[10]; itoa(current_port, pbuf);
+                                    const char* ps = pbuf; while(*ps) *u++ = *ps++;
+                                }
                                 s = el->link_url; while(*s) *u++ = *s++; *u = 0;
                             } else if (str_istarts_with(el->link_url, "http")) {
                                 int k=0; while(el->link_url[k]) { new_url[k] = el->link_url[k]; k++; } new_url[k] = 0;
                             } else {
                                 char *u = new_url; const char *s = "http://"; while(*s) *u++ = *s++;
-                                s = current_host; while(*s) *u++ = *s++; if (current_host[0] && current_host[0] != '/') *u++ = '/';
+                                s = current_host; while(*s) *u++ = *s++; 
+                                if (current_port != 80) {
+                                    *u++ = ':';
+                                    char pbuf[10]; itoa(current_port, pbuf);
+                                    const char* ps = pbuf; while(*ps) *u++ = *ps++;
+                                }
+                                if (current_host[0] && current_host[0] != '/') *u++ = '/';
                                 s = el->link_url; while(*s) *u++ = *s++; *u = 0;
                             }
                             int j=0; while(new_url[j]) { url_input_buffer[j] = new_url[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
@@ -543,20 +643,45 @@ int main(int argc, char **argv) {
                     RenderElement *el = &elements[focused_element];
                     int len = 0; while(el->attr_value[len]) len++;
                     if (c == 13 || c == 10) { 
-                        if (strstr(url_input_buffer, "frogfind.com")) {
-                            char search_url[1024] = "http://frogfind.com/?q=";
-                            int k = 23;
-                            for (int m=0; el->attr_value[m] && k < 1020; m++) {
-                                char sc = el->attr_value[m];
-                                if (sc == ' ') search_url[k++] = '+';
-                                else search_url[k++] = sc;
+                        char search_url[1024];
+                        char *u = search_url;
+                        const char *s;
+                        if (current_form_action[0] == '/') {
+                            s = "http://"; while(*s) *u++ = *s++;
+                            s = current_host; while(*s) *u++ = *s++;
+                            if (current_port != 80) {
+                                *u++ = ':';
+                                char pbuf[10]; itoa(current_port, pbuf);
+                                const char* ps = pbuf; while(*ps) *u++ = *ps++;
                             }
-                            search_url[k] = 0;
-                            int j=0; while(search_url[j]) { url_input_buffer[j] = search_url[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
-                            navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
+                            s = current_form_action; while(*s) *u++ = *s++;
+                        } else if (str_istarts_with(current_form_action, "http")) {
+                            s = current_form_action; while(*s) *u++ = *s++;
                         } else {
-                            focused_element = -1; 
+                            s = "http://"; while(*s) *u++ = *s++;
+                            s = current_host; while(*s) *u++ = *s++;
+                            if (current_port != 80) {
+                                *u++ = ':';
+                                char pbuf[10]; itoa(current_port, pbuf);
+                                const char* ps = pbuf; while(*ps) *u++ = *ps++;
+                            }
+                            if (current_host[0] && current_host[0] != '/') *u++ = '/';
+                            if (current_form_action[0]) { s = current_form_action; while(*s) *u++ = *s++; }
                         }
+                        
+                        s = (strstr(search_url, "?") ? "&" : "?");
+                        while(*s) *u++ = *s++;
+                        s = current_input_name; while(*s) *u++ = *s++;
+                        *u++ = '=';
+                        
+                        for (int m=0; el->attr_value[m] && (u - search_url) < 1020; m++) {
+                            char sc = el->attr_value[m];
+                            if (sc == ' ') *u++ = '+';
+                            else *u++ = sc;
+                        }
+                        *u = 0;
+                        int j=0; while(search_url[j]) { url_input_buffer[j] = search_url[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
+                        navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
                     }
                     else if (c == 127 || c == 8) { if (len > 0) el->attr_value[--len] = 0; }
                     else if (c >= 32 && c <= 126 && len < 255) { el->attr_value[len++] = c; el->attr_value[len] = 0; }
