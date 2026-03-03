@@ -40,6 +40,7 @@ typedef struct {
     size_t size;
     void *info; // stbtt_fontinfo
     float scale;
+    float pixel_height;
     int ascent;
     int descent;
     int line_gap;
@@ -48,6 +49,12 @@ typedef struct {
 bool font_manager_init(void);
 ttf_font_t* font_manager_load(const char *path, float size);
 void font_manager_render_char(ttf_font_t *font, int x, int y, char c, uint32_t color, void (*put_pixel_fn)(int, int, uint32_t));
+void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, char c, uint32_t color, float scale, void (*put_pixel_fn)(int, int, uint32_t));
 int font_manager_get_string_width(ttf_font_t *font, const char *s);
+int font_manager_get_string_width_scaled(ttf_font_t *font, const char *s, float scale);
+
+int font_manager_get_font_height_scaled(ttf_font_t *font, float scale);
+int font_manager_get_font_ascent_scaled(ttf_font_t *font, float scale);
+int font_manager_get_font_line_height_scaled(ttf_font_t *font, float scale);
 
 #endif

@@ -379,25 +379,45 @@ int graphics_get_font_height(void) {
     return 10; // Fallback bitmap height
 }
 
+int graphics_get_font_height_scaled(float scale) {
+    if (g_current_ttf) {
+        return font_manager_get_font_height_scaled(g_current_ttf, scale);
+    }
+    return 10; // Fallback bitmap height
+}
+
+int graphics_get_string_width_scaled(const char *s, float scale) {
+    if (g_current_ttf) {
+        return font_manager_get_string_width_scaled(g_current_ttf, s, scale);
+    }
+    int len = 0;
+    while (s && s[len]) len++;
+    return len * 8; // Fallback bitmap width
+}
+
 void draw_string(int x, int y, const char *s, uint32_t color) {
+    if (g_current_ttf) draw_string_scaled(x, y, s, color, g_current_ttf->pixel_height);
+    else draw_string_scaled(x, y, s, color, 15.0f);
+}
+
+void draw_string_scaled(int x, int y, const char *s, uint32_t color, float scale) {
     if (!s) return;
     int cur_x = x;
     
     if (g_current_ttf) {
-        float scale = g_current_ttf->scale;
-        // Shift baseline up by roughly 2 pixels for better vertical centering in bars/inputs
-        int baseline = y + (int)(g_current_ttf->ascent * scale) - 2;
-        int line_height = (int)((g_current_ttf->ascent - g_current_ttf->descent + g_current_ttf->line_gap) * scale);
+        // We let the font manager handle the stbtt scale internally to avoid bringing stb_truetype into graphics.c
+        int baseline = y + font_manager_get_font_ascent_scaled(g_current_ttf, scale) - 2;
+        int line_height = font_manager_get_font_line_height_scaled(g_current_ttf, scale);
         
         while (*s) {
             if (*s == '\n') {
                 cur_x = x;
                 baseline += line_height;
             } else {
-                font_manager_render_char(g_current_ttf, cur_x, baseline, *s, color, put_pixel);
+                font_manager_render_char_scaled(g_current_ttf, cur_x, baseline, *s, color, scale, put_pixel);
                 // Advance by same rounded width that font_manager_get_string_width uses
                 char buf[2] = {*s, 0};
-                cur_x += font_manager_get_string_width(g_current_ttf, buf);
+                cur_x += font_manager_get_string_width_scaled(g_current_ttf, buf, scale);
             }
             s++;
         }

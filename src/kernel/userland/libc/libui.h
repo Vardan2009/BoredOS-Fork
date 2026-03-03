@@ -15,6 +15,9 @@
 #define GUI_CMD_GET_STRING_WIDTH 8
 #define GUI_CMD_GET_FONT_HEIGHT  9
 #define GUI_CMD_DRAW_STRING_BITMAP 10
+#define GUI_CMD_DRAW_STRING_SCALED 11
+#define GUI_CMD_GET_STRING_WIDTH_SCALED 12
+#define GUI_CMD_GET_FONT_HEIGHT_SCALED 13
 
 // Event Types
 #define GUI_EVENT_NONE        0
@@ -51,5 +54,9 @@ void ui_draw_image(ui_window_t win, int x, int y, int w, int h, uint32_t *image_
 uint32_t ui_get_string_width(const char *str);
 uint32_t ui_get_font_height(void);
 void ui_draw_string_bitmap(ui_window_t win, int x, int y, const char *str, uint32_t color);
+
+void ui_draw_string_scaled(ui_window_t win, int x, int y, const char *str, uint32_t color, float scale);
+uint32_t ui_get_string_width_scaled(const char *str, float scale);
+uint32_t ui_get_font_height_scaled(float scale);
 
 #endif

@@ -72,12 +72,16 @@ static long strtol(const char* nptr, char** endptr, int base) {
     return neg ? -res : res;
 }
 
-typedef enum { TAG_NONE, TAG_IMG, TAG_INPUT, TAG_BUTTON } HTMLTag;
+#define TAG_NONE 0
+#define TAG_IMG 1
+#define TAG_INPUT 2
+#define TAG_BUTTON 3
+#define TAG_HR 4
 
 typedef struct {
     char content[1024];
     int x, y, w, h;
-    HTMLTag tag;
+    int tag; // Changed from HTMLTag enum to int
     char link_url[256];
     char attr_value[256];
     uint32_t color;
@@ -90,6 +94,7 @@ typedef struct {
     int form_id;
     int input_cursor;
     int input_scroll;
+    float scale;
 } RenderElement;
 
 #define MAX_ELEMENTS 65536
@@ -325,14 +330,36 @@ static void flush_line(bool centered) {
     if (offset_x < 10) offset_x = 10;
 
     int max_h = 16;
+    int max_baseline = 16;
+    
+    // First pass: find maximum height and maximum baseline
+    for (int i = 0; i < line_element_count; i++) {
+        RenderElement *el = &elements[line_elements[i]];
+        if (el->tag == TAG_IMG && el->img_h + 10 > max_h) max_h = el->img_h + 10;
+        if ((el->tag == TAG_INPUT || el->tag == TAG_BUTTON) && 20 + 10 > max_h) max_h = 20 + 10;
+        if (el->tag == TAG_NONE) {
+            int fh = ui_get_font_height_scaled(el->scale);
+            if (fh + 4 > max_h) max_h = fh + 4;
+            if (fh > max_baseline) max_baseline = fh;
+        }
+    }
+    
+    // Second pass: apply coordinates with baseline alignment
     for (int i = 0; i < line_element_count; i++) {
         RenderElement *el = &elements[line_elements[i]];
         el->x = offset_x;
-        el->y = cur_line_y;
+        
+        // Align text to the baseline of the largest text on this line
+        if (el->tag == TAG_NONE) {
+            int fh = ui_get_font_height_scaled(el->scale);
+            el->y = cur_line_y + (max_baseline - fh); 
+        } else {
+            el->y = cur_line_y; // Keep images/inputs at the top for now
+        }
+        
         offset_x += el->w;
-        if (el->tag == TAG_IMG && el->img_h + 10 > max_h) max_h = el->img_h + 10;
-        if ((el->tag == TAG_INPUT || el->tag == TAG_BUTTON) && 20 + 10 > max_h) max_h = 20 + 10;
     }
+    
     cur_line_y += max_h;
     cur_line_x = 10;
     line_element_count = 0;
@@ -340,10 +367,31 @@ static void flush_line(bool centered) {
 }
 
 
+static uint32_t parse_html_color(const char *str) {
+    if (!str) return COLOR_TEXT;
+    while (*str == ' ' || *str == '\"' || *str == '\'') str++;
+    if (*str == '#') {
+        char *end;
+        uint32_t val = (uint32_t)strtol(str + 1, &end, 16);
+        return 0xFF000000 | val; // Assumes RRGGBB
+    }
+    if (str_istarts_with(str, "red")) return 0xFFFF0000;
+    if (str_istarts_with(str, "green")) return 0xFF008000;
+    if (str_istarts_with(str, "blue")) return 0xFF0000FF;
+    if (str_istarts_with(str, "white")) return 0xFFFFFFFF;
+    if (str_istarts_with(str, "black")) return 0xFF000000;
+    if (str_istarts_with(str, "yellow")) return 0xFFFFFF00;
+    if (str_istarts_with(str, "gray")) return 0xFF808080;
+    if (str_istarts_with(str, "purple")) return 0xFF800080;
+    return COLOR_TEXT;
+}
+
 static void parse_html(const char *html) {
     browser_clear();
     cur_line_y = 10; cur_line_y = 10; cur_line_x = 10; line_element_count = 0;
     int i = 0; bool is_centered = false; bool is_bold = false; uint32_t current_color = COLOR_TEXT; char current_link[256] = "";
+    float current_scale = 15.0f; float base_scale = 15.0f;
+    bool is_space_pending = false;
     char current_form_action[256] = ""; int current_form_id = 0;
     bool skip_content = false;
     next_form_id = 1;
@@ -369,20 +417,68 @@ static void parse_html(const char *html) {
 
             if (tag_name[0] == '/') {
                 if (str_istarts_with(tag_name+1, "center")) { flush_line(is_centered); is_centered = false; }
-                else if (tag_name[1] == 'h' && tag_name[2] >= '1' && tag_name[2] <= '6') { flush_line(is_centered); cur_line_y += 10; is_bold = false; }
+                else if (tag_name[1] == 'h' && tag_name[2] >= '1' && tag_name[2] <= '6') { flush_line(is_centered); cur_line_y += 10; is_bold = false; base_scale = 15.0f; current_scale = 15.0f; }
                 else if (str_istarts_with(tag_name+1, "form")) {
                     flush_line(is_centered);
                     current_form_id = 0; current_form_action[0] = 0;
                 }
                 else if (str_istarts_with(tag_name+1, "a")) current_link[0] = 0;
                 else if (str_istarts_with(tag_name+1, "p") || str_istarts_with(tag_name+1, "li") || str_istarts_with(tag_name+1, "ol") || str_istarts_with(tag_name+1, "div")) flush_line(is_centered);
-                else if (str_istarts_with(tag_name+1, "font")) current_color = COLOR_TEXT;
+                else if (str_istarts_with(tag_name+1, "font")) { current_color = COLOR_TEXT; current_scale = base_scale; }
                 else if (str_istarts_with(tag_name+1, "head") || (tag_name[1] == 's' && tag_name[2] == 'c') || (tag_name[1] == 's' && tag_name[2] == 'i') || (tag_name[1] == 's' && tag_name[2] == 't') || str_istarts_with(tag_name+1, "title") || str_istarts_with(tag_name+1, "noscript") || str_istarts_with(tag_name+1, "style")) skip_content = false;
             } else {
                 if (str_istarts_with(tag_name, "center")) { flush_line(is_centered); is_centered = true; }
-                else if (tag_name[0] == 'h' && tag_name[1] >= '1' && tag_name[1] <= '6') { flush_line(is_centered); cur_line_y += 10; is_bold = true; }
+                else if (tag_name[0] == 'h' && tag_name[1] >= '1' && tag_name[1] <= '6') { 
+                    flush_line(is_centered); cur_line_y += 10; is_bold = true; 
+                    if (tag_name[1] == '1') base_scale = 32.0f;
+                    else if (tag_name[1] == '2') base_scale = 24.0f;
+                    else if (tag_name[1] == '3') base_scale = 20.0f;
+                    else base_scale = 18.0f;
+                    current_scale = base_scale;
+                }
+                else if (str_istarts_with(tag_name, "font")) {
+                    char *color_str = str_istrstr(attr_buf, "color=\"");
+                    if (color_str) {
+                        current_color = parse_html_color(color_str + 7);
+                    } else {
+                        color_str = str_istrstr(attr_buf, "color=");
+                        if (color_str) current_color = parse_html_color(color_str + 6);
+                    }
+                    
+                    char *size_str = str_istrstr(attr_buf, "size=\"");
+                    int offset = 0;
+                    if (size_str) {
+                        offset = 6;
+                    } else {
+                        size_str = str_istrstr(attr_buf, "size=");
+                        if (size_str) offset = 5;
+                    }
+                    if (size_str) {
+                        char s_char = size_str[offset];
+                        if (s_char == '+') {
+                            int inc = size_str[offset+1] - '0';
+                            int new_sz = 3 + inc;
+                            if (new_sz > 7) new_sz = 7;
+                            if (new_sz < 1) new_sz = 1;
+                            s_char = '0' + new_sz;
+                        } else if (s_char == '-') {
+                            int dec = size_str[offset+1] - '0';
+                            int new_sz = 3 - dec;
+                            if (new_sz > 7) new_sz = 7;
+                            if (new_sz < 1) new_sz = 1;
+                            s_char = '0' + new_sz;
+                        }
+                        if (s_char == '1') current_scale = 10.0f;
+                        else if (s_char == '2') current_scale = 13.0f;
+                        else if (s_char == '3') current_scale = 15.0f;
+                        else if (s_char == '4') current_scale = 18.0f;
+                        else if (s_char == '5') current_scale = 24.0f;
+                        else if (s_char == '6') current_scale = 32.0f;
+                        else if (s_char >= '7' && s_char <= '9') current_scale = 48.0f;
+                    }
+                }
                 else if (str_istarts_with(tag_name, "br")) flush_line(is_centered);
-                else if (str_istarts_with(tag_name, "h") || str_istarts_with(tag_name, "p") || str_istarts_with(tag_name, "hr") || str_istarts_with(tag_name, "li") || str_istarts_with(tag_name, "ol") || str_istarts_with(tag_name, "div")) flush_line(is_centered);
+                else if (str_istarts_with(tag_name, "p") || str_istarts_with(tag_name, "li") || str_istarts_with(tag_name, "ol") || str_istarts_with(tag_name, "div")) flush_line(is_centered);
                 else if (str_istarts_with(tag_name, "form")) {
                     flush_line(is_centered);
                     current_form_id = next_form_id++;
@@ -402,6 +498,16 @@ static void parse_html(const char *html) {
                         while(href[l] && href[l] != '\"' && l < 255) { current_link[l] = href[l]; l++; }
                         current_link[l] = 0;
                     }
+                } else if (str_istarts_with(tag_name, "hr")) {
+                    flush_line(is_centered);
+                    RenderElement *el = &elements[element_count++];
+                    for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0;
+                    el->tag = TAG_HR; 
+                    el->w = WIN_W - SCROLL_BAR_W - 40; 
+                    el->h = 10; // Extra padding
+                    el->centered = true;
+                    line_elements[line_element_count++] = element_count - 1;
+                    flush_line(is_centered);
                 } else if (str_istarts_with(tag_name, "img")) {
                     RenderElement *el = &elements[element_count++];
                     int idx = element_count - 1;
@@ -460,27 +566,49 @@ static void parse_html(const char *html) {
             }
         } else {
             if (!skip_content) {
+                while (html[i] && (html[i] == ' ' || html[i] == '\n' || html[i] == '\r')) {
+                    is_space_pending = true;
+                    i++;
+                }
+
                 while (html[i] && html[i] != '<') {
-                    while (html[i] && (html[i] == ' ' || html[i] == '\n' || html[i] == '\r')) i++;
-                    if (!html[i] || html[i] == '<') break;
-                    
                     char word[256]; int w_idx = 0;
-                    while (html[i] && html[i] != '<' && html[i] != ' ' && html[i] != '\n' && html[i] != '\r' && w_idx < 255) {
+                    if (is_space_pending) {
+                        if (cur_line_x > 10) word[w_idx++] = ' ';
+                        is_space_pending = false;
+                    }
+                    
+                    while (html[i] && html[i] != '<' && html[i] != ' ' && html[i] != '\n' && html[i] != '\r' && w_idx < 254) {
                         word[w_idx++] = html[i++];
                     }
+                    
+                    if (html[i] == ' ' || html[i] == '\n' || html[i] == '\r') {
+                        is_space_pending = true;
+                        while (html[i] && (html[i] == ' ' || html[i] == '\n' || html[i] == '\r')) i++;
+                    }
+                    
                     word[w_idx] = 0;
                     if (w_idx > 0) {
                         if (element_count >= MAX_ELEMENTS) break;
-                        int word_w = ui_get_string_width(word);
-                        if (cur_line_x + word_w > WIN_W - SCROLL_BAR_W - 20) flush_line(is_centered);
+                        int word_w = ui_get_string_width_scaled(word, current_scale);
+                        if (cur_line_x + word_w > WIN_W - SCROLL_BAR_W - 20) {
+                            flush_line(is_centered);
+                            if (word[0] == ' ') {
+                                for (int k=0; k<w_idx; k++) word[k] = word[k+1];
+                                word_w = ui_get_string_width_scaled(word, current_scale);
+                                if (word[0] == 0) continue;
+                            }
+                        }
                         
                         RenderElement *el = &elements[element_count++];
                         for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0;
                         int k=0; while(word[k]) { el->content[k] = word[k]; k++; } 
-                        el->content[k++] = ' '; el->content[k] = 0;
-                        el->w = ui_get_string_width(el->content); el->h = 16;
+                        el->content[k] = 0;
+                        el->w = word_w;
+                        el->h = ui_get_font_height_scaled(current_scale);
                         el->tag = TAG_NONE; el->color = current_link[0] ? COLOR_LINK : current_color;
                         el->centered = is_centered; el->bold = is_bold;
+                        el->scale = current_scale;
                         if (current_link[0]) { int k=0; while(current_link[k]) { el->link_url[k] = current_link[k]; k++; } el->link_url[k] = 0; }
                         
                         line_elements[line_element_count++] = element_count - 1;
@@ -541,9 +669,12 @@ static void browser_paint(void) {
             ui_draw_rect(win_browser, el->x, draw_y, 1, el->h, 0xFFFFFFFF);
             ui_draw_rect(win_browser, el->x + el->w - 1, draw_y, 1, el->h, 0xFF888888);
             ui_draw_string(win_browser, el->x + 10, draw_y + 4, el->attr_value, 0xFF000000);
+        } else if (el->tag == TAG_HR) {
+            ui_draw_rect(win_browser, el->x, draw_y + el->h / 2, el->w, 2, 0xFF888888);
+            ui_draw_rect(win_browser, el->x, draw_y + (el->h / 2) + 2, el->w, 1, 0xFFFFFFFF);
         } else {
-            ui_draw_string(win_browser, el->x, draw_y, el->content, el->color);
-            if (el->bold) ui_draw_string(win_browser, el->x + 1, draw_y, el->content, el->color);
+            ui_draw_string_scaled(win_browser, el->x, draw_y, el->content, el->color, el->scale);
+            if (el->bold) ui_draw_string_scaled(win_browser, el->x + 1, draw_y, el->content, el->color, el->scale);
         }
     }
 

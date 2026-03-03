@@ -109,6 +109,7 @@ ttf_font_t* font_manager_load(const char *path, float size) {
     font->data = buffer;
     font->size = fsize;
     font->info = info;
+    font->pixel_height = size;
     font->scale = stbtt_ScaleForPixelHeight(info, size);
     
     stbtt_GetFontVMetrics(info, &font->ascent, &font->descent, &font->line_gap);
@@ -121,10 +122,17 @@ ttf_font_t* font_manager_load(const char *path, float size) {
 void font_manager_render_char(ttf_font_t *font, int x, int y, char c, uint32_t color, void (*put_pixel_fn)(int, int, uint32_t)) {
     if (!font) font = default_font;
     if (!font) return;
+    font_manager_render_char_scaled(font, x, y, c, color, font->pixel_height, put_pixel_fn);
+}
+
+void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, char c, uint32_t color, float scale, void (*put_pixel_fn)(int, int, uint32_t)) {
+    if (!font) font = default_font;
+    if (!font) return;
 
     stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
     int w, h, xoff, yoff;
-    unsigned char *bitmap = stbtt_GetCodepointBitmap(info, 0, font->scale, c, &w, &h, &xoff, &yoff);
+    float real_scale = stbtt_ScaleForPixelHeight(info, scale); // Convert pixel size back to stbtt scale
+    unsigned char *bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, c, &w, &h, &xoff, &yoff);
 
     if (bitmap) {
         for (int row = 0; row < h; row++) {
@@ -144,15 +152,43 @@ void font_manager_render_char(ttf_font_t *font, int x, int y, char c, uint32_t c
 
 int font_manager_get_string_width(ttf_font_t *font, const char *s) {
     if (!font) font = default_font;
+    if (!font) return 0;
+    return font_manager_get_string_width_scaled(font, s, font->pixel_height);
+}
+
+int font_manager_get_font_height_scaled(ttf_font_t *font, float scale) {
+    if (!font) font = default_font;
+    if (!font) return 0;
+    float real_scale = stbtt_ScaleForPixelHeight((stbtt_fontinfo *)font->info, scale);
+    return (int)((font->ascent - font->descent) * real_scale);
+}
+
+int font_manager_get_font_ascent_scaled(ttf_font_t *font, float scale) {
+    if (!font) font = default_font;
+    if (!font) return 0;
+    float real_scale = stbtt_ScaleForPixelHeight((stbtt_fontinfo *)font->info, scale);
+    return (int)(font->ascent * real_scale);
+}
+
+int font_manager_get_font_line_height_scaled(ttf_font_t *font, float scale) {
+    if (!font) font = default_font;
+    if (!font) return 0;
+    float real_scale = stbtt_ScaleForPixelHeight((stbtt_fontinfo *)font->info, scale);
+    return (int)((font->ascent - font->descent + font->line_gap) * real_scale);
+}
+
+int font_manager_get_string_width_scaled(ttf_font_t *font, const char *s, float scale) {
+    if (!font) font = default_font;
     if (!font || !s) return 0;
 
     stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
+    float real_scale = stbtt_ScaleForPixelHeight(info, scale);
     int width = 0;
     while (*s) {
         int advance, lsb;
         stbtt_GetCodepointHMetrics(info, *s, &advance, &lsb);
         // Round per-character to match draw_string's accumulation
-        width += (int)(advance * font->scale + 0.5f);
+        width += (int)(advance * real_scale + 0.5f);
         s++;
     }
     return width;

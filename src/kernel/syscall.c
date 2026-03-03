@@ -387,6 +387,45 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                 
                 asm volatile("push %0; popfq" : : "r"(rflags));
             }
+        } else if (cmd == 11) { // GUI_CMD_DRAW_STRING_SCALED
+            Window *win = (Window *)arg2;
+            uint64_t coords = arg3;
+            int ux = coords & 0xFFFFFFFF;
+            int uy = coords >> 32;
+            const char *user_str = (const char *)arg4;
+            uint64_t packed = arg5;
+            uint32_t color = packed & 0xFFFFFFFF;
+            uint32_t scale_bits = packed >> 32;
+            float scale = *(float*)&scale_bits;
+
+            if (win && user_str) {
+                extern void draw_string_scaled(int x, int y, const char *str, uint32_t color, float scale);
+                extern void graphics_set_render_target(uint32_t *buffer, int w, int h);
+                
+                // Copy string safely to kernel stack buffer
+                char kernel_str[256];
+                int i = 0;
+                while (i < 255 && user_str[i]) {
+                    kernel_str[i] = user_str[i];
+                    i++;
+                }
+                kernel_str[i] = 0;
+
+                uint64_t rflags;
+                asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
+                
+                if (win->pixels) {
+                    if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
+                        graphics_set_render_target(win->pixels, win->w, win->h - 20);
+                        draw_string_scaled(ux, uy, kernel_str, color, scale);
+                        graphics_set_render_target(NULL, 0, 0);
+                    }
+                } else {
+                    draw_string_scaled(win->x + ux, win->y + uy, kernel_str, color, scale);
+                }
+                
+                asm volatile("push %0; popfq" : : "r"(rflags));
+            }
         } else if (cmd == GUI_CMD_DRAW_IMAGE) {
             Window *win = (Window *)arg2;
             uint64_t *u_params = (uint64_t *)arg3;
@@ -464,9 +503,31 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             } else {
                 return (uint64_t)i * 8; // Fallback bitmap width
             }
+        } else if (cmd == 12) { // GUI_CMD_GET_STRING_WIDTH_SCALED
+            const char *user_str = (const char *)arg2;
+            uint32_t scale_bits = (uint32_t)arg3;
+            float scale = *(float*)&scale_bits;
+
+            if (!user_str) return 0;
+            
+            char kernel_str[256];
+            int i = 0;
+            while (i < 255 && user_str[i]) {
+                kernel_str[i] = user_str[i];
+                i++;
+            }
+            kernel_str[i] = 0;
+            
+            extern int graphics_get_string_width_scaled(const char *s, float scale);
+            return (uint64_t)graphics_get_string_width_scaled(kernel_str, scale);
         } else if (cmd == GUI_CMD_GET_FONT_HEIGHT) {
             extern int graphics_get_font_height(void);
             return (uint64_t)graphics_get_font_height();
+        } else if (cmd == 13) { // GUI_CMD_GET_FONT_HEIGHT_SCALED
+            uint32_t scale_bits = (uint32_t)arg2;
+            float scale = *(float*)&scale_bits;
+            extern int graphics_get_font_height_scaled(float scale);
+            return (uint64_t)graphics_get_font_height_scaled(scale);
         }
     } else if (syscall_num == SYS_FS) {
         int cmd = (int)arg1;

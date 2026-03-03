@@ -24,6 +24,7 @@ void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t c
 void draw_char(int x, int y, char c, uint32_t color);
 void draw_char_bitmap(int x, int y, char c, uint32_t color);
 void draw_string(int x, int y, const char *s, uint32_t color);
+void draw_string_scaled(int x, int y, const char *s, uint32_t color, float scale);
 void draw_desktop_background(void);
 void graphics_set_bg_color(uint32_t color);
 void graphics_set_bg_pattern(const uint32_t *pattern);  // 128x128 pattern
@@ -56,6 +57,8 @@ void graphics_clear_clipping(void);
 #include "font_manager.h"
 ttf_font_t *graphics_get_current_ttf(void);
 int graphics_get_font_height(void);
+int graphics_get_font_height_scaled(float scale);
+int graphics_get_string_width_scaled(const char *s, float scale);
 void graphics_set_font(const char *path);
 
 #endif

@@ -57,3 +57,21 @@ uint32_t ui_get_string_width(const char *str) {
 uint32_t ui_get_font_height(void) {
     return (uint32_t)syscall3(SYS_GUI, GUI_CMD_GET_FONT_HEIGHT, 0, 0);
 }
+
+void ui_draw_string_scaled(ui_window_t win, int x, int y, const char *str, uint32_t color, float scale) {
+    uint64_t coords = ((uint64_t)x & 0xFFFFFFFF) | ((uint64_t)y << 32);
+    // Pack color into lower 32, scale (as uint32_t representation) into upper 32
+    uint32_t scale_bits = *(uint32_t*)&scale;
+    uint64_t packed_arg5 = ((uint64_t)scale_bits << 32) | (color & 0xFFFFFFFF);
+    syscall5(SYS_GUI, GUI_CMD_DRAW_STRING_SCALED, (uint64_t)win, coords, (uint64_t)str, packed_arg5);
+}
+
+uint32_t ui_get_string_width_scaled(const char *str, float scale) {
+    uint32_t scale_bits = *(uint32_t*)&scale;
+    return (uint32_t)syscall4(SYS_GUI, GUI_CMD_GET_STRING_WIDTH_SCALED, (uint64_t)str, (uint64_t)scale_bits, 0);
+}
+
+uint32_t ui_get_font_height_scaled(float scale) {
+    uint32_t scale_bits = *(uint32_t*)&scale;
+    return (uint32_t)syscall3(SYS_GUI, GUI_CMD_GET_FONT_HEIGHT_SCALED, (uint64_t)scale_bits, 0);
+}
