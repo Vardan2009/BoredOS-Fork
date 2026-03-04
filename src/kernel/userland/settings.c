@@ -760,7 +760,8 @@ static void control_panel_handle_click(int x, int y) {
     }
 }
 
-static void control_panel_handle_key(char c) {
+static void control_panel_handle_key(char c, bool pressed) {
+    if (!pressed) return;
     if (focused_field < 0) return;
     
     if (current_view == VIEW_WALLPAPER) {
@@ -811,9 +812,11 @@ int main(int argc, char **argv) {
                 control_panel_paint(win);
                 ui_mark_dirty(win, 0, 0, 350, 500);
             } else if (ev.type == GUI_EVENT_KEY) {
-                control_panel_handle_key((char)ev.arg1);
+                control_panel_handle_key((char)ev.arg1, true);
                 control_panel_paint(win);
                 ui_mark_dirty(win, 0, 0, 350, 500);
+            } else if (ev.type == GUI_EVENT_KEYUP) {
+                control_panel_handle_key((char)ev.arg1, false);
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }

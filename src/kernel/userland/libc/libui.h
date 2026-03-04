@@ -26,6 +26,7 @@
 #define GUI_EVENT_RIGHT_CLICK 3
 #define GUI_EVENT_CLOSE       4
 #define GUI_EVENT_KEY         5
+#define GUI_EVENT_KEYUP       10
 
 #define GUI_EVENT_MOUSE_DOWN  6
 #define GUI_EVENT_MOUSE_UP    7

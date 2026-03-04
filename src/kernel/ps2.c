@@ -28,21 +28,20 @@ static bool shift_pressed = false;
 static bool ctrl_pressed = false;
 static bool extended_scancode = false;
 
-// Simple US QWERTY Scan Code Set 1 Map
 static char scancode_map[128] = {
     0,  27, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
     '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',
-    0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
+    21, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0,
     '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*', 
-    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    22, ' ', 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 };
 
 static char scancode_map_shift[128] = {
     0,  27, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '\b',
     '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n',
-    0, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0,
+    21, 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0,
     '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0, '*', 
-    0, ' ', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    22, ' ', 23, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 };
 
 uint64_t keyboard_handler(registers_t *regs) {
@@ -81,24 +80,34 @@ uint64_t keyboard_handler(registers_t *regs) {
         shift_pressed = false;
     } else if (!(scancode & 0x80)) { // Key Press (not release)
         if (extended_scancode) {
-            // Extended scancode - arrow keys and special keys
             extended_scancode = false;
             switch (scancode) {
-                case 0x48: wm_handle_key(17); break; // Up arrow
-                case 0x50: wm_handle_key(18); break; // Down arrow
-                case 0x4B: wm_handle_key(19); break; // Left arrow
-                case 0x4D: wm_handle_key(20); break; // Right arrow
+                case 0x48: wm_handle_key(17, true); break; // Up arrow
+                case 0x50: wm_handle_key(18, true); break; // Down arrow
+                case 0x4B: wm_handle_key(19, true); break; // Left arrow
+                case 0x4D: wm_handle_key(20, true); break; // Right arrow
             }
         } else {
-            // Regular scancode
             char c = shift_pressed ? scancode_map_shift[scancode] : scancode_map[scancode];
             if (c) {
-                wm_handle_key(c);
+                wm_handle_key(c, true);
             }
         }
-    } else if (scancode & 0x80) {
-        // Key release
-        extended_scancode = false;
+    } else if (scancode & 0x80) { // Key release
+        if (extended_scancode) {
+            extended_scancode = false;
+            switch (scancode & 0x7F) { // Strip the release bit
+                case 0x48: wm_handle_key(17, false); break; // Up arrow
+                case 0x50: wm_handle_key(18, false); break; // Down arrow
+                case 0x4B: wm_handle_key(19, false); break; // Left arrow
+                case 0x4D: wm_handle_key(20, false); break; // Right arrow
+            }
+        } else {
+            char c = shift_pressed ? scancode_map_shift[scancode & 0x7F] : scancode_map[scancode & 0x7F];
+            if (c) {
+                wm_handle_key(c, false);
+            }
+        }
     }
 
     outb(0x20, 0x20); // EOI

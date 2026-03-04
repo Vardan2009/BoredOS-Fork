@@ -1197,7 +1197,8 @@ int main(int argc, char **argv) {
                     }
                 }
                 if (!found) { focused_element = -1; needs_repaint = true; }
-            } else if (ev.type == GUI_EVENT_KEY) {
+            } else if (ev.type == GUI_EVENT_KEY || ev.type == GUI_EVENT_KEYUP) {
+                if (ev.type == GUI_EVENT_KEYUP) continue;
                 char c = (char)ev.arg1;
                 if (focused_element == -1) {
                     if (c == 13 || c == 10) {

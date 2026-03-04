@@ -16,7 +16,10 @@ LIBC_OBJS = $(patsubst libc/%.c, $(BIN_DIR)/%.o, $(LIBC_SOURCES)) $(BIN_DIR)/crt
 APP_SOURCES = $(filter-out nanojpeg.c, $(wildcard *.c))
 APP_ELFS = $(patsubst %.c, $(BIN_DIR)/%.elf, $(APP_SOURCES))
 
-all: $(BIN_DIR) $(APP_ELFS)
+DOOM_SOURCES = $(wildcard doom/*.c)
+DOOM_OBJS = $(patsubst doom/%.c, $(BIN_DIR)/%.o, $(DOOM_SOURCES))
+
+all: $(BIN_DIR) $(APP_ELFS) $(BIN_DIR)/doom.elf
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
@@ -40,6 +43,12 @@ $(BIN_DIR)/settings.elf: $(LIBC_OBJS) $(BIN_DIR)/settings.o $(BIN_DIR)/nanojpeg.
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(BIN_DIR)/browser.elf: $(LIBC_OBJS) $(BIN_DIR)/browser.o $(BIN_DIR)/nanojpeg.o
+	$(LD) $(LDFLAGS) $^ -o $@
+
+$(BIN_DIR)/%.o: doom/%.c
+	$(CC) $(CFLAGS) -Wno-error -Idoom -c $< -o $@
+
+$(BIN_DIR)/doom.elf: $(LIBC_OBJS) $(DOOM_OBJS) $(BIN_DIR)/nanojpeg.o
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(BIN_DIR)/%.elf: $(LIBC_OBJS) $(BIN_DIR)/%.o

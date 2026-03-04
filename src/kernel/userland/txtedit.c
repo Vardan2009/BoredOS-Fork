@@ -350,7 +350,8 @@ static void editor_paint(ui_window_t win) {
     ui_draw_string(win, padding + 160, status_y + 5, col_str, COLOR_DARK_TEXT);
 }
 
-static void editor_handle_key(char c) {
+static void editor_handle_key(char c, bool pressed) {
+    if (!pressed) return;
     if (c == 17) { // UP
         if (cursor_line > 0) {
             cursor_line--;
@@ -417,9 +418,11 @@ int main(int argc, char **argv) {
                 editor_paint(win);
                 ui_mark_dirty(win, 0, 0, win_w, win_h);
             } else if (ev.type == GUI_EVENT_KEY) {
-                editor_handle_key((char)ev.arg1);
+                editor_handle_key((char)ev.arg1, true);
                 editor_paint(win);
                 ui_mark_dirty(win, 0, 0, win_w, win_h);
+            } else if (ev.type == GUI_EVENT_KEYUP) {
+                editor_handle_key((char)ev.arg1, false);
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }

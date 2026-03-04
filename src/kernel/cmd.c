@@ -2004,7 +2004,8 @@ void cmd_set_raw_mode(bool enabled) {
     terminal_raw_mode = enabled;
 }
 
-static void cmd_key(Window *target, char c) {
+static void cmd_key(Window *target, char c, bool pressed) {
+    if (!pressed) return;
     (void)target;
     
     if (terminal_raw_mode) {

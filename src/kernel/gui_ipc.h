@@ -23,6 +23,7 @@
 #define GUI_EVENT_MOUSE_DOWN  6
 #define GUI_EVENT_MOUSE_UP    7
 #define GUI_EVENT_MOUSE_MOVE  8
+#define GUI_EVENT_KEYUP       10
 
 typedef struct {
     int type;

@@ -380,7 +380,8 @@ static void md_paint(ui_window_t win) {
     }
 }
 
-static void md_handle_key(char c) {
+static void md_handle_key(char c, bool pressed) {
+    if (!pressed) return;
     if (c == 'w' || c == 'W' || c == 17) {
         scroll_top -= 3;
         if (scroll_top < 0) scroll_top = 0;
@@ -432,9 +433,11 @@ int main(int argc, char **argv) {
                 md_paint(win);
                 ui_mark_dirty(win, 0, 0, win_w, win_h - 20);
             } else if (ev.type == GUI_EVENT_KEY) {
-                md_handle_key((char)ev.arg1);
+                md_handle_key((char)ev.arg1, true);
                 md_paint(win);
                 ui_mark_dirty(win, 0, 0, win_w, win_h - 20);
+            } else if (ev.type == GUI_EVENT_KEYUP) {
+                md_handle_key((char)ev.arg1, false);
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }

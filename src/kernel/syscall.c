@@ -125,10 +125,10 @@ void syscall_send_mouse_up_event(Window *win, int x, int y) {
     user_window_mouse_up(win, x, y);
 }
 
-static void user_window_key(Window *win, char c) {
+static void user_window_key(Window *win, char c, bool pressed) {
     process_t *proc = (process_t *)win->data;
     if (!proc) return;
-    gui_event_t ev = { .type = GUI_EVENT_KEY, .arg1 = (int)c };
+    gui_event_t ev = { .type = pressed ? GUI_EVENT_KEY : GUI_EVENT_KEYUP, .arg1 = (int)c };
     process_push_gui_event(proc, &ev);
 }
 

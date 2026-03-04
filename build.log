@@ -1,0 +1,533 @@
+mkdir -p build
+mkdir -p build
+Building Limine host utility...
+make[1]: Nothing to be done for `all'.
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/cmd.c -o build/cmd.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/disk_manager.c -o build/disk_manager.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/e1000.c -o build/e1000.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/e1000_netif.c -o build/e1000_netif.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/elf.c -o build/elf.o
+src/kernel/elf.c:12:13: warning: 'print_hex' defined but not used [-Wunused-function]
+   12 | static void print_hex(uint64_t n) {
+      |             ^~~~~~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/explorer.c -o build/explorer.o
+src/kernel/explorer.c: In function 'explorer_draw_file_icon':
+src/kernel/explorer.c:887:73: warning: unused parameter 'color' [-Wunused-parameter]
+  887 | static void explorer_draw_file_icon(int x, int y, bool is_dir, uint32_t color, const char *filename, const char *current_path) {
+      |                                                                ~~~~~~~~~^~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/fat32.c -o build/fat32.o
+src/kernel/fat32.c: In function 'fat32_normalize_path':
+src/kernel/fat32.c:151:10: warning: unused variable 'drive' [-Wunused-variable]
+  151 |     char drive = parse_drive_from_path(&p);
+      |          ^~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/font_manager.c -o build/font_manager.o
+In file included from src/kernel/font_manager.c:4:
+src/kernel/stb_truetype.h: In function 'stbtt_FreeShape':
+src/kernel/stb_truetype.h:2672:54: warning: unused parameter 'info' [-Wunused-parameter]
+ 2672 | STBTT_DEF void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *v)
+      |                                ~~~~~~~~~~~~~~~~~~~~~~^~~~
+src/kernel/stb_truetype.h: In function 'stbtt__hheap_alloc':
+src/kernel/stb_truetype.h:2770:70: warning: unused parameter 'userdata' [-Wunused-parameter]
+ 2770 | static void *stbtt__hheap_alloc(stbtt__hheap *hh, size_t size, void *userdata)
+      |                                                                ~~~~~~^~~~~~~~
+src/kernel/stb_truetype.h: In function 'stbtt__hheap_cleanup':
+src/kernel/stb_truetype.h:2797:58: warning: unused parameter 'userdata' [-Wunused-parameter]
+ 2797 | static void stbtt__hheap_cleanup(stbtt__hheap *hh, void *userdata)
+      |                                                    ~~~~~~^~~~~~~~
+src/kernel/stb_truetype.h: In function 'stbtt_FlattenCurves':
+src/kernel/stb_truetype.h:3618:154: warning: unused parameter 'userdata' [-Wunused-parameter]
+ 3618 | static stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, float objspace_flatness, int **contour_lengths, int *num_contours, void *userdata)
+      |                                                                                                                                                    ~~~~~~^~~~~~~~
+src/kernel/stb_truetype.h: In function 'stbtt_FreeBitmap':
+src/kernel/stb_truetype.h:3708:62: warning: unused parameter 'userdata' [-Wunused-parameter]
+ 3708 | STBTT_DEF void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
+      |                                                        ~~~~~~^~~~~~~~
+src/kernel/stb_truetype.h: In function 'stbtt_FreeSDF':
+src/kernel/stb_truetype.h:4767:59: warning: unused parameter 'userdata' [-Wunused-parameter]
+ 4767 | STBTT_DEF void stbtt_FreeSDF(unsigned char *bitmap, void *userdata)
+      |                                                     ~~~~~~^~~~~~~~
+src/kernel/font_manager.c: In function 'font_manager_load':
+src/kernel/font_manager.c:93:9: warning: unused variable 'read' [-Wunused-variable]
+   93 |     int read = fat32_read(fh, buffer, fsize);
+      |         ^~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/gdt.c -o build/gdt.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/graphics.c -o build/graphics.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/idt.c -o build/idt.o
+src/kernel/idt.c: In function 'pic_remap':
+src/kernel/idt.c:110:17: warning: variable 'a2' set but not used [-Wunused-but-set-variable]
+  110 |     uint8_t a1, a2;
+      |                 ^~
+src/kernel/idt.c:110:13: warning: variable 'a1' set but not used [-Wunused-but-set-variable]
+  110 |     uint8_t a1, a2;
+      |             ^~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/kutils.c -o build/kutils.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/licensewr.c -o build/licensewr.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip_port.c -o build/lwip_port.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/main.c -o build/main.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/memory_manager.c -o build/memory_manager.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/nanojpeg.c -o build/nanojpeg.o
+src/kernel/nanojpeg.c: In function 'njGetVLC':
+src/kernel/nanojpeg.c:686:24: warning: left shift of negative value [-Wshift-negative-value]
+  686 |         value += ((-1) << bits) + 1;
+      |                        ^~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/network.c -o build/network.o
+src/kernel/network.c: In function 'network_dhcp_acquire':
+src/kernel/network.c:181:9: warning: unused variable 'loops' [-Wunused-variable]
+  181 |     int loops = 0;
+      |         ^~~~~
+src/kernel/network.c: In function 'network_init':
+src/kernel/network.c:97:9: warning: 'ip.bytes[0]' may be used uninitialized [-Wmaybe-uninitialized]
+   97 |         k_itoa(ip.bytes[0], buf); serial_write(buf); serial_write(".");
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+src/kernel/network.c:92:24: note: 'ip.bytes[0]' was declared here
+   92 |         ipv4_address_t ip;
+      |                        ^~
+src/kernel/network.c:98:9: warning: 'ip.bytes[1]' may be used uninitialized [-Wmaybe-uninitialized]
+   98 |         k_itoa(ip.bytes[1], buf); serial_write(buf); serial_write(".");
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+src/kernel/network.c:92:24: note: 'ip.bytes[1]' was declared here
+   92 |         ipv4_address_t ip;
+      |                        ^~
+src/kernel/network.c:99:9: warning: 'ip.bytes[2]' may be used uninitialized [-Wmaybe-uninitialized]
+   99 |         k_itoa(ip.bytes[2], buf); serial_write(buf); serial_write(".");
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+src/kernel/network.c:92:24: note: 'ip.bytes[2]' was declared here
+   92 |         ipv4_address_t ip;
+      |                        ^~
+src/kernel/network.c:100:9: warning: 'ip.bytes[3]' may be used uninitialized [-Wmaybe-uninitialized]
+  100 |         k_itoa(ip.bytes[3], buf); serial_write(buf); serial_write("\n");
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+src/kernel/network.c:92:24: note: 'ip.bytes[3]' was declared here
+   92 |         ipv4_address_t ip;
+      |                        ^~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/nj_kernel.c -o build/nj_kernel.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/paging.c -o build/paging.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/panic.c -o build/panic.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/pci.c -o build/pci.o
+src/kernel/pci.c: In function 'pci_enumerate_devices':
+src/kernel/pci.c:52:31: warning: comparison is always true due to limited range of data type [-Wtype-limits]
+   52 |     for (uint8_t bus = 0; bus < 256 && count < max_devices; bus++) {
+      |                               ^
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/platform.c -o build/platform.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/process.c -o build/process.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/ps2.c -o build/ps2.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/rtc.c -o build/rtc.o
+src/kernel/rtc.c: In function 'rtc_get_datetime':
+src/kernel/rtc.c:28:13: warning: unused variable 'last_century' [-Wunused-variable]
+   28 |     uint8_t last_century;
+      |             ^~~~~~~~~~~~
+src/kernel/rtc.c:21:13: warning: unused variable 'century' [-Wunused-variable]
+   21 |     uint8_t century;
+      |             ^~~~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/syscall.c -o build/syscall.o
+src/kernel/syscall.c: In function 'syscall_handler_inner':
+src/kernel/syscall.c:399:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+  399 |             float scale = *(float*)&scale_bits;
+      |                            ^~~~~~~~~~~~~~~~~~~
+src/kernel/syscall.c:509:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+  509 |             float scale = *(float*)&scale_bits;
+      |                            ^~~~~~~~~~~~~~~~~~~
+src/kernel/syscall.c:528:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+  528 |             float scale = *(float*)&scale_bits;
+      |                            ^~~~~~~~~~~~~~~~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/vm.c -o build/vm.o
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/wallpaper.c -o build/wallpaper.o
+src/kernel/wallpaper.c:83:13: warning: 'serial_num' defined but not used [-Wunused-function]
+   83 | static void serial_num(int n) {
+      |             ^~~~~~~~~~
+mkdir -p build/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/wm.c -o build/wm.o
+src/kernel/wm.c: In function 'wm_handle_click':
+src/kernel/wm.c:1570:29: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+ 1570 |                             if (col < 0) col = 0; if (row < 0) row = 0;
+      |                             ^~
+src/kernel/wm.c:1570:51: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+ 1570 |                             if (col < 0) col = 0; if (row < 0) row = 0;
+      |                                                   ^~
+src/kernel/wm.c: In function 'wm_handle_mouse':
+src/kernel/wm.c:2214:41: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+ 2214 |                                         if (col < 0) col = 0; if (row < 0) row = 0;
+      |                                         ^~
+src/kernel/wm.c:2214:63: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+ 2214 |                                         if (col < 0) col = 0; if (row < 0) row = 0;
+      |                                                               ^~
+src/kernel/wm.c: At top level:
+src/kernel/wm.c:1124:13: warning: 'erase_cursor' defined but not used [-Wunused-function]
+ 1124 | static void erase_cursor(int x, int y) {
+      |             ^~~~~~~~~~~~
+src/kernel/wm.c:1014:13: warning: 'draw_dock_editor' defined but not used [-Wunused-function]
+ 1014 | static void draw_dock_editor(int x, int y) {
+      |             ^~~~~~~~~~~~~~~~
+src/kernel/wm.c:87:13: warning: 'cursor_visible' defined but not used [-Wunused-variable]
+   87 | static bool cursor_visible = true;
+      |             ^~~~~~~~~~~~~~
+src/kernel/wm.c:84:12: warning: 'desktop_refresh_timer' defined but not used [-Wunused-variable]
+   84 | static int desktop_refresh_timer = 0;
+      |            ^~~~~~~~~~~~~~~~~~~~~
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/altcp.c -o build/lwip/core/altcp.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/altcp_alloc.c -o build/lwip/core/altcp_alloc.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/altcp_tcp.c -o build/lwip/core/altcp_tcp.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/def.c -o build/lwip/core/def.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/dns.c -o build/lwip/core/dns.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/inet_chksum.c -o build/lwip/core/inet_chksum.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/init.c -o build/lwip/core/init.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ip.c -o build/lwip/core/ip.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/mem.c -o build/lwip/core/mem.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/memp.c -o build/lwip/core/memp.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/netif.c -o build/lwip/core/netif.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/pbuf.c -o build/lwip/core/pbuf.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/raw.c -o build/lwip/core/raw.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/stats.c -o build/lwip/core/stats.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/sys.c -o build/lwip/core/sys.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/tcp.c -o build/lwip/core/tcp.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/tcp_in.c -o build/lwip/core/tcp_in.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/tcp_out.c -o build/lwip/core/tcp_out.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/timeouts.c -o build/lwip/core/timeouts.o
+mkdir -p build/lwip/core/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/udp.c -o build/lwip/core/udp.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/autoip.c -o build/lwip/core/ipv4/autoip.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/dhcp.c -o build/lwip/core/ipv4/dhcp.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/etharp.c -o build/lwip/core/ipv4/etharp.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/icmp.c -o build/lwip/core/ipv4/icmp.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/igmp.c -o build/lwip/core/ipv4/igmp.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/ip4.c -o build/lwip/core/ipv4/ip4.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/ip4_addr.c -o build/lwip/core/ipv4/ip4_addr.o
+mkdir -p build/lwip/core/ipv4/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/core/ipv4/ip4_frag.c -o build/lwip/core/ipv4/ip4_frag.o
+mkdir -p build/lwip/netif/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/netif/ethernet.c -o build/lwip/netif/ethernet.o
+mkdir -p build/lwip/netif/
+x86_64-elf-gcc -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding -fno-stack-protector -fno-stack-check -fno-lto -fPIE -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone -Isrc/kernel -Isrc/kernel/lwip -c src/kernel/lwip/netif/bridgeif.c -o build/lwip/netif/bridgeif.o
+nasm -f elf64 src/kernel/boot.asm -o build/boot.o
+nasm -f elf64 src/kernel/gdt_asm.asm -o build/gdt_asm.o
+nasm -f elf64 src/kernel/interrupts.asm -o build/interrupts.o
+nasm -f elf64 src/kernel/process_asm.asm -o build/process_asm.o
+nasm -f elf64 src/kernel/syscalls.asm -o build/syscalls.o
+nasm -f elf64 src/kernel/test_syscall.asm -o build/test_syscall.o
+nasm -f elf64 src/kernel/user_test.asm -o build/user_test.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -pie --no-dynamic-linker -z text -z max-page-size=0x1000 -T linker.ld -o build/boredos.elf  build/cmd.o  build/disk_manager.o  build/e1000.o  build/e1000_netif.o  build/elf.o  build/explorer.o  build/fat32.o  build/font_manager.o  build/gdt.o  build/graphics.o  build/idt.o  build/kutils.o  build/licensewr.o  build/lwip_port.o  build/main.o  build/memory_manager.o  build/nanojpeg.o  build/network.o  build/nj_kernel.o  build/paging.o  build/panic.o  build/pci.o  build/platform.o  build/process.o  build/ps2.o  build/rtc.o  build/syscall.o  build/vm.o  build/wallpaper.o  build/wm.o  build/lwip/core/altcp.o  build/lwip/core/altcp_alloc.o  build/lwip/core/altcp_tcp.o  build/lwip/core/def.o  build/lwip/core/dns.o  build/lwip/core/inet_chksum.o  build/lwip/core/init.o  build/lwip/core/ip.o  build/lwip/core/mem.o  build/lwip/core/memp.o  build/lwip/core/netif.o  build/lwip/core/pbuf.o  build/lwip/core/raw.o  build/lwip/core/stats.o  build/lwip/core/sys.o  build/lwip/core/tcp.o  build/lwip/core/tcp_in.o  build/lwip/core/tcp_out.o  build/lwip/core/timeouts.o  build/lwip/core/udp.o  build/lwip/core/ipv4/autoip.o  build/lwip/core/ipv4/dhcp.o  build/lwip/core/ipv4/etharp.o  build/lwip/core/ipv4/icmp.o  build/lwip/core/ipv4/igmp.o  build/lwip/core/ipv4/ip4.o  build/lwip/core/ipv4/ip4_addr.o  build/lwip/core/ipv4/ip4_frag.o  build/lwip/netif/ethernet.o  build/lwip/netif/bridgeif.o  build/boot.o  build/gdt_asm.o  build/interrupts.o  build/process_asm.o  build/syscalls.o  build/test_syscall.o  build/user_test.o
+x86_64-elf-ld: warning: build/boredos.elf has a LOAD segment with RWX permissions
+/Library/Developer/CommandLineTools/usr/bin/make -C src/kernel/userland
+mkdir -p bin
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c libc/libui.c -o bin/libui.o
+libc/libui.c: In function 'ui_draw_string_scaled':
+libc/libui.c:64:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+   64 |     uint32_t scale_bits = *(uint32_t*)&scale;
+      |                            ^~~~~~~~~~~~~~~~~
+libc/libui.c: In function 'ui_get_string_width_scaled':
+libc/libui.c:70:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+   70 |     uint32_t scale_bits = *(uint32_t*)&scale;
+      |                            ^~~~~~~~~~~~~~~~~
+libc/libui.c: In function 'ui_get_font_height_scaled':
+libc/libui.c:75:28: warning: dereferencing type-punned pointer will break strict-aliasing rules [-Wstrict-aliasing]
+   75 |     uint32_t scale_bits = *(uint32_t*)&scale;
+      |                            ^~~~~~~~~~~~~~~~~
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c libc/stdlib.c -o bin/stdlib.o
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c libc/syscall.c -o bin/syscall.o
+nasm -f elf64 crt0.asm -o bin/crt0.o
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c about.c -o bin/about.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/about.o -o bin/about.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c beep.c -o bin/beep.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/beep.o -o bin/beep.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c browser.c -o bin/browser.o
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c nanojpeg.c -o bin/nanojpeg.o
+nanojpeg.c: In function 'njGetVLC':
+nanojpeg.c:685:24: warning: left shift of negative value [-Wshift-negative-value]
+  685 |         value += ((-1) << bits) + 1;
+      |                        ^~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/browser.o bin/nanojpeg.o -o bin/browser.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c calculator.c -o bin/calculator.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/calculator.o -o bin/calculator.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c cat.c -o bin/cat.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/cat.o -o bin/cat.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c cc.c -o bin/cc.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/cc.o -o bin/cc.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c clear.c -o bin/clear.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/clear.o -o bin/clear.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c clock.c -o bin/clock.o
+clock.c: In function 'clock_paint':
+clock.c:89:36: warning: comparison of integer expressions of different signedness: 'tab_t' and 'int' [-Wsign-compare]
+   89 |         uint32_t bg = (current_tab == i) ? COLOR_TAB_ACTIVE : COLOR_DARK_PANEL;
+      |                                    ^~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/clock.o -o bin/clock.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c cowsay.c -o bin/cowsay.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/cowsay.o -o bin/cowsay.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c cp.c -o bin/cp.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/cp.o -o bin/cp.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c crash.c -o bin/crash.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/crash.o -o bin/crash.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c curl.c -o bin/curl.o
+curl.c: In function 'main':
+curl.c:60:9: warning: unused variable 'host_len' [-Wunused-variable]
+   60 |     int host_len = i;
+      |         ^~~~~~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/curl.o -o bin/curl.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c date.c -o bin/date.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/date.o -o bin/date.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c echo.c -o bin/echo.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/echo.o -o bin/echo.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c hello.c -o bin/hello.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/hello.o -o bin/hello.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c help.c -o bin/help.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/help.o -o bin/help.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c ls.c -o bin/ls.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/ls.o -o bin/ls.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c man.c -o bin/man.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/man.o -o bin/man.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c markdown.c -o bin/markdown.o
+markdown.c:59:12: warning: 'md_strncpy' defined but not used [-Wunused-function]
+   59 | static int md_strncpy(char *dest, const char *src, int n) {
+      |            ^~~~~~~~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/markdown.o -o bin/markdown.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c math.c -o bin/math.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/math.o -o bin/math.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c meminfo.c -o bin/meminfo.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/meminfo.o -o bin/meminfo.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c minesweeper.c -o bin/minesweeper.o
+minesweeper.c: In function 'minesweeper_handle_click':
+minesweeper.c:195:50: warning: unused parameter 'win' [-Wunused-parameter]
+  195 | static void minesweeper_handle_click(ui_window_t win, int x, int y, int button) {
+      |                                      ~~~~~~~~~~~~^~~
+minesweeper.c: At top level:
+minesweeper.c:17:13: warning: 'debug_print' defined but not used [-Wunused-function]
+   17 | static void debug_print(const char *msg) {
+      |             ^~~~~~~~~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/minesweeper.o -o bin/minesweeper.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c mkdir.c -o bin/mkdir.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/mkdir.o -o bin/mkdir.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c mv.c -o bin/mv.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/mv.o -o bin/mv.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c net.c -o bin/net.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/net.o -o bin/net.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c notepad.c -o bin/notepad.o
+notepad.c: In function 'notepad_key':
+notepad.c:149:37: warning: unused parameter 'win' [-Wunused-parameter]
+  149 | static void notepad_key(ui_window_t win, int h, char c) {
+      |                         ~~~~~~~~~~~~^~~
+notepad.c: In function 'main':
+notepad.c:234:14: warning: unused parameter 'argc' [-Wunused-parameter]
+  234 | int main(int argc, char **argv) {
+      |          ~~~~^~~~
+notepad.c:234:27: warning: unused parameter 'argv' [-Wunused-parameter]
+  234 | int main(int argc, char **argv) {
+      |                    ~~~~~~~^~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/notepad.o -o bin/notepad.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c paint.c -o bin/paint.o
+paint.c: In function 'wm_show_message':
+paint.c:156:41: warning: unused parameter 'title' [-Wunused-parameter]
+  156 | static void wm_show_message(const char *title, const char *msg) {
+      |                             ~~~~~~~~~~~~^~~~~
+paint.c:156:60: warning: unused parameter 'msg' [-Wunused-parameter]
+  156 | static void wm_show_message(const char *title, const char *msg) {
+      |                                                ~~~~~~~~~~~~^~~
+paint.c: At top level:
+paint.c:38:13: warning: 'debug_print' defined but not used [-Wunused-function]
+   38 | static void debug_print(const char *msg) {
+      |             ^~~~~~~~~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/paint.o -o bin/paint.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c pci_list.c -o bin/pci_list.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/pci_list.o -o bin/pci_list.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c ping.c -o bin/ping.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/ping.o -o bin/ping.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c pwd.c -o bin/pwd.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/pwd.o -o bin/pwd.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c reboot.c -o bin/reboot.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/reboot.o -o bin/reboot.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c rm.c -o bin/rm.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/rm.o -o bin/rm.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c settings.c -o bin/settings.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/settings.o bin/nanojpeg.o -o bin/settings.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c shutdown.c -o bin/shutdown.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/shutdown.o -o bin/shutdown.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c sweden.c -o bin/sweden.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/sweden.o -o bin/sweden.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c sysfetch.c -o bin/sysfetch.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/sysfetch.o -o bin/sysfetch.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c telnet.c -o bin/telnet.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/telnet.o -o bin/telnet.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c touch.c -o bin/touch.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/touch.o -o bin/touch.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c txtedit.c -o bin/txtedit.o
+txtedit.c: In function 'editor_paint':
+txtedit.c:330:10: warning: unused variable 'status_text' [-Wunused-variable]
+  330 |     char status_text[128];
+      |          ^~~~~~~~~~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/txtedit.o -o bin/txtedit.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c uptime.c -o bin/uptime.o
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/uptime.o -o bin/uptime.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -c viewer.c -o bin/viewer.o
+viewer.c: In function 'viewer_handle_click':
+viewer.c:104:45: warning: unused parameter 'win' [-Wunused-parameter]
+  104 | static void viewer_handle_click(ui_window_t win, int x, int y) {
+      |                                 ~~~~~~~~~~~~^~~
+x86_64-elf-ld -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic-linker -z text -z max-page-size=0x1000 -e _start bin/libui.o bin/stdlib.o bin/syscall.o bin/crt0.o bin/viewer.o bin/nanojpeg.o -o bin/viewer.elf
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -Wno-error -Idoom -c doom/am_map.c -o bin/am_map.o
+doom/am_map.c: In function 'AM_initVariables':
+doom/am_map.c:427:5: warning: missing initializer for field 'data4' of 'event_t' [-Wmissing-field-initializers]
+  427 |     static event_t st_notify = { ev_keyup, AM_MSGENTERED, 0, 0 };
+      |     ^~~~~~
+In file included from doom/st_stuff.h:25,
+                 from doom/am_map.c:27:
+doom/d_event.h:67:30: note: 'data4' declared here
+   67 |     int data1, data2, data3, data4;
+      |                              ^~~~~
+doom/am_map.c: In function 'AM_Stop':
+doom/am_map.c:543:5: warning: missing initializer for field 'data4' of 'event_t' [-Wmissing-field-initializers]
+  543 |     static event_t st_notify = { 0, ev_keyup, AM_MSGEXITED, 0 };
+      |     ^~~~~~
+doom/d_event.h:67:30: note: 'data4' declared here
+   67 |     int data1, data2, data3, data4;
+      |                              ^~~~~
+doom/am_map.c: In function 'AM_drawThings':
+doom/am_map.c:1293:9: warning: unused parameter 'colorrange' [-Wunused-parameter]
+ 1293 |   int   colorrange)
+      |   ~~~~~~^~~~~~~~~~
+x86_64-elf-gcc -Wall -Wextra -std=gnu11 -ffreestanding -O2 -fno-stack-protector -fno-stack-check -fno-lto -fno-pie -m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -Ilibc -Wno-error -Idoom -c doom/boredos_libc.c -o bin/boredos_libc.o
+doom/boredos_libc.c:6:27: error: 'false' undeclared here (not in a function)
+    6 | static FILE _stderr = {2, false, false};
+      |                           ^~~~~
+doom/boredos_libc.c:3:1: note: 'false' is defined in header '<stdbool.h>'; this is probably fixable by adding '#include <stdbool.h>'
+    2 | #include <syscall.h>
+  +++ |+#include <stdbool.h>
+    3 | 
+doom/boredos_libc.c:6:1: warning: missing initializer for field 'eof' of 'FILE' [-Wmissing-field-initializers]
+    6 | static FILE _stderr = {2, false, false};
+      | ^~~~~~
+In file included from doom/boredos_libc.c:1:
+doom/boredos_libc.h:17:9: note: 'eof' declared here
+   17 |     int eof;
+      |         ^~~
+doom/boredos_libc.c:7:1: warning: missing initializer for field 'eof' of 'FILE' [-Wmissing-field-initializers]
+    7 | static FILE _stdout = {1, false, false};
+      | ^~~~~~
+doom/boredos_libc.h:17:9: note: 'eof' declared here
+   17 |     int eof;
+      |         ^~~
+doom/boredos_libc.c: In function 'fread':
+doom/boredos_libc.c:37:25: error: 'true' undeclared (first use in this function)
+   37 |         stream->error = true;
+      |                         ^~~~
+doom/boredos_libc.c:37:25: note: 'true' is defined in header '<stdbool.h>'; this is probably fixable by adding '#include <stdbool.h>'
+doom/boredos_libc.c:37:25: note: each undeclared identifier is reported only once for each function it appears in
+doom/boredos_libc.c: In function 'fwrite':
+doom/boredos_libc.c:52:25: error: 'true' undeclared (first use in this function)
+   52 |         stream->error = true;
+      |                         ^~~~
+doom/boredos_libc.c:52:25: note: 'true' is defined in header '<stdbool.h>'; this is probably fixable by adding '#include <stdbool.h>'
+doom/boredos_libc.c: In function 'rename':
+doom/boredos_libc.c:73:24: warning: unused parameter 'oldpath' [-Wunused-parameter]
+   73 | int rename(const char *oldpath, const char *newpath) {
+      |            ~~~~~~~~~~~~^~~~~~~
+doom/boredos_libc.c:73:45: warning: unused parameter 'newpath' [-Wunused-parameter]
+   73 | int rename(const char *oldpath, const char *newpath) {
+      |                                 ~~~~~~~~~~~~^~~~~~~
+doom/boredos_libc.c: In function 'mkdir':
+doom/boredos_libc.c:94:37: warning: unused parameter 'mode' [-Wunused-parameter]
+   94 | int mkdir(const char *pathname, int mode) {
+      |                                 ~~~~^~~~
+doom/boredos_libc.c: In function 'access':
+doom/boredos_libc.c:98:38: warning: unused parameter 'mode' [-Wunused-parameter]
+   98 | int access(const char *pathname, int mode) {
+      |                                  ~~~~^~~~
+doom/boredos_libc.c: In function 'fprintf':
+doom/boredos_libc.c:179:19: warning: unused parameter 'stream' [-Wunused-parameter]
+  179 | int fprintf(FILE *stream, const char *format, ...) { return 0; }
+      |             ~~~~~~^~~~~~
+doom/boredos_libc.c:179:39: warning: unused parameter 'format' [-Wunused-parameter]
+  179 | int fprintf(FILE *stream, const char *format, ...) { return 0; }
+      |                           ~~~~~~~~~~~~^~~~~~
+doom/boredos_libc.c: In function 'sprintf':
+doom/boredos_libc.c:180:19: warning: unused parameter 'str' [-Wunused-parameter]
+  180 | int sprintf(char *str, const char *format, ...) { return 0; }
+      |             ~~~~~~^~~
+doom/boredos_libc.c:180:36: warning: unused parameter 'format' [-Wunused-parameter]
+  180 | int sprintf(char *str, const char *format, ...) { return 0; }
+      |                        ~~~~~~~~~~~~^~~~~~
+doom/boredos_libc.c: In function 'snprintf':
+doom/boredos_libc.c:181:20: warning: unused parameter 'str' [-Wunused-parameter]
+  181 | int snprintf(char *str, size_t size, const char *format, ...) { return 0; }
+      |              ~~~~~~^~~
+doom/boredos_libc.c:181:32: warning: unused parameter 'size' [-Wunused-parameter]
+  181 | int snprintf(char *str, size_t size, const char *format, ...) { return 0; }
+      |                         ~~~~~~~^~~~
+doom/boredos_libc.c:181:50: warning: unused parameter 'format' [-Wunused-parameter]
+  181 | int snprintf(char *str, size_t size, const char *format, ...) { return 0; }
+      |                                      ~~~~~~~~~~~~^~~~~~
+doom/boredos_libc.c: In function 'vsnprintf':
+doom/boredos_libc.c:182:21: warning: unused parameter 'str' [-Wunused-parameter]
+  182 | int vsnprintf(char *str, size_t size, const char *format, va_list ap) { return 0; }
+      |               ~~~~~~^~~
+doom/boredos_libc.c:182:33: warning: unused parameter 'size' [-Wunused-parameter]
+  182 | int vsnprintf(char *str, size_t size, const char *format, va_list ap) { return 0; }
+      |                          ~~~~~~~^~~~
+doom/boredos_libc.c:182:51: warning: unused parameter 'format' [-Wunused-parameter]
+  182 | int vsnprintf(char *str, size_t size, const char *format, va_list ap) { return 0; }
+      |                                       ~~~~~~~~~~~~^~~~~~
+doom/boredos_libc.c:182:67: warning: unused parameter 'ap' [-Wunused-parameter]
+  182 | int vsnprintf(char *str, size_t size, const char *format, va_list ap) { return 0; }
+      |                                                           ~~~~~~~~^~
+doom/boredos_libc.c: In function 'sscanf':
+doom/boredos_libc.c:183:24: warning: unused parameter 'str' [-Wunused-parameter]
+  183 | int sscanf(const char *str, const char *format, ...) { return 0; }
+      |            ~~~~~~~~~~~~^~~
+doom/boredos_libc.c:183:41: warning: unused parameter 'format' [-Wunused-parameter]
+  183 | int sscanf(const char *str, const char *format, ...) { return 0; }
+      |                             ~~~~~~~~~~~~^~~~~~
+make[1]: *** [bin/boredos_libc.o] Error 1
+rm bin/pwd.o bin/minesweeper.o bin/ls.o bin/echo.o bin/pci_list.o bin/date.o bin/mkdir.o bin/help.o bin/markdown.o bin/cc.o bin/sweden.o bin/rm.o bin/notepad.o bin/man.o bin/clock.o bin/clear.o bin/cat.o bin/cp.o bin/paint.o bin/crash.o bin/reboot.o bin/beep.o bin/meminfo.o bin/net.o bin/calculator.o bin/cowsay.o bin/telnet.o bin/hello.o bin/math.o bin/curl.o bin/uptime.o bin/about.o bin/sysfetch.o bin/ping.o bin/mv.o bin/txtedit.o bin/touch.o bin/shutdown.o
+make: *** [build/boredos.elf] Error 2

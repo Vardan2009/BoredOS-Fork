@@ -2370,11 +2370,15 @@ void wm_handle_right_click(int x, int y) {
 
 // Input Queue
 #define INPUT_QUEUE_SIZE 128
-static char key_queue[INPUT_QUEUE_SIZE];
+typedef struct {
+    char c;
+    bool pressed;
+} key_event_t;
+static key_event_t key_queue[INPUT_QUEUE_SIZE];
 static volatile int key_head = 0;
 static volatile int key_tail = 0;
 
-static void wm_dispatch_key(char c) {
+static void wm_dispatch_key(char c, bool pressed) {
     if (desktop_dialog_state != 0) {
         int len = 0; while(desktop_dialog_input[len]) len++;
         if (c == '\n') {
@@ -2435,17 +2439,18 @@ static void wm_dispatch_key(char c) {
     if (!target) return;
     
     if (target->handle_key) {
-        target->handle_key(target, c);
+        target->handle_key(target, c, pressed);
     }
     
     // Mark window as needing redraw on next timer tick
     wm_mark_dirty(target->x, target->y, target->w, target->h);
 }
 
-void wm_handle_key(char c) {
+void wm_handle_key(char c, bool pressed) {
     int next = (key_head + 1) % INPUT_QUEUE_SIZE;
     if (next != key_tail) {
-        key_queue[key_head] = c;
+        key_queue[key_head].c = c;
+        key_queue[key_head].pressed = pressed;
         key_head = next;
     }
 }
@@ -2463,9 +2468,9 @@ void wm_process_input(void) {
     uint64_t rflags;
     asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
     while (key_head != key_tail) {
-        char c = key_queue[key_tail];
+        key_event_t ev = key_queue[key_tail];
         key_tail = (key_tail + 1) % INPUT_QUEUE_SIZE;
-        wm_dispatch_key(c);
+        wm_dispatch_key(ev.c, ev.pressed);
     }
     asm volatile("push %0; popfq" : : "r"(rflags));
 }

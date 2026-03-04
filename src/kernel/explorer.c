@@ -1589,7 +1589,8 @@ static void explorer_handle_click(Window *win, int x, int y) {
 
 // === Key Handler ===
 
-static void explorer_handle_key(Window *win, char c) {
+static void explorer_handle_key(Window *win, char c, bool pressed) {
+    if (!pressed) return;
     ExplorerState *state = (ExplorerState*)win->data;
     
     // Handle dialog input
