@@ -110,3 +110,15 @@ void k_reboot(void) {
 void k_shutdown(void) {
     outw(0x604, 0x2000);
 }
+
+void k_beep(int freq, int ms) {
+    if (freq <= 0) return;
+    int div = 1193180 / freq;
+    outb(0x43, 0xB6);
+    outb(0x42, div & 0xFF);
+    outb(0x42, (div >> 8) & 0xFF);
+    outb(0x61, inb(0x61) | 0x03);
+    k_sleep(ms);
+    outb(0x61, inb(0x61) & 0xFC);
+}
+

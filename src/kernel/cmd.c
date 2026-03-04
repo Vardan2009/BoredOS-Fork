@@ -37,6 +37,7 @@
 typedef struct {
     char c;
     uint32_t color;
+    uint8_t attrs; // bit 0: bold, bit 1: reverse, bit 2: blink
 } CharCell;
 
 typedef enum {
@@ -113,6 +114,11 @@ static int ansi_state = 0;
 static int ansi_params[ANSI_MAX_PARAMS];
 static int ansi_param_count = 0;
 static bool ansi_private_mode = false;
+static int saved_cursor_row = 0;
+static int saved_cursor_col = 0;
+static uint8_t current_attrs = 0;
+static bool cursor_visible = true;
+static bool terminal_raw_mode = false;
 
 // Pager State
 static CmdMode current_mode = MODE_SHELL;
@@ -172,11 +178,22 @@ static void ansi_handle_sgr() {
     if (ansi_param_count == 0) {
         current_color = 0xFFFFFFFF;
         current_bg_color = 0;
+        current_attrs = 0;
         return;
     }
     for (int i = 0; i < ansi_param_count; i++) {
         int p = ansi_params[i];
-        if (p == 0) { current_color = 0xFFFFFFFF; current_bg_color = 0; }
+        if (p == 0) { 
+            current_color = 0xFFFFFFFF; 
+            current_bg_color = 0; 
+            current_attrs = 0; 
+        }
+        else if (p == 1) current_attrs |= 1; // Bold
+        else if (p == 5) current_attrs |= 4; // Blink
+        else if (p == 7) current_attrs |= 2; // Reverse
+        else if (p == 22) current_attrs &= ~1; // Normal intensity
+        else if (p == 25) current_attrs &= ~4; // Stop blink
+        else if (p == 27) current_attrs &= ~2; // Normal (not reverse)
         else if (p >= 30 && p <= 37) current_color = ansi_get_256_color(p - 30);
         else if (p >= 40 && p <= 47) current_bg_color = ansi_get_256_color(p - 40);
         else if (p >= 90 && p <= 97) current_color = ansi_get_256_color(p - 90 + 8);
@@ -615,6 +632,10 @@ void cmd_putchar(char c) {
         if (c == '\x1b') {
             ansi_state = 1;
             return;
+        } else if (c == '\x07') {
+            // BEL - Beep
+            k_beep(750, 100);
+            return;
         }
     } else if (ansi_state == 1) {
         if (c == '[') {
@@ -622,6 +643,32 @@ void cmd_putchar(char c) {
             ansi_param_count = 0;
             for(int i=0; i<ANSI_MAX_PARAMS; i++) ansi_params[i] = 0;
             ansi_private_mode = false;
+            return;
+        } else if (c == 'O') {
+            ansi_state = 3; // SS3
+            return;
+        } else if (c == 'M') {
+            // Reverse Index - scroll up if at top
+            if (cursor_row > 0) {
+                cursor_row--;
+            } else {
+                // Scroll screen down
+                for (int r = terminal_rows - 1; r > 0; r--) {
+                    for (int col = 0; col < terminal_cols; col++) {
+                        screen_buffer[r * terminal_cols + col] = screen_buffer[(r - 1) * terminal_cols + col];
+                    }
+                }
+                for (int col = 0; col < terminal_cols; col++) {
+                    screen_buffer[0 * terminal_cols + col].c = ' ';
+                    screen_buffer[0 * terminal_cols + col].color = shell_config.default_text_color;
+                    screen_buffer[0 * terminal_cols + col].attrs = 0;
+                }
+            }
+            ansi_state = 0;
+            return;
+        } else if (c == '=' || c == '>') {
+            // ALT/NORM Keypad mode - absorb
+            ansi_state = 0;
             return;
         } else {
             ansi_state = 0; // Unsupported ESC sequence
@@ -642,7 +689,7 @@ void cmd_putchar(char c) {
             // End of sequence
             if (ansi_param_count < ANSI_MAX_PARAMS) ansi_param_count++;
             
-            if (c == 'm') {
+                        if (c == 'm') {
                 ansi_handle_sgr();
             } else if (c == 'H' || c == 'f') {
                 int r = ansi_params[0] > 0 ? ansi_params[0] - 1 : 0;
@@ -663,20 +710,67 @@ void cmd_putchar(char c) {
             } else if (c == 'D') {
                 int n = ansi_params[0] > 0 ? ansi_params[0] : 1;
                 cursor_col -= n; if (cursor_col < 0) cursor_col = 0;
+            } else if (c == 's') {
+                saved_cursor_row = cursor_row;
+                saved_cursor_col = cursor_col;
+            } else if (c == 'u') {
+                cursor_row = saved_cursor_row;
+                cursor_col = saved_cursor_col;
             } else if (c == 'J') {
                 if (ansi_params[0] == 2) {
                     cmd_screen_clear();
+                } else if (ansi_params[0] == 0) {
+                    // Erase from cursor to end of screen
+                    for (int i = cursor_row * terminal_cols + cursor_col; i < terminal_rows * terminal_cols; i++) {
+                        screen_buffer[i].c = ' ';
+                        screen_buffer[i].color = current_color;
+                        screen_buffer[i].attrs = 0;
+                    }
+                } else if (ansi_params[0] == 1) {
+                    // Erase from beginning of screen to cursor
+                    for (int i = 0; i <= cursor_row * terminal_cols + cursor_col; i++) {
+                        screen_buffer[i].c = ' ';
+                        screen_buffer[i].color = current_color;
+                        screen_buffer[i].attrs = 0;
+                    }
                 }
             } else if (c == 'K') {
-                for (int i = cursor_col; i < terminal_cols; i++) {
-                    screen_buffer[cursor_row * terminal_cols + i].c = ' ';
-                    screen_buffer[cursor_row * terminal_cols + i].color = current_color;
+                if (ansi_params[0] == 0) {
+                    for (int i = cursor_col; i < terminal_cols; i++) {
+                        screen_buffer[cursor_row * terminal_cols + i].c = ' ';
+                        screen_buffer[cursor_row * terminal_cols + i].color = current_color;
+                        screen_buffer[cursor_row * terminal_cols + i].attrs = current_attrs;
+                    }
+                } else if (ansi_params[0] == 1) {
+                    for (int i = 0; i <= cursor_col; i++) {
+                        screen_buffer[cursor_row * terminal_cols + i].c = ' ';
+                        screen_buffer[cursor_row * terminal_cols + i].color = current_color;
+                        screen_buffer[cursor_row * terminal_cols + i].attrs = current_attrs;
+                    }
+                } else if (ansi_params[0] == 2) {
+                    for (int i = 0; i < terminal_cols; i++) {
+                        screen_buffer[cursor_row * terminal_cols + i].c = ' ';
+                        screen_buffer[cursor_row * terminal_cols + i].color = current_color;
+                        screen_buffer[cursor_row * terminal_cols + i].attrs = current_attrs;
+                    }
                 }
+            } else if (c == 'h' && ansi_private_mode) {
+                if (ansi_params[0] == 25) cursor_visible = true;
+            } else if (c == 'l' && ansi_private_mode) {
+                if (ansi_params[0] == 25) cursor_visible = false;
             }
             
             ansi_state = 0;
             return;
         }
+    } else if (ansi_state == 3) {
+        // SS3 sequences: ESC O <char>
+        if (c == 'A') { cursor_row--; if (cursor_row < 0) cursor_row = 0; }
+        else if (c == 'B') { cursor_row++; if (cursor_row >= terminal_rows) cursor_row = terminal_rows - 1; }
+        else if (c == 'C') { cursor_col++; if (cursor_col >= terminal_cols) cursor_col = terminal_cols - 1; }
+        else if (c == 'D') { cursor_col--; if (cursor_col < 0) cursor_col = 0; }
+        ansi_state = 0;
+        return;
     }
     
     if (c == '\n') {
@@ -707,7 +801,7 @@ void cmd_putchar(char c) {
 
         screen_buffer[cursor_row * terminal_cols + cursor_col].c = c;
         screen_buffer[cursor_row * terminal_cols + cursor_col].color = current_color;
-        // Optionally set background color if we support it in CharCell
+        screen_buffer[cursor_row * terminal_cols + cursor_col].attrs = current_attrs;
         cursor_col++;
     }
 
@@ -1787,7 +1881,7 @@ static void cmd_paint(Window *win) {
         draw_string(start_x, start_y + (terminal_rows * LINE_HEIGHT), "-- Press Q to quit --", shell_config.default_text_color);
     } else {
         // Draw Cursor
-        if (win->focused) {
+        if (win->focused && cursor_visible) {
             draw_rect(start_x + (cursor_col * CHAR_WIDTH), start_y + (cursor_row * LINE_HEIGHT), 
                       CHAR_WIDTH, LINE_HEIGHT, shell_config.cursor_color);
         }
@@ -1795,14 +1889,27 @@ static void cmd_paint(Window *win) {
         // Draw Shell Buffer
         for (int r = 0; r < terminal_rows; r++) {
             for (int c = 0; c < terminal_cols; c++) {
-                char ch = screen_buffer[r * terminal_cols + c].c;
+                CharCell cell = screen_buffer[r * terminal_cols + c];
+                char ch = cell.c;
                 if (ch != 0 && ch != ' ') {
-                    uint32_t color = screen_buffer[r * terminal_cols + c].color;
-                    // If cursor is on this character, and cursor color is bright, use background color for char
-                    if (r == cursor_row && c == cursor_col && win->focused) {
-                        color = shell_config.bg_color;
+                    uint32_t fg = cell.color;
+                    uint32_t bg = shell_config.bg_color;
+
+                    if (cell.attrs & 2) { // Reverse
+                        uint32_t tmp = fg;
+                        fg = bg;
+                        bg = tmp;
+                        // Draw background for reversed text
+                        draw_rect(start_x + (c * CHAR_WIDTH), start_y + (r * LINE_HEIGHT), 
+                                  CHAR_WIDTH, LINE_HEIGHT, bg);
                     }
-                    draw_char_bitmap(start_x + (c * CHAR_WIDTH), start_y + (r * LINE_HEIGHT), ch, color);
+
+                    // If cursor is on this character, and cursor color is bright, use background color for char
+                    if (r == cursor_row && c == cursor_col && win->focused && cursor_visible) {
+                        fg = bg; // Character takes background color when cursor is over it
+                    }
+                    
+                    draw_char_bitmap(start_x + (c * CHAR_WIDTH), start_y + (r * LINE_HEIGHT), ch, fg);
                 }
             }
         }
@@ -1893,8 +2000,27 @@ void cmd_handle_click(Window *win, int x, int y) {
     }
 }
 
+void cmd_set_raw_mode(bool enabled) {
+    terminal_raw_mode = enabled;
+}
+
 static void cmd_key(Window *target, char c) {
     (void)target;
+    
+    if (terminal_raw_mode) {
+        // Find the process associated with this terminal and push a key event
+        extern process_t* process_get_by_ui_window(void* win);
+        extern void process_push_gui_event(process_t *proc, gui_event_t *ev);
+        process_t *proc = process_get_by_ui_window(&win_cmd);
+        if (proc && proc->is_terminal_proc) {
+            gui_event_t ev;
+            ev.type = GUI_EVENT_KEY;
+            ev.arg1 = c;
+            process_push_gui_event(proc, &ev);
+            return;
+        }
+    }
+
     if (current_mode == MODE_PAGER) {
         if (c == 'q' || c == 'Q') {
             current_mode = MODE_SHELL;

@@ -68,6 +68,7 @@
 #define SYSTEM_CMD_DNS_LOOKUP 37
 #define SYSTEM_CMD_SET_DNS 38
 #define SYSTEM_CMD_NET_UNLOCK 39
+#define SYSTEM_CMD_SET_RAW_MODE 41
 
 // Internal assembly entry into Ring 0
 extern uint64_t syscall0(uint64_t sys_num);

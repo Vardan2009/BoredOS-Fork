@@ -907,6 +907,10 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             path[i] = 0;
             graphics_set_font(path);
             return 0;
+        } else if (cmd == 41) { // SYSTEM_CMD_SET_RAW_MODE
+            extern void cmd_set_raw_mode(bool enabled);
+            cmd_set_raw_mode((bool)arg2);
+            return 0;
         }
         return -1;
     }

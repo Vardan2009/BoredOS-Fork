@@ -22,5 +22,6 @@ void k_delay(int iterations);
 void k_sleep(int ms);
 void k_reboot(void);
 void k_shutdown(void);
+void k_beep(int freq, int ms);
 
 #endif
