@@ -300,9 +300,7 @@ char* getcwd(char *buf, int size) {
 }
 
 void sleep(int ms) {
-    // We don't have a sleep syscall yet, so we'll just busy wait for now or skip
-    // Actually, BoredOS doesn't seem to have a sleep syscall. 
-    // I'll add one if needed, but for now I'll just skip.
+
     (void)ms;
 }
 
