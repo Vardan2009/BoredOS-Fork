@@ -67,7 +67,8 @@ typedef struct {
     unsigned char *bitmap;
 } font_cache_entry_t;
 
-static font_cache_entry_t g_font_cache[FONT_CACHE_SIZE];
+// Cache is disabled for now due to race conditions and collisions
+// static font_cache_entry_t g_font_cache[FONT_CACHE_SIZE];
 
 bool font_manager_init(void) {
     // We'll load a default font later if available
@@ -141,34 +142,15 @@ void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, char c, uin
 
     stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
     
-    int cache_idx = ((unsigned char)c * 31 + (int)(scale * 17.0f)) % FONT_CACHE_SIZE;
-    font_cache_entry_t *entry = &g_font_cache[cache_idx];
-    
     unsigned char *bitmap = NULL;
     int w, h, xoff, yoff;
     
-    if (entry->bitmap && entry->c == c && entry->pixel_height == scale) {
-        bitmap = entry->bitmap;
-        w = entry->w;
-        h = entry->h;
-        xoff = entry->xoff;
-        yoff = entry->yoff;
-    } else {
-        float real_scale = stbtt_ScaleForPixelHeight(info, scale); // Convert pixel size back to stbtt scale
-        bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, c, &w, &h, &xoff, &yoff);
-        
-        if (entry->bitmap) {
-            stbtt_FreeBitmap(entry->bitmap, NULL);
-        }
-        
-        entry->c = c;
-        entry->pixel_height = scale;
-        entry->w = w;
-        entry->h = h;
-        entry->xoff = xoff;
-        entry->yoff = yoff;
-        entry->bitmap = bitmap;
-    }
+    float real_scale = stbtt_ScaleForPixelHeight(info, scale); // Convert pixel size back to stbtt scale
+    
+    int codepoint = (unsigned char)c;
+    if (codepoint == 128) codepoint = 0x2014; // Unicode emdash
+    
+    bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, codepoint, &w, &h, &xoff, &yoff);
 
     if (bitmap) {
         for (int row = 0; row < h; row++) {
@@ -182,6 +164,7 @@ void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, char c, uin
                 }
             }
         }
+        stbtt_FreeBitmap(bitmap, NULL);
     }
 }
 
@@ -221,7 +204,9 @@ int font_manager_get_string_width_scaled(ttf_font_t *font, const char *s, float 
     int width = 0;
     while (*s) {
         int advance, lsb;
-        stbtt_GetCodepointHMetrics(info, *s, &advance, &lsb);
+        int codepoint = (unsigned char)*s;
+        if (codepoint == 128) codepoint = 0x2014; // Unicode emdash
+        stbtt_GetCodepointHMetrics(info, codepoint, &advance, &lsb);
         // Round per-character to match draw_string's accumulation
         width += (int)(advance * real_scale + 0.5f);
         s++;

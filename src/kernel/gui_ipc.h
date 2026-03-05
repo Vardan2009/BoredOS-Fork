@@ -13,6 +13,7 @@
 #define GUI_CMD_DRAW_IMAGE    7
 #define GUI_CMD_GET_STRING_WIDTH 8
 #define GUI_CMD_GET_FONT_HEIGHT  9
+#define GUI_CMD_WINDOW_SET_RESIZABLE 14
 
 #define GUI_EVENT_NONE        0
 #define GUI_EVENT_PAINT       1
@@ -24,6 +25,7 @@
 #define GUI_EVENT_MOUSE_UP    7
 #define GUI_EVENT_MOUSE_MOVE  8
 #define GUI_EVENT_KEYUP       10
+#define GUI_EVENT_RESIZE      11
 
 typedef struct {
     int type;

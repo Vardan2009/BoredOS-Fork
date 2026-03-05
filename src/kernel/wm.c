@@ -1894,6 +1894,18 @@ void wm_handle_right_click(int x, int y) {
             if (drag_window->handle_resize) {
                 drag_window->handle_resize(drag_window, new_w, new_h);
             }
+            
+            // Push resize event to userland process if it has one
+            process_t *proc = process_get_by_ui_window(drag_window);
+            if (proc) {
+                gui_event_t ev;
+                ev.type = 11; // GUI_EVENT_RESIZE
+                ev.arg1 = new_w;
+                ev.arg2 = new_h;
+                ev.arg3 = 0;
+                process_push_gui_event(proc, &ev);
+            }
+            
             force_redraw = true;
         }
     } else if (left && !is_dragging && !is_resizing && !is_dragging_file && (dx != 0 || dy != 0)) {

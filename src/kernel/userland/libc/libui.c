@@ -75,3 +75,11 @@ uint32_t ui_get_font_height_scaled(float scale) {
     uint32_t scale_bits = *(uint32_t*)&scale;
     return (uint32_t)syscall3(SYS_GUI, GUI_CMD_GET_FONT_HEIGHT_SCALED, (uint64_t)scale_bits, 0);
 }
+
+void ui_window_set_title(ui_window_t win, const char *title) {
+    syscall3(SYS_GUI, GUI_CMD_WINDOW_SET_TITLE, (uint64_t)win, (uint64_t)title);
+}
+
+void ui_window_set_resizable(ui_window_t win, bool resizable) {
+    syscall3(SYS_GUI, GUI_CMD_WINDOW_SET_RESIZABLE, (uint64_t)win, resizable ? 1 : 0);
+}

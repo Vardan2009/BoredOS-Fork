@@ -132,6 +132,26 @@ static void user_window_key(Window *win, char c, bool pressed) {
     process_push_gui_event(proc, &ev);
 }
 
+static void user_window_resize(Window *win, int w, int h) {
+    if (!win) return;
+    if (w <= 0 || h <= 0) return;
+    
+    extern void* kmalloc(size_t size);
+    extern void kfree(void* ptr);
+    extern void serial_write(const char *str);
+    
+    
+    if (win->pixels) kfree(win->pixels);
+    if (win->comp_pixels) kfree(win->comp_pixels);
+    
+    win->pixels = (uint32_t *)kmalloc(w * h * sizeof(uint32_t));
+    win->comp_pixels = (uint32_t *)kmalloc(w * h * sizeof(uint32_t));
+    
+    if (win->pixels) {
+        for (int i = 0; i < w * h; i++) win->pixels[i] = 0;
+    }
+}
+
 
 static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5) {
     extern void cmd_write(const char *str);
@@ -244,8 +264,8 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             win->handle_right_click = user_window_right_click;
             win->handle_close = user_window_close;
             win->handle_key = user_window_key;
-            win->handle_resize = NULL;
-            win->resizable = false;
+            win->handle_resize = user_window_resize;
+            win->resizable = false; // Default to false, can be enabled via syscall
             
             proc->ui_window = win;
             wm_add_window(win);
@@ -523,11 +543,44 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
         } else if (cmd == GUI_CMD_GET_FONT_HEIGHT) {
             extern int graphics_get_font_height(void);
             return (uint64_t)graphics_get_font_height();
+
+        } else if (cmd == 14) { // GUI_CMD_WINDOW_SET_RESIZABLE
+            Window *win = (Window *)arg2;
+            if (win) {
+                extern void serial_write(const char *str);
+                serial_write("Kernel: Setting window resizable to ");
+                serial_write(arg3 ? "true\n" : "false\n");
+                win->resizable = (arg3 != 0);
+            }
+            return 0;
         } else if (cmd == 13) { // GUI_CMD_GET_FONT_HEIGHT_SCALED
             uint32_t scale_bits = (uint32_t)arg2;
             float scale = *(float*)&scale_bits;
             extern int graphics_get_font_height_scaled(float scale);
             return (uint64_t)graphics_get_font_height_scaled(scale);
+        } else if (cmd == 15) { // GUI_CMD_WINDOW_SET_TITLE
+            Window *win = (Window *)arg2;
+            const char *user_title = (const char *)arg3;
+            if (win && user_title) {
+                int title_len = 0;
+                while (user_title[title_len] && title_len < 255) title_len++;
+                
+                char *kernel_title = kmalloc(title_len + 1);
+                if (kernel_title) {
+                    for (int i = 0; i < title_len; i++) {
+                        kernel_title[i] = user_title[i];
+                    }
+                    kernel_title[title_len] = '\0';
+                    
+                    if (win->title && win->title != (char*)"Unknown") {
+                        kfree(win->title);
+                    }
+                    win->title = kernel_title;
+                    wm_mark_dirty(win->x, win->y - 20, win->w, 20); // Mark title bar dirty
+                    wm_refresh();
+                }
+            }
+            return 0;
         }
     } else if (syscall_num == SYS_FS) {
         int cmd = (int)arg1;

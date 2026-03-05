@@ -14,10 +14,12 @@
 #define GUI_CMD_DRAW_IMAGE    7
 #define GUI_CMD_GET_STRING_WIDTH 8
 #define GUI_CMD_GET_FONT_HEIGHT  9
+#define GUI_CMD_WINDOW_SET_RESIZABLE 14
 #define GUI_CMD_DRAW_STRING_BITMAP 10
 #define GUI_CMD_DRAW_STRING_SCALED 11
 #define GUI_CMD_GET_STRING_WIDTH_SCALED 12
 #define GUI_CMD_GET_FONT_HEIGHT_SCALED 13
+#define GUI_CMD_WINDOW_SET_TITLE 15
 
 // Event Types
 #define GUI_EVENT_NONE        0
@@ -32,6 +34,7 @@
 #define GUI_EVENT_MOUSE_UP    7
 #define GUI_EVENT_MOUSE_MOVE  8
 #define GUI_EVENT_MOUSE_WHEEL 9
+#define GUI_EVENT_RESIZE      11
 
 typedef struct {
     int type;
@@ -59,5 +62,7 @@ void ui_draw_string_bitmap(ui_window_t win, int x, int y, const char *str, uint3
 void ui_draw_string_scaled(ui_window_t win, int x, int y, const char *str, uint32_t color, float scale);
 uint32_t ui_get_string_width_scaled(const char *str, float scale);
 uint32_t ui_get_font_height_scaled(float scale);
+void ui_window_set_title(ui_window_t win, const char *title);
+void ui_window_set_resizable(ui_window_t win, bool resizable);
 
 #endif

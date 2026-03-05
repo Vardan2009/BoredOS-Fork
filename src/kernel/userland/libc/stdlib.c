@@ -55,23 +55,15 @@ void *malloc(size_t size) {
 
     size = ALIGN8(size);
 
-    // Best-fit search
-    BlockMeta *best = NULL;
+    // First-fit search (faster than best-fit for large heaps)
     BlockMeta *current = heap_head;
     while (current) {
         if (current->free && current->size >= size) {
-            if (!best || current->size < best->size) {
-                best = current;
-                if (best->size == size) break; // Perfect fit
-            }
+            split_block(current, size);
+            current->free = 0;
+            return (current + 1);
         }
         current = current->next;
-    }
-
-    if (best) {
-        split_block(best, size);
-        best->free = 0;
-        return (best + 1);
     }
 
     // No suitable block found, request more space
