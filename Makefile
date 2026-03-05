@@ -113,9 +113,10 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 	
 	# Copy README and WAD
 	@if [ -f README.md ]; then cp README.md $(ISO_DIR)/; fi
-	@if [ -f doom1.wad ]; then \
-		cp doom1.wad $(ISO_DIR)/; \
-		echo "    module_path: boot():/doom1.wad" >> $(ISO_DIR)/limine.conf; \
+	@if [ -f $(SRC_DIR)/userland/doom/doom1.wad ]; then \
+		mkdir -p $(ISO_DIR)/Library/DOOM; \
+		cp $(SRC_DIR)/userland/doom/doom1.wad $(ISO_DIR)/Library/DOOM/; \
+		echo "    module_path: boot():/Library/DOOM/doom1.wad" >> $(ISO_DIR)/limine.conf; \
 	fi
 	
 	# Copy Wallpapers

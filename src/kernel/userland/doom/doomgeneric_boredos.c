@@ -121,7 +121,7 @@ int DG_GetKey(int* pressed, unsigned char* key) {
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
-    char* fake_argv[] = {"doom", "-iwad", "A:/doom1.wad"};
+    char* fake_argv[] = {"doom", "-iwad", "A:/Library/DOOM/doom1.wad"};
     doomgeneric_Create(3, fake_argv);
 
     while (1) {

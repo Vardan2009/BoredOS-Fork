@@ -156,6 +156,7 @@ void kmain(void) {
     fat32_mkdir("/Library/images");
     fat32_mkdir("/Library/images/Wallpapers");
     fat32_mkdir("/Library/Fonts");
+    fat32_mkdir("/Library/DOOM");
 
     if (module_request.response == NULL) {
         serial_write("[DEBUG] ERROR: Limine Module Response is NULL!\n");
