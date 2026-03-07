@@ -20,6 +20,7 @@
 #define GUI_CMD_GET_STRING_WIDTH_SCALED 12
 #define GUI_CMD_GET_FONT_HEIGHT_SCALED 13
 #define GUI_CMD_WINDOW_SET_TITLE 15
+#define GUI_CMD_SET_FONT         16
 
 // Event Types
 #define GUI_EVENT_NONE        0
@@ -64,5 +65,6 @@ uint32_t ui_get_string_width_scaled(const char *str, float scale);
 uint32_t ui_get_font_height_scaled(float scale);
 void ui_window_set_title(ui_window_t win, const char *title);
 void ui_window_set_resizable(ui_window_t win, bool resizable);
+void ui_set_font(ui_window_t win, const char *path);
 
 #endif

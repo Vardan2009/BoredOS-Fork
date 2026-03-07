@@ -226,9 +226,9 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             win->visible = true;
             win->focused = true;
             win->z_index = 0;
-            win->buf_len = 0;
-            win->buffer[0] = 0;
+            win->cursor_pos = 0;
             win->data = proc;
+            win->font = NULL;
             
             serial_write("Kernel: Dims initialized.\n");
             
@@ -360,14 +360,40 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                 uint64_t rflags;
                 asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
                 
+                ttf_font_t *font = win->font ? (ttf_font_t*)win->font : graphics_get_current_ttf();
+
                 if (win->pixels) {
                     if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
                         graphics_set_render_target(win->pixels, win->w, win->h - 20);
-                        draw_string(ux, uy, kernel_str, color);
+                        if (font) {
+                            int baseline = uy + font_manager_get_font_ascent_scaled(font, font->pixel_height) - 2;
+                            int cur_x = ux;
+                            const char *s = kernel_str;
+                            while (*s) {
+                                font_manager_render_char_scaled(font, cur_x, baseline, *s, color, font->pixel_height, put_pixel);
+                                char buf[2] = {*s, 0};
+                                cur_x += font_manager_get_string_width_scaled(font, buf, font->pixel_height);
+                                s++;
+                            }
+                        } else {
+                            draw_string(ux, uy, kernel_str, color);
+                        }
                         graphics_set_render_target(NULL, 0, 0);
                     }
                 } else {
-                    draw_string(win->x + ux, win->y + uy, kernel_str, color);
+                    if (font) {
+                        int baseline = win->y + uy + font_manager_get_font_ascent_scaled(font, font->pixel_height) - 2;
+                        int cur_x = win->x + ux;
+                        const char *s = kernel_str;
+                        while (*s) {
+                            font_manager_render_char_scaled(font, cur_x, baseline, *s, color, font->pixel_height, put_pixel);
+                            char buf[2] = {*s, 0};
+                            cur_x += font_manager_get_string_width_scaled(font, buf, font->pixel_height);
+                            s++;
+                        }
+                    } else {
+                        draw_string(win->x + ux, win->y + uy, kernel_str, color);
+                    }
                 }
                 
                 asm volatile("push %0; popfq" : : "r"(rflags));
@@ -434,14 +460,40 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                 uint64_t rflags;
                 asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
                 
+                ttf_font_t *font = win->font ? (ttf_font_t*)win->font : graphics_get_current_ttf();
+
                 if (win->pixels) {
                     if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
                         graphics_set_render_target(win->pixels, win->w, win->h - 20);
-                        draw_string_scaled(ux, uy, kernel_str, color, scale);
+                        if (font) {
+                            int baseline = uy + font_manager_get_font_ascent_scaled(font, scale) - 2;
+                            int cur_x = ux;
+                            const char *s = kernel_str;
+                            while (*s) {
+                                font_manager_render_char_scaled(font, cur_x, baseline, *s, color, scale, put_pixel);
+                                char buf[2] = {*s, 0};
+                                cur_x += font_manager_get_string_width_scaled(font, buf, scale);
+                                s++;
+                            }
+                        } else {
+                            draw_string_scaled(ux, uy, kernel_str, color, scale);
+                        }
                         graphics_set_render_target(NULL, 0, 0);
                     }
                 } else {
-                    draw_string_scaled(win->x + ux, win->y + uy, kernel_str, color, scale);
+                    if (font) {
+                        int baseline = win->y + uy + font_manager_get_font_ascent_scaled(font, scale) - 2;
+                        int cur_x = win->x + ux;
+                        const char *s = kernel_str;
+                        while (*s) {
+                            font_manager_render_char_scaled(font, cur_x, baseline, *s, color, scale, put_pixel);
+                            char buf[2] = {*s, 0};
+                            cur_x += font_manager_get_string_width_scaled(font, buf, scale);
+                            s++;
+                        }
+                    } else {
+                        draw_string_scaled(win->x + ux, win->y + uy, kernel_str, color, scale);
+                    }
                 }
                 
                 asm volatile("push %0; popfq" : : "r"(rflags));
@@ -517,9 +569,9 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             }
             kernel_str[i] = 0;
             
-            ttf_font_t *font = graphics_get_current_ttf();
+            ttf_font_t *font = (proc->ui_window && ((Window*)proc->ui_window)->font) ? (ttf_font_t*)((Window*)proc->ui_window)->font : graphics_get_current_ttf();
             if (font) {
-                return (uint64_t)font_manager_get_string_width(font, kernel_str);
+                return (uint64_t)font_manager_get_string_width_scaled(font, kernel_str, font->pixel_height);
             } else {
                 return (uint64_t)i * 8; // Fallback bitmap width
             }
@@ -539,10 +591,18 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
             kernel_str[i] = 0;
             
             extern int graphics_get_string_width_scaled(const char *s, float scale);
-            return (uint64_t)graphics_get_string_width_scaled(kernel_str, scale);
+            ttf_font_t *font = (proc->ui_window && ((Window*)proc->ui_window)->font) ? (ttf_font_t*)((Window*)proc->ui_window)->font : graphics_get_current_ttf();
+            if (font) {
+                return (uint64_t)font_manager_get_string_width_scaled(font, kernel_str, scale);
+            } else {
+                return (uint64_t)i * 8; // Fallback
+            }
         } else if (cmd == GUI_CMD_GET_FONT_HEIGHT) {
-            extern int graphics_get_font_height(void);
-            return (uint64_t)graphics_get_font_height();
+            ttf_font_t *font = (proc->ui_window && ((Window*)proc->ui_window)->font) ? (ttf_font_t*)((Window*)proc->ui_window)->font : graphics_get_current_ttf();
+            if (font) {
+                return (uint64_t)font_manager_get_font_height_scaled(font, font->pixel_height);
+            }
+            return 10;
 
         } else if (cmd == 14) { // GUI_CMD_WINDOW_SET_RESIZABLE
             Window *win = (Window *)arg2;
@@ -556,8 +616,11 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
         } else if (cmd == 13) { // GUI_CMD_GET_FONT_HEIGHT_SCALED
             uint32_t scale_bits = (uint32_t)arg2;
             float scale = *(float*)&scale_bits;
-            extern int graphics_get_font_height_scaled(float scale);
-            return (uint64_t)graphics_get_font_height_scaled(scale);
+            ttf_font_t *font = (proc->ui_window && ((Window*)proc->ui_window)->font) ? (ttf_font_t*)((Window*)proc->ui_window)->font : graphics_get_current_ttf();
+            if (font) {
+                return (uint64_t)font_manager_get_font_height_scaled(font, scale);
+            }
+            return 10;
         } else if (cmd == 15) { // GUI_CMD_WINDOW_SET_TITLE
             Window *win = (Window *)arg2;
             const char *user_title = (const char *)arg3;
@@ -578,6 +641,24 @@ static uint64_t syscall_handler_inner(uint64_t syscall_num, uint64_t arg1, uint6
                     win->title = kernel_title;
                     wm_mark_dirty(win->x, win->y - 20, win->w, 20); // Mark title bar dirty
                     wm_refresh();
+                }
+            }
+            return 0;
+        } else if (cmd == 16) { // GUI_CMD_SET_FONT
+            Window *win = (Window *)arg2;
+            const char *user_path = (const char *)arg3;
+            if (win && user_path) {
+                char kernel_path[256];
+                int i = 0;
+                while (i < 255 && user_path[i]) {
+                    kernel_path[i] = user_path[i];
+                    i++;
+                }
+                kernel_path[i] = 0;
+                
+                ttf_font_t *new_font = font_manager_load(kernel_path, 15.0f);
+                if (new_font) {
+                    win->font = new_font;
                 }
             }
             return 0;

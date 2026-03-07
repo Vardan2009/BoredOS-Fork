@@ -83,3 +83,7 @@ void ui_window_set_title(ui_window_t win, const char *title) {
 void ui_window_set_resizable(ui_window_t win, bool resizable) {
     syscall3(SYS_GUI, GUI_CMD_WINDOW_SET_RESIZABLE, (uint64_t)win, resizable ? 1 : 0);
 }
+
+void ui_set_font(ui_window_t win, const char *path) {
+    syscall3(SYS_GUI, GUI_CMD_SET_FONT, (uint64_t)win, (uint64_t)path);
+}

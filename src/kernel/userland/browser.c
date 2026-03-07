@@ -1306,6 +1306,7 @@ static void net_init_if_needed(void) {
 int main(int argc, char **argv) {
     win_browser = ui_window_create("Bored Web", 50, 50, win_w, win_h);
     ui_window_set_resizable(win_browser, true);
+    ui_set_font(win_browser, "/Library/Fonts/times.ttf");
     net_init_if_needed();
     if (argc > 1) { int k=0; while(argv[1][k]) { url_input_buffer[k] = argv[1][k]; k++; } url_input_buffer[k] = 0; url_cursor = k; }
     navigate(url_input_buffer);

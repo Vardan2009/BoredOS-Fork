@@ -52,6 +52,7 @@ struct Window {
     void *data;   
     uint32_t *pixels; 
     uint32_t *comp_pixels; 
+    void *font;
     
     // Callbacks
     void (*paint)(Window *win);
