@@ -107,7 +107,7 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 	fi
 	
 	mkdir -p $(ISO_DIR)/Library/images/Wallpapers
-	@for f in $(SRC_DIR)/images/wallpapers/*.jpg; do \
+	@for f in $(SRC_DIR)/images/wallpapers/*; do \
 		if [ -f "$$f" ]; then \
 			basename=$$(basename "$$f"); \
 			cp "$$f" $(ISO_DIR)/Library/images/Wallpapers/; \
