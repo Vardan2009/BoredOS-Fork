@@ -2,8 +2,9 @@
 // This software is released under the GNU General Public License v3.0. See LICENSE file for details.
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "syscall.h"
-#include "libui.h"
-#include <stddef.h>
+#include "libc/libui.h"
+#include "libc/stdlib.h"
+#include <stdbool.h>
 
 static uint32_t ansi_to_boredos_color(int code) {
     uint32_t default_color = 0xFFFFFFFF;
@@ -121,7 +122,7 @@ int main(void) {
             }
         } else {
             // Avoid high CPU usage
-            for(volatile int i=0; i<10000; i++);
+            sleep(10);
         }
     }
     

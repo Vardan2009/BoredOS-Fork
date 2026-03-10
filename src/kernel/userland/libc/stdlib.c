@@ -292,8 +292,7 @@ char* getcwd(char *buf, int size) {
 }
 
 void sleep(int ms) {
-
-    (void)ms;
+    sys_system(46, ms, 0, 0, 0);
 }
 
 void exit(int status) {

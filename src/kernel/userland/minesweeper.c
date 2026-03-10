@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "libc/stdlib.h"
 
 #define COLOR_DARK_BG       0xFF121212
 #define COLOR_DARK_PANEL    0xFF202020

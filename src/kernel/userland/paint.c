@@ -247,6 +247,8 @@ int main(int argc, char **argv) {
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }
+        } else {
+            sleep(10);
         }
     }
     return 0;

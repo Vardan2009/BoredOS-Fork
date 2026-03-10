@@ -68,6 +68,9 @@
 #define SYSTEM_CMD_DNS_LOOKUP 37
 #define SYSTEM_CMD_SET_DNS 38
 #define SYSTEM_CMD_NET_UNLOCK 39
+#define SYSTEM_CMD_PROCESS_LIST 44
+#define SYSTEM_CMD_GET_CPU_MODEL 45
+#define SYSTEM_CMD_SLEEP 46
 #define SYSTEM_CMD_SET_RAW_MODE 41
 #define SYSTEM_CMD_TCP_RECV_NB 42
 #define SYSTEM_CMD_YIELD 43
@@ -112,6 +115,13 @@ typedef struct {
 
 int sys_list(const char *path, FAT32_FileInfo *entries, int max_entries);
 int sys_get_file_info(const char *path, FAT32_FileInfo *info);
+
+typedef struct {
+    uint32_t pid;
+    char name[64];
+    uint64_t ticks;
+    size_t used_memory;
+} ProcessInfo;
 
 // Network API
 typedef struct { uint8_t bytes[6]; } net_mac_address_t;

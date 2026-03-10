@@ -256,7 +256,7 @@ int main(void) {
         } else {
             long long now = sys_system(16, 0, 0, 0, 0);
             if (now - last_rep >= 6) { clock_paint(); ui_mark_dirty(win_clock, 0, 0, WIN_W, WIN_H); last_rep = now; }
-            for(volatile int i=0; i<5000; i++);
+            sleep(10);
         }
     }
     return 0;

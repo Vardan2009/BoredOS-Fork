@@ -409,6 +409,8 @@ static void draw_dock_terminal(int x, int y);
 static void draw_dock_minesweeper(int x, int y);
 static void draw_dock_paint(int x, int y);
 static void draw_dock_clock(int x, int y);
+static void draw_dock_taskman(int x, int y);
+static void draw_dock_editor(int x, int y);
 static void draw_dock_editor(int x, int y);
 static void draw_filled_circle(int cx, int cy, int r, uint32_t color);
 
@@ -792,6 +794,22 @@ void draw_recycle_bin_icon(int x, int y, const char *label) {
 
 void draw_paint_icon(int x, int y, const char *label) {
     draw_scaled_icon(x, y, draw_dock_paint);
+    draw_icon_label(x, y, label);
+}
+
+static void draw_dock_taskman(int x, int y) {
+    draw_rounded_rect_filled(x, y, 48, 48, 12, 0xFF37474F); // Dark blue-grey
+    draw_rounded_rect_filled(x+4, y+4, 40, 40, 8, 0xFF455A64);
+    
+    // Draw "Activity" lines
+    draw_rect(x+8, y+24, 6, 12, 0xFF4FC3F7); // Light blue bar
+    draw_rect(x+16, y+16, 6, 20, 0xFF81C784); // Green bar
+    draw_rect(x+24, y+20, 6, 16, 0xFFFFB74D); // Orange bar
+    draw_rect(x+32, y+10, 6, 26, 0xFFE57373); // Red bar
+}
+
+void draw_taskman_icon(int x, int y, const char *label) {
+    draw_scaled_icon(x, y, draw_dock_taskman);
     draw_icon_label(x, y, label);
 }
 
@@ -1299,7 +1317,7 @@ void wm_paint(void) {
     int dock_y = sh - dock_h - 6;   
     int dock_item_size = 48;
     int dock_spacing = 10;
-    int total_dock_width = 9 * (dock_item_size + dock_spacing);
+    int total_dock_width = 10 * (dock_item_size + dock_spacing);
     int dock_bg_x = (sw - total_dock_width) / 2 - 12;   
     int dock_bg_w = total_dock_width + 24;
     draw_rounded_rect_filled(dock_bg_x, dock_y, dock_bg_w, dock_h, 18, COLOR_DOCK_BG);
@@ -1322,6 +1340,8 @@ void wm_paint(void) {
     draw_dock_paint(dock_x, dock_item_y);
     dock_x += dock_item_size + dock_spacing;
     draw_dock_browser(dock_x, dock_item_y);
+    dock_x += dock_item_size + dock_spacing;
+    draw_dock_taskman(dock_x, dock_item_y);
     dock_x += dock_item_size + dock_spacing;
     draw_dock_clock(dock_x, dock_item_y);
     // Editor removed from dock
@@ -1867,7 +1887,7 @@ void wm_handle_right_click(int x, int y) {
         int dock_y = sh - dock_h - 6;  
         int dock_item_size = 48;
         int dock_spacing = 10;
-        int total_dock_width = 9 * (dock_item_size + dock_spacing);
+        int total_dock_width = 10 * (dock_item_size + dock_spacing);
         int dock_bg_x = (sw - total_dock_width) / 2 - 12;
         int dock_bg_w = total_dock_width + 24;
         
@@ -1886,7 +1906,8 @@ void wm_handle_right_click(int x, int y) {
                 else if (item == 5) start_menu_pending_app = "Minesweeper";
                 else if (item == 6) start_menu_pending_app = "Paint";
                 else if (item == 7) start_menu_pending_app = "Browser";
-                else if (item == 8) start_menu_pending_app = "Clock";
+                else if (item == 8) start_menu_pending_app = "Task Manager";
+                else if (item == 9) start_menu_pending_app = "Clock";
             }
         } else {
             wm_handle_click(mx, my);
@@ -2040,6 +2061,10 @@ void wm_handle_right_click(int x, int y) {
                 else process_create_elf("/bin/browser.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "About")) {
                 process_create_elf("/bin/about.elf", NULL);
+            } else if (str_starts_with(start_menu_pending_app, "Task Manager")) {
+                Window *existing = wm_find_window_by_title("Task Manager");
+                if (existing) wm_bring_to_front(existing);
+                else process_create_elf("/bin/taskman.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Shutdown")) {
                 k_shutdown();
             } else if (str_starts_with(start_menu_pending_app, "Restart")) {

@@ -51,3 +51,21 @@ uint64_t v2p(uint64_t virt) {
     }
     return virt;
 }
+void platform_get_cpu_model(char *model) {
+    uint32_t brand[12];
+    uint32_t eax, ebx, ecx, edx;
+
+    for (uint32_t i = 0; i < 3; i++) {
+        asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0x80000002 + i));
+        brand[i * 4 + 0] = eax;
+        brand[i * 4 + 1] = ebx;
+        brand[i * 4 + 2] = ecx;
+        brand[i * 4 + 3] = edx;
+    }
+    
+    char *p = (char *)brand;
+    for (int i = 0; i < 48; i++) {
+        model[i] = p[i];
+    }
+    model[48] = '\0';
+}

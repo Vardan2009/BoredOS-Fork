@@ -14,11 +14,11 @@ extern void serial_print_hex(uint64_t n);
 volatile uint64_t kernel_ticks = 0;
 
 uint64_t timer_handler(registers_t *regs) {
-    outb(0x20, 0x20); // EOI as fast as possible
     kernel_ticks++;
     wm_timer_tick();
     network_process_frames();
     
+    outb(0x20, 0x20); // EOI after processing to prevent nested timer interrupts
     extern uint64_t process_schedule(uint64_t current_rsp);
     return process_schedule((uint64_t)regs);
 }

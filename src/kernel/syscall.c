@@ -811,6 +811,7 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
         return old_end;
     } else if (syscall_num == 5) { // SYS_SYSTEM
         int cmd = (int)arg1;
+        process_t *proc = process_get_current();
         if (cmd == 1) { // SYSTEM_CMD_SET_BG_COLOR
             uint32_t color = (uint32_t)arg2;
             extern void graphics_set_bg_color(uint32_t color);
@@ -1068,6 +1069,51 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
             size_t max_len = (size_t)arg3;
             extern int network_tcp_recv_nb(void *buf, size_t max_len);
             return (uint64_t)network_tcp_recv_nb(buf, max_len);
+        } else if (cmd == SYSTEM_CMD_PROCESS_LIST) {
+            ProcessInfo *out = (ProcessInfo *)arg2;
+            int max_procs = (int)arg3;
+            if (!out) return 0;
+            
+            extern process_t processes[];
+            extern int process_count;
+            int count = 0;
+            for (int i = 0; i < 16; i++) { // MAX_PROCESSES is 16
+                if (processes[i].pid != 0xFFFFFFFF) {
+                    out[count].pid = processes[i].pid;
+                    extern void mem_memcpy(void *dest, const void *src, size_t len);
+                    mem_memcpy(out[count].name, processes[i].name, 64);
+                    out[count].ticks = processes[i].ticks;
+                    
+                    // Memory estimation: heap + stacks
+                    size_t mem = 0;
+                    if (processes[i].heap_end > processes[i].heap_start)
+                        mem += (processes[i].heap_end - processes[i].heap_start);
+                    
+                    if (processes[i].pid == 0) {
+                        // For kernel, we can report a more realistic figure if we want, 
+                        // but 32KB is specifically its stack. Let's keep it but maybe 
+                        // add a note in documentation.
+                        mem = 32768; 
+                    } else {
+                        if (processes[i].is_user) mem += 262144; // User stack
+                        mem += 32768; // Kernel stack
+                    }
+                    
+                    out[count].used_memory = mem;
+                    
+                    count++;
+                    if (count >= max_procs) break;
+                }
+            }
+            return (uint64_t)count;
+        } else if (cmd == SYSTEM_CMD_GET_CPU_MODEL) {
+            char *user_buf = (char *)arg2;
+            if (!user_buf) return -1;
+            char model[64];
+            platform_get_cpu_model(model);
+            extern void mem_memcpy(void *dest, const void *src, size_t len);
+            mem_memcpy(user_buf, model, 49);
+            return 0;
         }
         return -1;
     }
@@ -1079,12 +1125,43 @@ uint64_t syscall_handler_c(registers_t *regs) {
     uint64_t syscall_num = regs->rax;
     
     // Check for context-switching syscalls
-    if (syscall_num == 0 || syscall_num == 60 || syscall_num == 10) { // EXIT or KILL
+    if (syscall_num == 0 || syscall_num == 60) { // EXIT
         return process_terminate_current();
+    }
+    
+    if (syscall_num == 10) { // KILL
+        uint32_t target_pid = (uint32_t)regs->rdi;
+        process_t *current = process_get_current();
+        if (target_pid == 0) {
+            // Protect kernel process
+            regs->rax = -1;
+            return (uint64_t)regs;
+        }
+        if (target_pid == 0xFFFFFFFF || target_pid == current->pid) {
+            return process_terminate_current();
+        } else {
+            process_t *target = process_get_by_pid(target_pid);
+            if (target) {
+                process_terminate(target);
+            }
+            regs->rax = 0;
+            return (uint64_t)regs;
+        }
     }
     
     if (syscall_num == 5 && regs->rdi == 43) { // SYSTEM_CMD_YIELD
         extern uint64_t process_schedule(uint64_t current_rsp);
+        regs->rax = 0;
+        return process_schedule((uint64_t)regs);
+    }
+    
+    if (syscall_num == 5 && regs->rdi == 46) { // SYSTEM_CMD_SLEEP
+        uint32_t ms = (uint32_t)regs->rsi;
+        process_t *proc = process_get_current();
+        extern uint32_t wm_get_ticks(void);
+        uint32_t ticks = ms / 16;
+        if (ticks == 0 && ms > 0) ticks = 1;
+        proc->sleep_until = wm_get_ticks() + ticks;
         regs->rax = 0;
         return process_schedule((uint64_t)regs);
     }

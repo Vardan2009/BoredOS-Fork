@@ -4,6 +4,7 @@
 #include "syscall.h"
 #include "libui.h"
 #include <stdbool.h>
+#include "stdlib.h"
 
 #define SCALE 1000000LL
 
@@ -254,8 +255,7 @@ int main(void) {
                 sys_exit(0);
             }
         } else {
-            // Avoid high CPU usage
-            for(volatile int i=0; i<10000; i++);
+            sleep(10);
         }
     }
     

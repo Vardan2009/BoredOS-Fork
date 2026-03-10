@@ -3,6 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "libc/syscall.h"
 #include "libc/libui.h"
+#include "libc/stdlib.h"
 #include "libc/syscall_user.h"
 #include <stddef.h>
 
@@ -257,8 +258,7 @@ int main(int argc, char **argv) {
                 sys_exit(0);
             }
         } else {
-
-            for(volatile int i=0; i<10000; i++); 
+            sleep(10);
         }
     }
 

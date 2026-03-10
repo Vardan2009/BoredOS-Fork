@@ -138,8 +138,7 @@ int main(void) {
                             goto exit_app;
                         }
                     }
-                    // No explicit sleep, rendering takes some time and provides natural visual delay.
-                    // If it's too fast, we'll add sleep(1) here later.
+                    sleep(2);
                 }
             }
 
@@ -168,13 +167,14 @@ int main(void) {
                             goto exit_app;
                         }
                     }
+                    sleep(2);
                 }
             }
             start = start + 1;
         } else {
             // Sort is done, just render and idle
             render_state(win);
-            sleep(50);
+            sleep(200);
         }
     }
 

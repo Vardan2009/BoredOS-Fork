@@ -15,12 +15,16 @@ extern void cmd_write(const char *str);
 extern void serial_write(const char *str);
 
 #define MAX_PROCESSES 16
-static process_t processes[MAX_PROCESSES] __attribute__((aligned(16)));
-static int process_count = 0;
+process_t processes[MAX_PROCESSES] __attribute__((aligned(16)));
+int process_count = 0;
 static process_t* current_process = NULL;
 static uint32_t next_pid = 0;
 
 void process_init(void) {
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        processes[i].pid = 0xFFFFFFFF;
+    }
+
     // Current kernel execution is PID 0
     process_t *kernel_proc = &processes[process_count++];
     kernel_proc->pid = next_pid++;
@@ -36,6 +40,10 @@ void process_init(void) {
 
     for (int i = 0; i < MAX_PROCESS_FDS; i++) kernel_proc->fds[i] = NULL;
     
+    extern void mem_memcpy(void *dest, const void *src, size_t len);
+    mem_memcpy(kernel_proc->name, "kernel", 7);
+    kernel_proc->ticks = 0;
+
     kernel_proc->next = kernel_proc; // Circular linked list
     current_process = kernel_proc;
 }
@@ -121,9 +129,12 @@ void process_create(void* entry_point, bool is_user) {
     asm volatile("fninit");
     new_proc->fpu_initialized = true;
     
-    // Add to linked list
+    // Add to linked list (Critical Section)
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
     new_proc->next = current_process->next;
     current_process->next = new_proc;
+    asm volatile("push %0; popfq" : : "r"(rflags));
 }
 
 process_t* process_create_elf(const char* filepath, const char* args_str) {
@@ -165,11 +176,23 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
         return NULL;
     }
 
+    // Set process name from filepath
+    int last_slash = -1;
+    for (int i = 0; filepath[i]; i++) if (filepath[i] == '/') last_slash = i;
+    const char *filename = (last_slash == -1) ? filepath : (filepath + last_slash + 1);
+    int ni = 0;
+    while (filename[ni] && ni < 63) {
+        new_proc->name[ni] = filename[ni];
+        ni++;
+    }
+    new_proc->name[ni] = 0;
+    new_proc->ticks = 0;
+
     // 3. Allocate generic User stack and Kernel stack for interrupts
     // Increase to 256KB to prevent stack smashing on heavy networking
     size_t user_stack_size = 262144;
     void* stack = kmalloc_aligned(user_stack_size, 4096);
-    void* kernel_stack = kmalloc_aligned(32768, 32768); 
+    void* kernel_stack = kmalloc_aligned(65536, 65536); 
     
     // Map User stack to 0x800000
     for (uint64_t i = 0; i < (user_stack_size / 4096); i++) {
@@ -248,7 +271,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     current_user_sp &= ~15ULL;
 
     // 4. Build Stack Frame for context switch via IRETQ
-    uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 32768);
+    uint64_t* stack_ptr = (uint64_t*)((uint64_t)kernel_stack + 65536);
     *(--stack_ptr) = 0x1B;            // SS (User Mode Data)
     *(--stack_ptr) = current_user_sp; // RSP (Updated user stack pointer)
     *(--stack_ptr) = 0x202;           // RFLAGS (Interrupts Enabled)
@@ -279,7 +302,7 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     asm volatile("fninit");
     asm volatile("fxsave %0" : "=m"(*stack_ptr));
 
-    new_proc->kernel_stack = (uint64_t)kernel_stack + 32768;
+    new_proc->kernel_stack = (uint64_t)kernel_stack + 65536;
     new_proc->kernel_stack_alloc = kernel_stack;
     new_proc->user_stack_alloc = stack;
     new_proc->rsp = (uint64_t)stack_ptr;
@@ -288,11 +311,12 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     asm volatile("fninit");
     new_proc->fpu_initialized = true;
 
-    // Slot is already counted in process_count if new, or reused.
-
-    // Add to linked list
+    // Add to linked list (Critical Section)
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
     new_proc->next = current_process->next;
     current_process->next = new_proc;
+    asm volatile("push %0; popfq" : : "r"(rflags));
     
     serial_write("[PROCESS] Spawned ELF Executable: ");
     serial_write(filepath);
@@ -308,13 +332,24 @@ uint64_t process_schedule(uint64_t current_rsp) {
     if (!current_process || !current_process->next || current_process == current_process->next) 
         return current_rsp;
         
-    // serial_write("SCHED\n");
-
-    // Save/Restore context
+    // Save context
     current_process->rsp = current_rsp;
 
-    // Switch process
-    current_process = current_process->next;
+    // Switch to next ready process
+    extern uint32_t wm_get_ticks(void);
+    uint32_t now = wm_get_ticks();
+    
+    process_t *start = current_process;
+    process_t *next_proc = current_process->next;
+    
+    while (next_proc != start) {
+        if (next_proc->pid == 0 || next_proc->sleep_until == 0 || next_proc->sleep_until <= now) {
+            break;
+        }
+        next_proc = next_proc->next;
+    }
+    
+    current_process = next_proc;
     
     // Update Kernel Stack for User Mode interrupts and System Calls
     if (current_process->is_user && current_process->kernel_stack) {
@@ -326,7 +361,16 @@ uint64_t process_schedule(uint64_t current_rsp) {
     // Switch page table
     paging_switch_directory(current_process->pml4_phys);
     
+    current_process->ticks++;
+
     return current_process->rsp;
+}
+
+process_t* process_get_by_pid(uint32_t pid) {
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        if (processes[i].pid == pid) return &processes[i];
+    }
+    return NULL;
 }
 
 static void process_cleanup_inner(process_t *proc) {
@@ -356,7 +400,7 @@ static void process_cleanup_inner(process_t *proc) {
 }
 
 void process_terminate(process_t *to_delete) {
-    if (!to_delete || to_delete->pid == 0xFFFFFFFF) return;
+    if (!to_delete || to_delete->pid == 0xFFFFFFFF || to_delete->pid == 0) return;
 
     uint64_t rflags;
     asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
@@ -389,8 +433,9 @@ void process_terminate(process_t *to_delete) {
     to_delete->pid = 0xFFFFFFFF; 
 
     if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
+    if (to_delete->kernel_stack_alloc) kfree(to_delete->kernel_stack_alloc);
     to_delete->user_stack_alloc = NULL;
-    to_delete->kernel_stack_alloc = NULL; 
+    to_delete->kernel_stack_alloc = NULL;
 
     asm volatile("push %0; popfq" : : "r"(rflags));
 }
@@ -399,7 +444,7 @@ uint64_t process_terminate_current(void) {
     uint64_t rflags;
     asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
 
-    if (!current_process) {
+    if (!current_process || current_process->pid == 0) {
         asm volatile("push %0; popfq" : : "r"(rflags));
         return 0;
     }

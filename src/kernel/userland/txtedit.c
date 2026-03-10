@@ -3,6 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "libc/syscall.h"
 #include "libc/libui.h"
+#include "libc/stdlib.h"
 #include <stddef.h>
 
 #define COLOR_DARK_PANEL  0xFF202020
@@ -426,6 +427,8 @@ int main(int argc, char **argv) {
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }
+        } else {
+            sleep(10);
         }
     }
     return 0;

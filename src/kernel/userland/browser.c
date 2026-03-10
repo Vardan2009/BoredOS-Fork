@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include "libc/stdlib.h"
 
 static int win_w = 1280;
 static int win_h = 960;
@@ -1734,9 +1734,9 @@ int main(int argc, char **argv) {
         }
         if (gif_updated) {
             browser_paint(); ui_mark_dirty(win_browser, 0, 0, win_w, win_h);
+        } else {
+            sleep(10);
         }
-
-        for(volatile int x=0; x<10000; x++);
     }
     return 0;
 }

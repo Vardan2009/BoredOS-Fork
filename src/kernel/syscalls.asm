@@ -15,7 +15,9 @@ section .text
 ; R9  = arg5
 
 syscall_entry:
-    ; 1. Switch to Kernel Stack
+    ; 1. Switch to Kernel Stack safely
+    ; Note: For true SMP safety, we need per-CPU storage (via swapgs).
+    ; For now, we use a global scratch which is only safe because we mask interrupts on entry.
     mov [rel user_rsp_scratch], rsp
     mov rsp, [rel kernel_syscall_stack]
 
@@ -52,9 +54,7 @@ syscall_entry:
 
     ; 4. Call C handler with registers_t*
     mov rdi, rsp
-    sti
     call syscall_handler_c
-    cli
 
     ; 5. Switch to the resulting RSP (might be different if task switched)
     mov rsp, rax
@@ -80,6 +80,11 @@ syscall_entry:
     pop rbx
     pop rax
     add rsp, 16 ; drop int_no/err_code
+    
+    ; Debug: check RIP before iretq
+    ; We can't easily print from here without destroying registers, 
+    ; but we can at least check if it's canonical.
+    
     iretq
 
 section .bss
