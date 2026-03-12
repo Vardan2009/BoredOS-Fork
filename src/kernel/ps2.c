@@ -25,7 +25,7 @@ uint64_t timer_handler(registers_t *regs) {
 
 // --- Keyboard ---
 static bool shift_pressed = false;
-static bool ctrl_pressed = false;
+bool ps2_ctrl_pressed = false;
 static bool extended_scancode = false;
 
 static char scancode_map[128] = {
@@ -54,14 +54,14 @@ uint64_t keyboard_handler(registers_t *regs) {
     }
 
     if (scancode == 0x1D) {
-        ctrl_pressed = true;
+        ps2_ctrl_pressed = true;
         extended_scancode = false; // Reset if Ctrl is pressed (prevents E0 1D bug)
     } else if (scancode == 0x9D) {
-        ctrl_pressed = false;
+        ps2_ctrl_pressed = false;
         extended_scancode = false;
     }
 
-    if (ctrl_pressed && scancode == 0x2E) {
+    if (ps2_ctrl_pressed && scancode == 0x2E) {
         extern process_t* process_get_current(void);
         process_t* proc = process_get_current();
         if (proc && proc->is_user && proc->is_terminal_proc && proc->ui_window) {

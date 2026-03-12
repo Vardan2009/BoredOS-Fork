@@ -583,6 +583,24 @@ void graphics_flip_buffer(void) {
     }
 }
 
+void graphics_copy_screenbuffer(uint32_t *dest) {
+    if (!g_fb || !dest) return;
+    
+    uint64_t rflags;
+    asm volatile("pushfq; pop %0; cli" : "=r"(rflags));
+    int sw = g_fb->width;
+    int sh = g_fb->height;
+    
+    // Copy the internal back object to the dest directly
+    for (int y = 0; y < sh; y++) {
+        uint32_t *src_row = &g_back_buffer[y * sw];
+        for (int x = 0; x < sw; x++) {
+            dest[y * sw + x] = src_row[x];
+        }
+    }
+    asm volatile("push %0; popfq" : : "r"(rflags));
+}
+
 void graphics_set_clipping(int x, int y, int w, int h) {
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }

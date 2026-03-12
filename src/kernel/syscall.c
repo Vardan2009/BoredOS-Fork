@@ -680,6 +680,51 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 }
             }
             return 0;
+        } else if (cmd == GUI_CMD_GET_SCREEN_SIZE) {
+            uint64_t *out_w = (uint64_t *)arg2;
+            uint64_t *out_h = (uint64_t *)arg3;
+            if (out_w && out_h) {
+                extern int get_screen_width(void);
+                extern int get_screen_height(void);
+                *out_w = (uint64_t)get_screen_width();
+                *out_h = (uint64_t)get_screen_height();
+            }
+            return 0;
+        } else if (cmd == GUI_CMD_GET_SCREENBUFFER) {
+            uint32_t *dest = (uint32_t *)arg2;
+            if (dest) {
+                extern void graphics_copy_screenbuffer(uint32_t *dest);
+                graphics_copy_screenbuffer(dest);
+            }
+            return 0;
+        } else if (cmd == GUI_CMD_SHOW_NOTIFICATION) {
+            const char *user_msg = (const char *)arg2;
+            if (user_msg) {
+                char kernel_msg[256];
+                int i = 0;
+                while (i < 255 && user_msg[i]) {
+                    kernel_msg[i] = user_msg[i];
+                    i++;
+                }
+                kernel_msg[i] = 0;
+                extern void wm_show_notification(const char *msg);
+                wm_show_notification(kernel_msg);
+            }
+            return 0;
+        } else if (cmd == GUI_CMD_GET_DATETIME) {
+            uint64_t *out_arr = (uint64_t *)arg2;
+            if (out_arr) {
+                extern void rtc_get_datetime(int *year, int *month, int *day, int *hour, int *minute, int *second);
+                int y, m, d, h, min, s;
+                rtc_get_datetime(&y, &m, &d, &h, &min, &s);
+                out_arr[0] = y;
+                out_arr[1] = m;
+                out_arr[2] = d;
+                out_arr[3] = h;
+                out_arr[4] = min;
+                out_arr[5] = s;
+            }
+            return 0;
         }
     } else if (syscall_num == SYS_FS) {
         int cmd = (int)arg1;
@@ -1090,9 +1135,6 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                         mem += (processes[i].heap_end - processes[i].heap_start);
                     
                     if (processes[i].pid == 0) {
-                        // For kernel, we can report a more realistic figure if we want, 
-                        // but 32KB is specifically its stack. Let's keep it but maybe 
-                        // add a note in documentation.
                         mem = 32768; 
                     } else {
                         if (processes[i].is_user) mem += 262144; // User stack

@@ -818,6 +818,7 @@ static int realfs_write(FAT32_FileHandle *handle, const void *buffer, int size) 
              uint32_t old_val = *(uint32_t*)&fat_buf[fat_offset];
              *(uint32_t*)&fat_buf[fat_offset] = (old_val & 0xF0000000) | 0x0FFFFFF8;  // EOF
              vol->disk->write_sector(vol->disk, fat_sector, fat_buf);
+             if (vol->cached_fat_sector == fat_sector) vol->cached_fat_sector = 0xFFFFFFFF;
         }
         if (fat_buf) kfree(fat_buf);
         
@@ -894,6 +895,7 @@ static int realfs_write(FAT32_FileHandle *handle, const void *buffer, int size) 
                      uint32_t old_val = *(uint32_t*)&fat_buf[fat_offset];
                      *(uint32_t*)&fat_buf[fat_offset] = (old_val & 0xF0000000) | (new_cluster & 0x0FFFFFFF);
                      vol->disk->write_sector(vol->disk, fat_sector, fat_buf);
+                     if (vol->cached_fat_sector == fat_sector) vol->cached_fat_sector = 0xFFFFFFFF;
                 }
                 if (fat_buf) kfree(fat_buf);
                 
@@ -905,6 +907,7 @@ static int realfs_write(FAT32_FileHandle *handle, const void *buffer, int size) 
                      uint32_t old_val = *(uint32_t*)&fat_buf[fat_offset];
                      *(uint32_t*)&fat_buf[fat_offset] = (old_val & 0xF0000000) | 0x0FFFFFF8;  // EOF
                      vol->disk->write_sector(vol->disk, fat_sector, fat_buf);
+                     if (vol->cached_fat_sector == fat_sector) vol->cached_fat_sector = 0xFFFFFFFF;
                 }
                 if (fat_buf) kfree(fat_buf);
                 
@@ -1074,6 +1077,7 @@ static bool realfs_delete(char drive, const char *path) {
             if (vol->disk->read_sector(vol->disk, fat_sector, fat_buf) == 0) {
                 *(uint32_t*)&fat_buf[fat_offset] = 0; // Free
                 vol->disk->write_sector(vol->disk, fat_sector, fat_buf);
+                if (vol->cached_fat_sector == fat_sector) vol->cached_fat_sector = 0xFFFFFFFF;
             }
             kfree(fat_buf);
             
@@ -1449,6 +1453,7 @@ static bool realfs_mkdir(char drive, const char *path) {
                     uint32_t old_val = *(uint32_t*)&sect_buf[fat_offset];
                     *(uint32_t*)&sect_buf[fat_offset] = (old_val & 0xF0000000) | (expanded & 0x0FFFFFFF);
                     vol->disk->write_sector(vol->disk, fat_sector, sect_buf);
+                    if (vol->cached_fat_sector == fat_sector) vol->cached_fat_sector = 0xFFFFFFFF;
                 }
                 // Zero out new cluster
                 for(uint32_t k=0; k<cluster_size; k++) dir_cluster_buf[k] = 0;

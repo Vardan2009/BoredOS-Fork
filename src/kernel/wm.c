@@ -66,6 +66,13 @@ static char msg_box_text[64];
 // Hook definition
 void (*wm_custom_paint_hook)(void) = NULL;
 
+// Notification state
+static char notif_text[256] = {0};
+static int notif_timer = 0;
+static int notif_x_offset = 300; // Starts offscreen
+static bool notif_active = false;
+extern bool ps2_ctrl_pressed;
+
 // Dragging State
 static bool is_dragging = false;
 static bool is_resizing = false;
@@ -1411,7 +1418,18 @@ void wm_paint(void) {
         draw_string(mx + 15, my + 10, msg_box_title, COLOR_DARK_TEXT);
         draw_string(mx + 10, my + 40, msg_box_text, COLOR_DARK_TEXT);
         draw_rounded_rect_filled(mx + mw/2 - 30, my + 70, 60, 20, 4, COLOR_DARK_BORDER);
-        draw_string(mx + mw/2 - 18, my + 75, "OK", COLOR_DARK_TEXT);
+    }
+    
+    // Notification (dark mode)
+    if (notif_active) {
+        int nx = sw - 280 + notif_x_offset;
+        int ny = 40;
+        int nw = 260;
+        int nh = 50;
+        
+        draw_rounded_rect_filled(nx, ny, nw, nh, 8, COLOR_DARK_PANEL);
+        draw_string(nx + 15, ny + 10, "Screenshot", COLOR_DARK_TEXT);
+        draw_string(nx + 15, ny + 30, notif_text, COLOR_DKGRAY);
     }
     
     // Custom Overlay (VM Graphics)
@@ -2492,6 +2510,7 @@ static void wm_dispatch_key(char c, bool pressed) {
     
     if (!target) return;
     
+    
     if (target->handle_key) {
         target->handle_key(target, c, pressed);
     }
@@ -2500,7 +2519,26 @@ static void wm_dispatch_key(char c, bool pressed) {
     wm_mark_dirty(target->x, target->y, target->w, target->h);
 }
 
+void wm_show_notification(const char *msg) {
+    int i = 0;
+    while (msg[i] && i < 255) {
+        notif_text[i] = msg[i];
+        i++;
+    }
+    notif_text[i] = 0;
+    
+    notif_timer = 180; // ~3 seconds at 60Hz
+    notif_x_offset = 300;
+    notif_active = true;
+    force_redraw = true;
+}
+
 void wm_handle_key(char c, bool pressed) {
+    if (pressed && c == 'p' && ps2_ctrl_pressed) {
+        process_create_elf("/bin/screenshot.elf", NULL);
+        return;
+    }
+    
     int next = (key_head + 1) % INPUT_QUEUE_SIZE;
     if (next != key_tail) {
         key_queue[key_head].c = c;
@@ -2605,6 +2643,26 @@ void wm_timer_tick(void) {
         last_second = current_sec;
         int sw = get_screen_width();
         wm_mark_dirty(sw - 110, 6, 110, 24);
+    }
+    
+    if (notif_active) {
+        if (notif_timer > 0) {
+            notif_timer--;
+            // Slide in
+            if (notif_timer > 165 && notif_x_offset > 0) { // First 15 ticks (1/4 sec) slide in
+                notif_x_offset -= 20;
+                if (notif_x_offset < 0) notif_x_offset = 0;
+            }
+            // Slide out
+            else if (notif_timer < 15 && notif_x_offset < 300) { // Last 15 ticks slide out
+                notif_x_offset += 20;
+            }
+        } else {
+            notif_active = false;
+        }
+        
+        int sw = get_screen_width();
+        wm_mark_dirty(sw - 280, 40, 275, 60); 
     }
     
     if (force_redraw) {
