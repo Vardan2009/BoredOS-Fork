@@ -10,12 +10,13 @@
 #include "lwip/raw.h"
 #include "lwip/sys.h"
 #include "netif/ethernet.h"
-#include "e1000_netif.h"
+#include "nic_netif.h"
 #include "kutils.h"
 #include "pci.h"
 #include "e1000.h"
+#include "nic.h"
 
-static struct netif e1000_netif;
+static struct netif nic_netif;
 static int lwip_initialized = 0;
 
 static struct tcp_pcb *current_tcp_pcb = NULL;
@@ -58,14 +59,9 @@ static err_t tcp_connected_callback(void *arg, struct tcp_pcb *tpcb, err_t err) 
 int network_init(void) {
     if (lwip_initialized) return 0;
     
-    // First, find and initialize the E1000 device if not already done
-    if (!e1000_get_device()) {
-        pci_device_t pci_dev;
-        if (pci_find_device(E1000_VENDOR_ID, E1000_DEVICE_ID_82540EM, &pci_dev)) {
-            if (e1000_init(&pci_dev) != 0) return -1;
-        } else {
-            return -1; // No E1000 found
-        }
+    // First, find and initialize the generic NIC device if not already done
+    if (nic_init() != 0) {
+        return -1; // No supported NIC found
     }
 
     lwip_init();
@@ -76,12 +72,12 @@ int network_init(void) {
     ip4_addr_set_zero(&netmask);
     ip4_addr_set_zero(&gw);
     
-    if (netif_add(&e1000_netif, &ipaddr, &netmask, &gw, NULL, e1000_netif_init, ethernet_input) == NULL) {
+    if (netif_add(&nic_netif, &ipaddr, &netmask, &gw, NULL, nic_netif_init, ethernet_input) == NULL) {
         return -1;
     }
     
-    netif_set_default(&e1000_netif);
-    netif_set_up(&e1000_netif);
+    netif_set_default(&nic_netif);
+    netif_set_up(&nic_netif);
     
     lwip_initialized = 1;
 
@@ -113,13 +109,13 @@ int network_init(void) {
 
 int network_get_mac_address(mac_address_t* mac) {
     if (!lwip_initialized) return -1;
-    for (int i = 0; i < 6; i++) mac->bytes[i] = e1000_netif.hwaddr[i];
+    for (int i = 0; i < 6; i++) mac->bytes[i] = nic_netif.hwaddr[i];
     return 0;
 }
 
 int network_get_ipv4_address(ipv4_address_t* ip) {
     if (!lwip_initialized) return -1;
-    u32_t addr = ip4_addr_get_u32(netif_ip4_addr(&e1000_netif));
+    u32_t addr = ip4_addr_get_u32(netif_ip4_addr(&nic_netif));
     ip->bytes[0] = (addr >> 0) & 0xFF;
     ip->bytes[1] = (addr >> 8) & 0xFF;
     ip->bytes[2] = (addr >> 16) & 0xFF;
@@ -131,13 +127,13 @@ int network_set_ipv4_address(const ipv4_address_t* ip) {
     if (!lwip_initialized) return -1;
     ip4_addr_t ipaddr;
     IP4_ADDR(&ipaddr, ip->bytes[0], ip->bytes[1], ip->bytes[2], ip->bytes[3]);
-    netif_set_ipaddr(&e1000_netif, &ipaddr);
+    netif_set_ipaddr(&nic_netif, &ipaddr);
     return 0;
 }
 
 static volatile int network_processing = 0;
 static void network_poll_internal(void) {
-    e1000_netif_poll(&e1000_netif);
+    nic_netif_poll(&nic_netif);
     sys_check_timeouts();
 }
 
@@ -174,14 +170,14 @@ int network_dhcp_acquire(void) {
     }
     network_processing = 1;
     serial_write("[DHCP] Starting...\n");
-    dhcp_start(&e1000_netif);
+    dhcp_start(&nic_netif);
     
     uint32_t start = sys_now();
     asm volatile("sti");
     int loops = 0;
     while (sys_now() - start < 10000) { // 10 second timeout
         network_poll_internal();
-        if (dhcp_supplied_address(&e1000_netif)) {
+        if (dhcp_supplied_address(&nic_netif)) {
             asm volatile("cli");
             serial_write("[DHCP] Bound!\n");
             network_processing = 0;
@@ -405,7 +401,7 @@ int network_set_dns_server(const ipv4_address_t *ip) {
 
 int network_get_gateway_ip(ipv4_address_t *ip) {
     if (!lwip_initialized) return -1;
-    u32_t addr = ip4_addr_get_u32(netif_ip4_gw(&e1000_netif));
+    u32_t addr = ip4_addr_get_u32(netif_ip4_gw(&nic_netif));
     ip->bytes[0] = (addr >> 0) & 0xFF;
     ip->bytes[1] = (addr >> 8) & 0xFF;
     ip->bytes[2] = (addr >> 16) & 0xFF;
@@ -424,10 +420,10 @@ int network_get_dns_ip(ipv4_address_t *ip) {
 }
 
 int network_is_initialized(void) { return lwip_initialized; }
-int network_has_ip(void) { return lwip_initialized && !ip4_addr_isany_val(*netif_ip4_addr(&e1000_netif)); }
+int network_has_ip(void) { return lwip_initialized && !ip4_addr_isany_val(*netif_ip4_addr(&nic_netif)); }
 
-int network_send_frame(const void* data, size_t length) { return e1000_send_packet(data, length); }
-int network_receive_frame(void* buffer, size_t buffer_size) { return e1000_receive_packet(buffer, buffer_size); }
+int network_send_frame(const void* data, size_t length) { return nic_send_packet(data, length); }
+int network_receive_frame(void* buffer, size_t buffer_size) { return nic_receive_packet(buffer, buffer_size); }
 
 static u16_t icmp_cksum(void *data, int len) {
     u32_t sum = 0;

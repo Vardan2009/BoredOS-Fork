@@ -130,6 +130,14 @@ e1000_device_t* e1000_get_device(void) {
     return &e1000_dev;
 }
 
+int e1000_get_mac(uint8_t* mac_out) {
+    if (!e1000_initialized) return -1;
+    for (int i = 0; i < 6; i++) {
+        mac_out[i] = e1000_dev.mac_address.bytes[i];
+    }
+    return 0;
+}
+
 int e1000_send_packet(const void* data, size_t length) {
     if (!e1000_initialized || !e1000_dev.initialized) return -1;
     if (length > 2048) return -1;

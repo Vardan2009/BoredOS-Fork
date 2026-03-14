@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "e1000.h"
+#include "nic.h"
 
 #define ETH_FRAME_MAX_SIZE 1518
 #define ETH_HEADER_SIZE 14

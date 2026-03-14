@@ -157,7 +157,7 @@ run: $(ISO_IMAGE)
 	qemu-system-x86_64 -m 4G -serial stdio -cdrom $< -boot d \
 	    -smp 4 \
 		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
-		-netdev user,id=net0,hostfwd=udp::12346-:12345 -device e1000,netdev=net0 \
+		-netdev user,id=net0,hostfwd=udp::12346-:12345 -device virtio-net-pci,netdev=net0 \
 		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
 		-display cocoa,show-cursor=off \
 		-drive file=disk.img,format=raw,file.locking=off \
