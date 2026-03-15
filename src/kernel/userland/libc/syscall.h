@@ -137,6 +137,7 @@ int sys_network_set_ip(const net_ipv4_address_t *ip);
 int sys_network_get_stat(int stat_type);
 int sys_network_get_gateway(net_ipv4_address_t *ip);
 int sys_network_get_dns(net_ipv4_address_t *ip);
+int sys_get_dns_server(net_ipv4_address_t *ip);
 int sys_udp_send(const net_ipv4_address_t *dest_ip, uint16_t dest_port, uint16_t src_port, const void *data, size_t data_len);
 int sys_icmp_ping(const net_ipv4_address_t *dest_ip);
 int sys_network_is_initialized(void);

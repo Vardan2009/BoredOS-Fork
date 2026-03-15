@@ -40,6 +40,8 @@ static char rgb_g[4] = "";
 static char rgb_b[4] = "";
 static char custom_res_w[6] = "";
 static char custom_res_h[6] = "";
+static char net_ip[16] = "";
+static char net_dns[16] = "";
 static int focused_field = -1;
 static int input_cursor = 0;
 
@@ -144,6 +146,26 @@ static void generate_lumberjack_pattern(void) {
             pattern_lumberjack[y * PATTERN_SIZE + x] = color;
         }
     }
+}
+
+static void k_itoa_hex(uint64_t num, char* str) {
+    if (num == 0) {
+        str[0] = '0';
+        str[1] = '\0';
+        return;
+    }
+    char buf[64];
+    int len = 0;
+    while (num > 0) {
+        int rem = num % 16;
+        if (rem < 10) buf[len++] = rem + '0';
+        else buf[len++] = rem - 10 + 'a';
+        num /= 16;
+    }
+    for (int i = 0; i < len; i++) {
+        str[i] = buf[len - 1 - i];
+    }
+    str[len] = '\0';
 }
 
 static void scale_rgba_to_argb(const unsigned char *rgba, int src_w, int src_h, uint32_t *dst, int dst_w, int dst_h) {
@@ -422,13 +444,109 @@ static void control_panel_paint_network(ui_window_t win) {
     ui_draw_rounded_rect_filled(win, offset_x, offset_y + 5, 80, 25, 6, COLOR_DARK_PANEL);
     ui_draw_string(win, offset_x + 10, offset_y + 13, "< Back", COLOR_DARK_TEXT);
     
-    ui_draw_string(win, offset_x, offset_y + 40, "Network:", COLOR_DARK_TEXT);
+    ui_draw_string(win, offset_x, offset_y + 40, "Network Adapter:", COLOR_DARK_TEXT);
     ui_draw_rounded_rect_filled(win, offset_x, offset_y + 55, 140, 25, 6, COLOR_DARK_PANEL);
     ui_draw_string(win, offset_x + 30, offset_y + 63, "Init Network", COLOR_DARK_TEXT);
     
     if (net_status[0] != '\0') {
         ui_draw_string(win, offset_x + 150, offset_y + 63, net_status, 0xFF90EE90);
     }
+
+    int info_y = offset_y + 90;
+    
+    // Adapter Info
+    char nic_name[64];
+    ui_draw_string(win, offset_x, info_y, "NIC:", COLOR_DARK_TEXT);
+    if (sys_network_is_initialized() && sys_network_get_nic_name(nic_name) == 0) {
+        ui_draw_string(win, offset_x + 40, info_y, nic_name, COLOR_DKGRAY);
+    } else {
+        ui_draw_string(win, offset_x + 40, info_y, "NOT INITIALIZED", 0xFFFF6B6B);
+    }
+    info_y += 20;
+
+    ui_draw_string(win, offset_x, info_y, "MAC:", COLOR_DARK_TEXT);
+    net_mac_address_t mac;
+    if (sys_network_is_initialized() && sys_network_get_mac(&mac) == 0) {
+        char mac_str[32];
+        char b[4];
+        mac_str[0] = 0;
+        for (int i=0; i<6; i++) {
+            k_itoa_hex(mac.bytes[i], b);
+            if (b[1] == 0) { b[1] = b[0]; b[0] = '0'; b[2] = 0; } // zero pad
+            strcat(mac_str, b);
+            if (i < 5) strcat(mac_str, ":");
+        }
+        ui_draw_string(win, offset_x + 40, info_y, mac_str, COLOR_DKGRAY);
+    } else {
+        ui_draw_string(win, offset_x + 40, info_y, "NOT INITIALIZED", 0xFFFF6B6B);
+    }
+    info_y += 30;
+
+    // Current IP Address
+    ui_draw_string(win, offset_x, info_y, "IP:", COLOR_DARK_TEXT);
+    if (!sys_network_has_ip()) {
+        ui_draw_string(win, offset_x + 40, info_y, "NOT INITIALIZED", 0xFFFF6B6B);
+    } else {
+        net_ipv4_address_t ip;
+        if (sys_network_get_ip(&ip) == 0) {
+            char ip_str[32];
+            char b[4];
+            ip_str[0] = 0;
+            for (int i=0; i<4; i++) {
+                cli_itoa(ip.bytes[i], b);
+                strcat(ip_str, b);
+                if (i < 3) strcat(ip_str, ".");
+            }
+            ui_draw_string(win, offset_x + 40, info_y, ip_str, COLOR_DKGRAY);
+        }
+    }
+    info_y += 20;
+
+    // Current DNS Address
+    ui_draw_string(win, offset_x, info_y, "DNS:", COLOR_DARK_TEXT);
+    if (!sys_network_has_ip()) {
+        ui_draw_string(win, offset_x + 40, info_y, "NOT INITIALIZED", 0xFFFF6B6B);
+    } else {
+        net_ipv4_address_t dns;
+        if (sys_get_dns_server(&dns) == 0) {
+            char dns_str[32];
+            char b[4];
+            dns_str[0] = 0;
+            for (int i=0; i<4; i++) {
+                cli_itoa(dns.bytes[i], b);
+                strcat(dns_str, b);
+                if (i < 3) strcat(dns_str, ".");
+            }
+            ui_draw_string(win, offset_x + 40, info_y, dns_str, COLOR_DKGRAY);
+        }
+    }
+    info_y += 30;
+
+    // IP SET
+    ui_draw_string(win, offset_x, info_y + 4, "IPSET:", COLOR_DARK_TEXT);
+    ui_draw_rounded_rect_filled(win, offset_x + 60, info_y, 140, 20, 4, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 65, info_y + 4, net_ip, (focused_field == 5) ? 0xFF90EE90 : COLOR_DARK_TEXT);
+    if (focused_field == 5) {
+        int cursor_x = offset_x + 65 + input_cursor * 8;
+        ui_draw_rect(win, cursor_x, info_y + 4, 1, 10, 0xFF90EE90);
+    }
+    
+    ui_draw_rounded_rect_filled(win, offset_x + 210, info_y, 50, 20, 4, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 225, info_y + 4, "SET", COLOR_DARK_TEXT);
+    
+    info_y += 30;
+
+    // DNS SET
+    ui_draw_string(win, offset_x, info_y + 4, "DNSSET:", COLOR_DARK_TEXT);
+    ui_draw_rounded_rect_filled(win, offset_x + 60, info_y, 140, 20, 4, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 65, info_y + 4, net_dns, (focused_field == 6) ? 0xFF87CEEB : COLOR_DARK_TEXT);
+    if (focused_field == 6) {
+        int cursor_x = offset_x + 65 + input_cursor * 8;
+        ui_draw_rect(win, cursor_x, info_y + 4, 1, 10, 0xFF87CEEB);
+    }
+    
+    ui_draw_rounded_rect_filled(win, offset_x + 210, info_y, 50, 20, 4, COLOR_DARK_PANEL);
+    ui_draw_string(win, offset_x + 225, info_y + 4, "SET", COLOR_DARK_TEXT);
 }
 
 static void control_panel_paint_desktop(ui_window_t win) {
@@ -650,6 +768,28 @@ static void save_mouse_config(void) {
     sys_system(5 /*SET_MOUSE_SPEED*/, mouse_speed, 0, 0, 0);
 }
 
+static int parse_ip(const char* str, net_ipv4_address_t* ip) {
+    int val = 0;
+    int part = 0;
+    const char* p = str;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            val = val * 10 + (*p - '0');
+            if (val > 255) return -1;
+        } else if (*p == '.') {
+            if (part > 3) return -1;
+            ip->bytes[part++] = (uint8_t)val;
+            val = 0;
+        } else {
+            return -1;
+        }
+        p++;
+    }
+    if (part != 3) return -1;
+    ip->bytes[3] = (uint8_t)val;
+    return 0;
+}
+
 static void fetch_kernel_state(void) {
     desktop_snap_to_grid = sys_system(7 /*GET_DESKTOP_PROP*/, 1, 0, 0, 0);
     desktop_auto_align = sys_system(7, 2, 0, 0, 0);
@@ -657,6 +797,27 @@ static void fetch_kernel_state(void) {
     desktop_max_cols = sys_system(7, 4, 0, 0, 0);
     mouse_speed = sys_system(8 /*GET_MOUSE_SPEED*/, 0, 0, 0, 0);
     
+    net_ipv4_address_t kip;
+    if (sys_network_get_ip(&kip) == 0) {
+        char bp[4];
+        net_ip[0] = 0;
+        for (int i=0; i<4; i++) {
+            cli_itoa(kip.bytes[i], bp);
+            strcat(net_ip, bp);
+            if (i < 3) strcat(net_ip, ".");
+        }
+    }
+
+    if (sys_get_dns_server(&kip) == 0) {
+        char bp[4];
+        net_dns[0] = 0;
+        for (int i=0; i<4; i++) {
+            cli_itoa(kip.bytes[i], bp);
+            strcat(net_dns, bp);
+            if (i < 3) strcat(net_dns, ".");
+        }
+    }
+
     init_dynamic_resolutions();
     load_wallpapers();
 }
@@ -793,6 +954,46 @@ static void control_panel_handle_click(int x, int y) {
                 net_status[0] = 'F'; net_status[1] = 'a'; net_status[2] = 'i'; 
                 net_status[3] = 'l'; net_status[4] = 'e'; net_status[5] = 'd'; net_status[6] = 0;
             }
+            return;
+        }
+
+        int info_y = offset_y + 90 + 20 + 30; // Info + MAC Y positions
+        
+        info_y += 20; // IP display
+        info_y += 30; // DNS display
+
+        // IPSET click bounds
+        if (x >= offset_x + 60 && x < offset_x + 200 && y >= info_y && y < info_y + 20) {
+            focused_field = 5;
+            int len = 0; while (net_ip[len]) len++; input_cursor = len;
+            return;
+        }
+
+        // Apply IPSET click block
+        if (x >= offset_x + 210 && x < offset_x + 260 && y >= info_y && y < info_y + 20) {
+            net_ipv4_address_t ip;
+            if (parse_ip(net_ip, &ip) == 0) {
+                sys_network_set_ip(&ip);
+            }
+            return;
+        }
+
+        info_y += 30;
+        
+        // DNSSET click bounds
+        if (x >= offset_x + 60 && x < offset_x + 200 && y >= info_y && y < info_y + 20) {
+            focused_field = 6;
+            int len = 0; while (net_dns[len]) len++; input_cursor = len;
+            return;
+        }
+
+        // Apply DNSSET click block
+        if (x >= offset_x + 210 && x < offset_x + 260 && y >= info_y && y < info_y + 20) {
+            net_ipv4_address_t ip;
+            if (parse_ip(net_dns, &ip) == 0) {
+                sys_set_dns_server(&ip);
+            }
+            return;
         }
     } else if (current_view == VIEW_DESKTOP) {
         int offset_x = 8;
@@ -954,7 +1155,7 @@ static void control_panel_handle_key(char c, bool pressed) {
     if (!pressed) return;
     if (focused_field < 0) return;
     
-    if (current_view == VIEW_WALLPAPER || current_view == VIEW_DISPLAY) {
+    if (current_view == VIEW_WALLPAPER || current_view == VIEW_DISPLAY || current_view == VIEW_NETWORK) {
         char *focused_buffer = NULL;
         int max_len = 3;
         
@@ -963,6 +1164,8 @@ static void control_panel_handle_key(char c, bool pressed) {
         else if (focused_field == 2 && current_view == VIEW_WALLPAPER) focused_buffer = rgb_b;
         else if (focused_field == 3 && current_view == VIEW_DISPLAY) { focused_buffer = custom_res_w; max_len = 5; }
         else if (focused_field == 4 && current_view == VIEW_DISPLAY) { focused_buffer = custom_res_h; max_len = 5; }
+        else if (focused_field == 5 && current_view == VIEW_NETWORK) { focused_buffer = net_ip; max_len = 15; }
+        else if (focused_field == 6 && current_view == VIEW_NETWORK) { focused_buffer = net_dns; max_len = 15; }
         else return;
         
         if (c == '\b') {
@@ -970,14 +1173,15 @@ static void control_panel_handle_key(char c, bool pressed) {
                 input_cursor--;
                 focused_buffer[input_cursor] = '\0';
             }
-        } else if (c >= '0' && c <= '9') {
+        } else if ((c >= '0' && c <= '9') || c == '.') {
             if (input_cursor < max_len) {
                 focused_buffer[input_cursor] = c;
                 input_cursor++;
                 focused_buffer[input_cursor] = '\0';
             }
         } else if (c == '\t') {
-            focused_field = (focused_field + 1) % 3;
+            if (current_view == VIEW_WALLPAPER) focused_field = (focused_field + 1) % 3;
+            else if (current_view == VIEW_NETWORK) focused_field = (focused_field == 5) ? 6 : 5;
             input_cursor = 0;
         }
     }

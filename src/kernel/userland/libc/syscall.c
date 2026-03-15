@@ -166,6 +166,10 @@ int sys_network_get_stat(int stat_type) {
     return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_NETWORK_GET_STATS, (uint64_t)stat_type);
 }
 
+int sys_get_dns_server(net_ipv4_address_t *ip) {
+    return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_NETWORK_GET_DNS, (uint64_t)ip);
+}
+
 int sys_network_get_gateway(net_ipv4_address_t *ip) {
     return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_NETWORK_GET_GATEWAY, (uint64_t)ip);
 }
