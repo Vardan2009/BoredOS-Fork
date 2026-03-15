@@ -10,7 +10,6 @@
 #include "fat32.h"
 #include "disk.h"
 #include "kutils.h"
-#include "licensewr.h"
 #include <stddef.h>
 #include "memory_manager.h"
 #include "process.h"
@@ -2260,105 +2259,7 @@ static void create_ramfs_files(void) {
 
     
   
-    // Always try to write README to ensure content exists
-    FAT32_FileHandle *fh = fat32_open("README.md", "w");
-    if (fh) {
-        const char *content = 
-            "# Bored OS 1.50\n\n"
-            "BoredOS is now in a Beta stage as i have brought over all apps from boredkernel and have made the DE a lot more usable and stable.\n"
-            "## Boredkernel is now BoredOS!\n"
-            "Boredkernel will from now on be deprecated as it's core became too messy. I have built a less bloated kernel and wrote a DE above it, which is why it is now an OS instead of a kernel (in my opinion).\n\n"
-            "Bored Kernel is a simple x86_64 hobbyist operating system.\n"
-            "It features a DE (and WM), a FAT32 filesystem, customizable UI and much much more!\n\n"
-            "## Features\n"
-            "- Bored WM\n"
-            "- Fat 32 FS\n"
-            "- 64-bit long mode support\n"
-            "- Multiboot2 compliant\n"
-            "- Text editor\n"
-            "- IDT\n"
-            "- Ability to run on actual x86_64 hardware\n"
-            "- CLI\n\n"
-            "## Prerequisites\n\n"
-            "To build BoredOS, you'll need the following tools installed:\n\n"
-            "- **x86_64 ELF Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`\n"
-            "- **NASM**: Netwide Assembler for compiling assembly code\n"
-            "- **xorriso**: For creating bootable ISO images\n"
-            "- **QEMU** (optional): For testing the kernel in an emulator\n\n"
-            "On macOS, you can install these using Homebrew:\n"
-            "```sh\n"
-            "brew install x86_64-elf-binutils x86_64-elf-gcc nasm xorriso qemu\n"
-            "```\n\n"
-            "## Building\n\n"
-            "Simply run `make` from the project root:\n\n"
-            "```sh\n"
-            "make\n"
-            "```\n\n"
-            "This will:\n"
-            "1. Compile all kernel C sources and assembly files\n"
-            "2. Link the kernel ELF binary\n"
-            "3. Generate a bootable ISO image (`boredos.iso`)\n\n"
-            "The build output is organized as follows:\n"
-            "- Compiled object files: `build/`\n"
-            "- ISO root filesystem: `iso_root/`\n"
-            "- Final ISO image: `boredos.iso`\n\n"
-            "## Running\n\n"
-            "### QEMU Emulation\n\n"
-            "Run the kernel in QEMU:\n\n"
-            "```sh\n"
-            "make run\n"
-            "```\n\n"
-            "Or manually:\n"
-            "```sh\n"
-            "qemu-system-x86_64 -m 2G -serial stdio -cdrom boredos.iso -boot d\n"
-            "```\n\n"
-            "### Running on Real Hardware\n\n"
-            "*Warning: This is at YOUR OWN RISK. This software comes with ZERO warranty and may break your system.*\n\n"
-            "1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `boredos.iso` to a USB drive\n\n"
-            "2. **Prepare the system**:\n"
-            "   - Enable legacy (BIOS) boot in your system BIOS/UEFI settings\n"
-            "   - Disable Secure Boot if needed\n\n"
-            "3. **Boot**: Insert the USB drive and select it in the boot menu during startup\n\n"
-            "4. **Tested Hardware**:\n"
-            "   - HP EliteDesk 705 G4 DM (AMD Ryzen 5 PRO 2400G, Radeon Vega)\n"
-            "   - Lenovo ThinkPad A475 20KL002VMH (AMD Pro A12-8830B, Radeon R7)\n\n"
-            "## Project Structure\n\n"
-            "- `src/kernel/` - Main kernel implementation\n"
-            "  - `boot.asm` - Boot assembly code\n"
-            "  - `main.c` - Kernel entry point\n"
-            "  - `*.c / *.h` - Core kernel modules (graphics, interrupts, filesystem, etc.)\n"
-            "  - `cli_apps/` - Command-line applications\n"
-            "  - `wallpaper.ppm` - Default desktop wallpaper\n"
-            "- `build/` - Compiled object files (generated during build)\n"
-            "- `iso_root/` - ISO filesystem layout (generated during build)\n"
-            "- `limine/` - Limine bootloader files (downloaded automatically)\n"
-            "- `linker.ld` - Linker script for x86_64 ELF\n"
-            "- `limine.conf` - Limine bootloader configuration\n"
-            "- `Makefile` - Build configuration and targets\n\n"
-            "## License\n\n"
-            "Copyright (C) 2024-2026 boreddevnl\n\n"
-            "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.\n\n"
-            "NOTICE\n"
-            "------\n\n"
-            "This product includes software developed by Chris (\"boreddevnl\") as part of the BoredOS project.\n\n"
-            "Copyright (C) 2024–2026 Chris / boreddevnl (previously boreddevhq)\n\n"
-            "All source files in this repository contain copyright and license\n"
-            "headers that must be preserved in redistributions and derivative works.\n\n"
-            "If you distribute or modify this project (in whole or in part),\n"
-            "you MUST:\n\n"
-            "  - Retain all copyright and license headers at the top of each file.\n"
-            "  - Include this NOTICE file along with any redistributions or\n"
-            "    derivative works.\n"
-            "  - Provide clear attribution to the original author in documentation\n"
-            "    or credits where appropriate.\n\n"
-            "The above attribution requirements are informational and intended to\n"
-            "ensure proper credit is given. They do not alter or supersede the\n"
-            "terms of the GNU General Public License (GPL), which governs this work.\n";
-            fat32_write(fh, (void *)content, cmd_strlen(content));
-            fat32_close(fh);
-    }
-    
-    fh = fat32_open("Apps/README.md", "w");
+    FAT32_FileHandle *fh = fat32_open("Apps/README.md", "w");
     if (fh) {
         const char *content = 
             "# All compiled C files in this directory are openable from any other directory by typing in the name of the compiled file by typing in the name of the compiled file.\n\n"            
@@ -2367,10 +2268,6 @@ static void create_ramfs_files(void) {
         fat32_write(fh, (void *)content, cmd_strlen(content));
         fat32_close(fh);
     }    
-    
-   
-
-    write_license_file();
     
     fh = fat32_open("Documents/notes.txt", "w");
     if (fh) {

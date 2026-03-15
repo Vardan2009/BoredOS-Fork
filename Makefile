@@ -141,6 +141,16 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 		fi \
 	done
 	
+	@if [ -f README.md ]; then \
+		cp README.md $(ISO_DIR)/; \
+		echo "    module_path: boot():/README.md" >> $(ISO_DIR)/limine.conf; \
+	fi
+	
+	@if [ -f LICENSE ]; then \
+		cp LICENSE $(ISO_DIR)/; \
+		echo "    module_path: boot():/LICENSE" >> $(ISO_DIR)/limine.conf; \
+	fi
+	
 	$(XORRISO) -as mkisofs -R -J -b limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
 		--efi-boot limine-uefi-cd.bin \

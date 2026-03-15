@@ -1,35 +1,21 @@
-# BoredOS
+# Bored OS 1.50
 
-<div align="center">
-  <img src="boredos.svg" alt="BoredOS Logo" width="450" />
-</div>
-BoredOS is a simple x86_64 hobbyist operating system. 
+BoredOS is now in a Beta stage as i have brought over all apps from boredkernel and have made the DE a lot more usable and stable.
+## Boredkernel is now BoredOS!
+Boredkernel will from now on be deprecated as it's core became too messy. I have built a less bloated kernel and wrote a DE above it, which is why it is now an OS instead of a kernel (in my opinion).
+
+Bored Kernel is a simple x86_64 hobbyist operating system.
 It features a DE (and WM), a FAT32 filesystem, customizable UI and much much more!
 
-![Screenshot](screenshot.jpg)
-*this screenshot might be outdated*
-
 ## Features
-- userspace
-- JPG image support
-- Disk manager
-- Drag and drop mouse centered UI
-- Customizable UI
-- Basic Networking Stack
 - Bored WM
-- FAT32 filesystem
+- Fat 32 FS
 - 64-bit long mode support
 - Multiboot2 compliant
 - Text editor
-- Markdown Viewer
-- Minesweeper
-- Markdown Viewer
-- GUI Text editor
-- Paint application
 - IDT
 - Ability to run on actual x86_64 hardware
 - CLI
-- (Limited) C Compiler
 
 ## Prerequisites
 
@@ -90,53 +76,24 @@ qemu-system-x86_64 -m 2G -serial stdio -cdrom boredos.iso -boot d
 
 3. **Boot**: Insert the USB drive and select it in the boot menu during startup
 
-**Networking requires an Intel E1000 network card or similar while using Ethernet.**
-
 4. **Tested Hardware**:
-   - HP EliteDesk 705 G4 DM (AMD Ryzen 5 PRO 2400G, Radeon Vega) **Tested, no networking.**
-   - Lenovo ThinkPad A475 20KL002VMH (AMD Pro A12-8830B, Radeon R7) **Tested, no networking.**
-   - Acer Aspire E5-573-311M (Intel Core i3-5005U, Intel HD Graphics) **Tested, no networking.**
-
+   - HP EliteDesk 705 G4 DM (AMD Ryzen 5 PRO 2400G, Radeon Vega)
+   - Lenovo ThinkPad A475 20KL002VMH (AMD Pro A12-8830B, Radeon R7)
 
 ## Project Structure
 
 - `src/kernel/` - Main kernel implementation
-- `boot.asm` - Boot assembly code
-- `main.c` - Kernel entry point
-- `*.c / *.h` - Core kernel modules (graphics, interrupts, filesystem, etc.)
-- `cli_apps/` - Command-line applications
+  - `boot.asm` - Boot assembly code
+  - `main.c` - Kernel entry point
+  - `*.c / *.h` - Core kernel modules (graphics, interrupts, filesystem, etc.)
+  - `cli_apps/` - Command-line applications
+  - `wallpaper.ppm` - Default desktop wallpaper
 - `build/` - Compiled object files (generated during build)
 - `iso_root/` - ISO filesystem layout (generated during build)
 - `limine/` - Limine bootloader files (downloaded automatically)
 - `linker.ld` - Linker script for x86_64 ELF
 - `limine.conf` - Limine bootloader configuration
 - `Makefile` - Build configuration and targets
-
-
-
-
-###
-###
-
-<h2 align="left">Help me brew some coffee! ☕️</h2>
-
-###
-
-<p align="left">
-  If you enjoy this project, and like what i'm doing here, consider buying me a coffee!
-  <br><br>
-  <a href="https://buymeacoffee.com/boreddevnl" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50" style="border-radius: 8px;" />
-  </a>
-</p>
-
-###
-
-
-## This project was previously labeled as "BrewKernel"
-Brewkernel was a text only very simple (and messy) project i started 3 years ago. It was my first work in OSDev and i absolutely loved it. It sadly just got too messy and i myself couldn't understand my own code anymore. About a year ago i started work on BoredOS, and pushed a *"working"* version of it a few days ago as of writing this *(Feb. 10 2026)* 
-Brewkernel has already been deprecated and will not be accepting any pull requests or fix any issues as it is now a public archive.
-Thanks to everyone who helped me with Brewkernel, even if it were just ideas, and intend to keep working on this for the forseeable future!
 
 ## License
 
@@ -147,7 +104,7 @@ This program is free software: you can redistribute it and/or modify it under th
 NOTICE
 ------
 
-This product includes software developed by Chris ("boreddevnl") as part of the BoredOS (Previously Brewkernel/BrewOS) project.
+This product includes software developed by Chris ("boreddevnl") as part of the BoredOS project.
 
 Copyright (C) 2024–2026 Chris / boreddevnl (previously boreddevhq)
 
