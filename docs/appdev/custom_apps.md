@@ -13,30 +13,31 @@ Applications reside entirely in the `src/userland/` directory. Create a new file
 // src/userland/gui/hello.c
 #include <stdlib.h>
 #include <libui.h>
+#include <syscall.h>
 
 int main(void) {
     // Attempt to open a 300x200 window
-    int wid = ui_create_window("My Custom App", 300, 200, 0);
+    ui_window_t wid = ui_window_create("My Custom App", 100, 100, 300, 200);
     if (wid < 0) {
         printf("Error creating window!\n");
         return 1;
     }
     
     // Write text in center
-    ui_draw_string(wid, "Hello, BoredOS!!", 50, 90, 0xFFFFFFFF);
+    ui_draw_string(wid, 50, 90, "Hello, BoredOS!!", 0xFFFFFFFF);
     
     // Commit drawing to screen
-    ui_swap_buffers(wid);
+    ui_mark_dirty(wid, 0, 0, 300, 200);
 
-    ui_event_t event;
+    gui_event_t event;
     while (1) {
-        if (ui_poll_event(&event)) {
-            if (event.window_id == wid && event.type == UI_EVENT_WINDOW_CLOSE) {
+        if (ui_get_event(wid, &event)) {
+            if (event.type == GUI_EVENT_CLOSE) {
                 break; // Exit loop if 'X' is clicked
             }
         }
         
-        syscall1(SYSTEM_CMD_YIELD, 0);
+        sys_yield();
     }
 
     return 0; // Returning 0 smoothly exits the process via crt0.asm
