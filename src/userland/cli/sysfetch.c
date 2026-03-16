@@ -239,11 +239,11 @@ int main(int argc, char **argv) {
     }
     if (config.os_label[0]) {
         strcpy(info_lines[info_line_count], config.os_label);
-        strcat(info_lines[info_line_count++], ": BoredOS V1.70 'Retrowave'");
+        strcat(info_lines[info_line_count++], ": BoredOS V1.71 'Retrowave'");
     }
     if (config.kernel_label[0]) {
         strcpy(info_lines[info_line_count], config.kernel_label);
-        strcat(info_lines[info_line_count++], ": Boredkernel V3.1.0 x86_64");
+        strcat(info_lines[info_line_count++], ": Boredkernel V3.1.1 x86_64");
     }
     if (config.uptime_label[0]) {
         uint64_t ticks = sys_system(16, 0, 0, 0, 0);

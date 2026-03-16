@@ -13,10 +13,10 @@ BIN_DIR = bin
 LIBC_SOURCES = $(wildcard libc/*.c)
 LIBC_OBJS = $(patsubst libc/%.c, $(BIN_DIR)/%.o, $(LIBC_SOURCES)) $(BIN_DIR)/crt0.o
 
-VPATH = cli gui sys games libc
-vpath %.c cli gui sys games libc
+VPATH = cli gui sys games libc net
+vpath %.c cli gui sys games libc net
 
-APP_SOURCES_FULL = $(wildcard cli/*.c gui/*.c sys/*.c games/*.c *.c)
+APP_SOURCES_FULL = $(wildcard cli/*.c gui/*.c sys/*.c games/*.c *.c net/*.c)
 APP_SOURCES = $(filter-out stb_image.c, $(APP_SOURCES_FULL))
 APP_ELFS = $(patsubst %.c, $(BIN_DIR)/%.elf, $(notdir $(APP_SOURCES)))
 
