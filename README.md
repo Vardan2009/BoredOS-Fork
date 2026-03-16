@@ -31,95 +31,15 @@ It features a DE (and WM), a FAT32 filesystem, customizable UI and much much mor
 - CLI
 - (Limited) C Compiler
 
-## Prerequisites
+## Documentation
 
-To build BoredOS, you'll need the following tools installed:
+BoredOS has comprehensive documentation available in the [`docs/`](docs/) directory covering architecture, the build system, and application development SDKs.
 
-- **x86_64 ELF Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`
-- **NASM**: Netwide Assembler for compiling assembly code
-- **xorriso**: For creating bootable ISO images
-- **QEMU** (optional): For testing the kernel in an emulator
+-   **[Index / Table of Contents](docs/README.md)**
+-   **[Architecture Overview](docs/architecture/core.md)**
+-   **[Building and Running](docs/build/usage.md)**
+-   **[Application Development Guide](docs/appdev/custom_apps.md)**
 
-On macOS, you can install these using Homebrew:
-```sh
-brew install x86_64-elf-binutils x86_64-elf-gcc nasm xorriso qemu
-```
-
-## Building
-
-Simply run `make` from the project root:
-
-```sh
-make
-```
-
-This will:
-1. Compile all kernel C sources and assembly files
-2. Link the kernel ELF binary
-3. Generate a bootable ISO image (`boredos.iso`)
-
-The build output is organized as follows:
-- Compiled object files: `build/`
-- ISO root filesystem: `iso_root/`
-- Final ISO image: `boredos.iso`
-
-## Running
-
-### QEMU Emulation
-
-Run the kernel in QEMU:
-
-```sh
-make run
-```
-
-Or manually:
-```sh
-qemu-system-x86_64 -m 2G -serial stdio -cdrom boredos.iso -boot d
-```
-
-### Running on Real Hardware
-
-*Warning: This is at YOUR OWN RISK. This software comes with ZERO warranty and may break your system.*
-
-1. **Create bootable USB**: Use [Balena Etcher](https://www.balena.io/etcher/) to flash `boredos.iso` to a USB drive
-
-2. **Prepare the system**:
-   - Enable legacy (BIOS) boot in your system BIOS/UEFI settings
-   - Disable Secure Boot if needed
-
-3. **Boot**: Insert the USB drive and select it in the boot menu during startup
-
-**Networking requires an Intel E1000 network card or similar while using Ethernet.**
-
-4. **Tested Hardware**:
-   - HP EliteDesk 705 G4 DM (AMD Ryzen 5 PRO 2400G, Radeon Vega) **Tested, no networking.**
-   - Lenovo ThinkPad A475 20KL002VMH (AMD Pro A12-8830B, Radeon R7) **Tested, no networking.**
-   - Acer Aspire E5-573-311M (Intel Core i3-5005U, Intel HD Graphics) **Tested, no networking.**
-
-
-## Project Structure
-
-- `src/` - Main OS codebase
-  - `arch/` - Assembly bootstrap and interrupt architectures
-  - `core/` - Initialization, commands, system panic
-  - `dev/` - PCI, disk manager, inputs, and RTC 
-  - `fs/` - Physical and virtual filesystems (FAT32)
-  - `mem/` - Memory management, paging, and VM
-  - `net/` - Networking stack, interface controllers, and `lwip/`
-  - `sys/` - System calls, process management, and ELF loader
-  - `wm/` - Graphics, user interface, fonts, and window manager
-  - `userland/` - End-user applications and tools
-    - `cli/` - Standard command line applications
-    - `gui/` - Graphical applications
-    - `games/` - Games such as DOOM and Minesweeper
-    - `sys/` - Userland system tools and network clients
-- `build/` - Compiled object files (generated during build)
-- `iso_root/` - ISO filesystem layout (generated during build)
-- `limine/` - Limine bootloader files (downloaded automatically)
-- `linker.ld` - Linker script for x86_64 ELF
-- `limine.conf` - Limine bootloader configuration
-- `Makefile` - Build configuration and targets
 
 
 

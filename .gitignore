@@ -20,7 +20,6 @@ limine 2/limine.dSYM/Contents/Resources/DWARF/limine
 limine 2/limine.exe
 boredos.dump
 qemu-debug.log
-build/
 iso_root/
 limine/
 src/userland/bin/
@@ -30,3 +29,4 @@ limine
 .DS_Store
 src/.DS_Store
 limine
+/build/
