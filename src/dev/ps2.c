@@ -18,6 +18,9 @@ uint64_t timer_handler(registers_t *regs) {
     wm_timer_tick();
     network_process_frames();
     
+    extern void k_beep_process(void);
+    k_beep_process();
+    
     outb(0x20, 0x20); // EOI after processing to prevent nested timer interrupts
     extern uint64_t process_schedule(uint64_t current_rsp);
     return process_schedule((uint64_t)regs);

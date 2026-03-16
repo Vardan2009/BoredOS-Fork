@@ -929,16 +929,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
         } else if (cmd == 14) { // SYSTEM_CMD_BEEP
             int freq = (int)arg2;
             int ms = (int)arg3;
-            if (freq > 0) {
-                int div = 1193180 / freq;
-                outb(0x43, 0xB6);
-                outb(0x42, div & 0xFF);
-                outb(0x42, (div >> 8) & 0xFF);
-                outb(0x61, inb(0x61) | 0x03);
-            }
-            // Sleep - kernel side
-            k_sleep(ms);
-            outb(0x61, inb(0x61) & 0xFC);
+            extern void k_beep(int freq, int ms);
+            k_beep(freq, ms);
             return 0;
         } else if (cmd == 15) { // SYSTEM_CMD_MEMINFO
             uint64_t *out = (uint64_t *)arg2;

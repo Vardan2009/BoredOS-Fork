@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // Kernel string utilities
 void k_memset(void *dest, int val, size_t len);
@@ -23,5 +24,6 @@ void k_sleep(int ms);
 void k_reboot(void);
 void k_shutdown(void);
 void k_beep(int freq, int ms);
+void k_beep_process(void);
 
 #endif

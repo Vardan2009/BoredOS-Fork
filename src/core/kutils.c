@@ -113,14 +113,35 @@ void k_shutdown(void) {
     outw(0x4004, 0x3400); // VirtualBox fallback
 }
 
+volatile uint64_t beep_end_tick = 0;
+bool beep_active = false;
+
 void k_beep(int freq, int ms) {
-    if (freq <= 0) return;
+    if (freq <= 0) {
+        outb(0x61, inb(0x61) & 0xFC);
+        beep_active = false;
+        return;
+    }
     int div = 1193180 / freq;
     outb(0x43, 0xB6);
     outb(0x42, div & 0xFF);
     outb(0x42, (div >> 8) & 0xFF);
     outb(0x61, inb(0x61) | 0x03);
-    k_sleep(ms);
-    outb(0x61, inb(0x61) & 0xFC);
+    
+    uint32_t ticks = ms / 16;
+    if (ticks == 0 && ms > 0) ticks = 1;
+    extern volatile uint64_t kernel_ticks;
+    beep_end_tick = kernel_ticks + ticks;
+    beep_active = true;
+}
+
+void k_beep_process(void) {
+    if (beep_active) {
+        extern volatile uint64_t kernel_ticks;
+        if (kernel_ticks >= beep_end_tick) {
+            outb(0x61, inb(0x61) & 0xFC);
+            beep_active = false;
+        }
+    }
 }
 
