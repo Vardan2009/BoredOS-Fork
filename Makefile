@@ -149,9 +149,9 @@ $(ISO_IMAGE): $(KERNEL_ELF) limine.conf limine-setup
 	done
 	
 	@if [ -f README.md ]; then cp README.md $(ISO_DIR)/; fi
-	@if [ -f $(SRC_DIR)/userland/doom/doom1.wad ]; then \
+	@if [ -f $(SRC_DIR)/userland/games/doom/doom1.wad ]; then \
 		mkdir -p $(ISO_DIR)/Library/DOOM; \
-		cp $(SRC_DIR)/userland/doom/doom1.wad $(ISO_DIR)/Library/DOOM/; \
+		cp $(SRC_DIR)/userland/games/doom/doom1.wad $(ISO_DIR)/Library/DOOM/; \
 		echo "    module_path: boot():/Library/DOOM/doom1.wad" >> $(ISO_DIR)/limine.conf; \
 	fi
 	

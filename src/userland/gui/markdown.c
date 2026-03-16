@@ -433,7 +433,7 @@ static void md_paint(ui_window_t win) {
             
             if (x_offset == start_x && local_display_line == 0) {
                 if (line->type == MD_LINE_LIST) {
-                    ui_draw_rect(win, start_x - 12, current_y + MD_LINE_HEIGHT/2 - 1, 2, 2, COLOR_BLACK);
+                    ui_draw_rect(win, start_x - 12, current_y + MD_LINE_HEIGHT/2 - 1, 2, 2, COLOR_DARK_TEXT);
                 } else if (line->type == MD_LINE_BLOCKQUOTE) {
                     ui_draw_rect(win, start_x - 4, current_y, 2, line_height, 0xFF404080);
                 }
