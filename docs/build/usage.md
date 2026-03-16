@@ -46,7 +46,7 @@ This command invokes QEMU with specific arguments:
 
 ## Running on Bare Metal
 
-> [CAUTION]
+> [!CAUTION]
 > Running hobby operating systems on real hardware is at your own risk and may cause undefined behavior.
 
 To boot BoredOS on a physical PC:
