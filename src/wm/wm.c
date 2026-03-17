@@ -2133,7 +2133,7 @@ void wm_handle_right_click(int x, int y) {
             } else if (str_starts_with(start_menu_pending_app, "Word Processor")) {
                 Window *existing = wm_find_window_by_title("Word Processor");
                 if (existing) wm_bring_to_front(existing);
-                else process_create_elf("/bin/word.elf", NULL);
+                else process_create_elf("/bin/boredword.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
                 cmd_reset(); wm_bring_to_front(&win_cmd);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
@@ -2247,7 +2247,7 @@ void wm_handle_right_click(int x, int y) {
                     } else if (str_ends_with(icon->name, ".md")) {
                         process_create_elf("/bin/markdown.elf", path);
                     } else if (str_ends_with(icon->name, ".pdf")) {
-                        process_create_elf("/bin/word.elf", path);
+                        process_create_elf("/bin/boredword.elf", path);
                     } else if (is_image_file(icon->name)) {
                         process_create_elf("/bin/viewer.elf", path);
                     } else {

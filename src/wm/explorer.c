@@ -751,7 +751,7 @@ static void explorer_open_target(const char *path) {
         if (explorer_str_ends_with(path, ".elf")) {
             process_create_elf(path, NULL);
         } else if (explorer_str_ends_with(path, ".pdf")) {
-            process_create_elf("A:/bin/word.elf", path);
+            process_create_elf("A:/bin/boredword.elf", path);
         } else if (explorer_is_markdown_file(path)) {
             process_create_elf("A:/bin/markdown.elf", path);
         } else if (explorer_str_ends_with(path, ".pnt")) {
