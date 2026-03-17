@@ -97,8 +97,8 @@ static void about_paint(ui_window_t win) {
     
     int fh = ui_get_font_height();
     ui_draw_string(win, offset_x, offset_y + 105, "BoredOS 'Retrowave'", 0xFFFFFFFF);
-    ui_draw_string(win, offset_x, offset_y + 105 + fh, "BoredOS Version 1.71", 0xFFFFFFFF);
-    ui_draw_string(win, offset_x, offset_y + 105 + fh*2, "Kernel Version 3.1.1", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh, "BoredOS Version 1.72", 0xFFFFFFFF);
+    ui_draw_string(win, offset_x, offset_y + 105 + fh*2, "Kernel Version 3.1.2", 0xFFFFFFFF);
     
     // Copyright
     ui_draw_string(win, offset_x, offset_y + 105 + fh*3, "(C) 2026 boreddevnl.", 0xFFFFFFFF);
