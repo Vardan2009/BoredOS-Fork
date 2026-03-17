@@ -230,6 +230,10 @@ void idt_register_interrupts(void) {
     idt_set_gate(30, exc30_wrapper, cs, 0x8E);
     idt_set_gate(31, exc31_wrapper, cs, 0x8E);
 
+    // SMP: Scheduling IPI for AP cores (vector 0x41 = 65)
+    extern void isr_sched_ipi_wrapper(void);
+    idt_set_gate(0x41, isr_sched_ipi_wrapper, cs, 0x8E);
+
 }
 
 void idt_load(void) {

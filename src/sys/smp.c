@@ -89,16 +89,12 @@ static void ap_entry(struct limine_smp_info *info) {
     serial_write_num(cpu_states[my_id].lapic_id);
     serial_write(")\n");
 
-    // 8. Enable interrupts and enter idle loop
-    // APs don't handle PIC interrupts (only BSP does with legacy PIC).
-    // But they WILL pick up work from the work queue.
+    // 8. Enable interrupts and enter idle halt loop.
+    // APs will be woken by scheduling IPIs from BSP (vector 0x41).
+    // The IPI handler does context switching for this CPU's processes.
     asm volatile("sti");
 
-    // Import work queue drain function
-    extern void work_queue_drain_loop(void);
-    work_queue_drain_loop();
-
-    // Should never reach here
+    // Idle loop — APs halt and wait for IPI
     for (;;) { asm volatile("hlt"); }
 }
 

@@ -7,9 +7,11 @@ global isr1_wrapper
 global isr8_wrapper
 global isr12_wrapper
 global isr14_wrapper
+global isr_sched_ipi_wrapper
 extern timer_handler
 extern keyboard_handler
 extern mouse_handler
+extern sched_ipi_handler
 extern exception_handler_c
 
 ; Helper to send EOI (End of Interrupt) to PIC
@@ -84,6 +86,9 @@ isr1_wrapper:
 
 isr12_wrapper:
     ISR_NOERRCODE mouse_handler, 44
+
+isr_sched_ipi_wrapper:
+    ISR_NOERRCODE sched_ipi_handler, 65
 
 ; Common exception macro for exceptions WITHOUT error code
 %macro EXCEPTION_NOERRCODE 1

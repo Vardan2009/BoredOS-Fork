@@ -52,6 +52,7 @@ typedef struct process {
     uint64_t ticks;
     uint64_t sleep_until;
     size_t used_memory;
+    uint32_t cpu_affinity;    // Which CPU this process runs on (0 = BSP)
 } __attribute__((aligned(16))) process_t;
 
 typedef struct {
@@ -69,6 +70,9 @@ uint64_t process_schedule(uint64_t current_rsp);
 uint64_t process_terminate_current(void);
 void process_terminate(process_t *proc);
 process_t* process_get_by_pid(uint32_t pid);
+
+// SMP: IPI handler for AP scheduling (called from ISR)
+uint64_t sched_ipi_handler(registers_t *regs);
 
 void process_push_gui_event(process_t *proc, gui_event_t *ev);
 process_t* process_get_by_ui_window(void* win);

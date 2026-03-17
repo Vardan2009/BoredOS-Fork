@@ -11,17 +11,21 @@
 #include "elf.h"
 #include "wm.h"
 #include "spinlock.h"
+#include "smp.h"
+#include "lapic.h"
 
 extern void cmd_write(const char *str);
 extern void serial_write(const char *str);
 
 #define MAX_PROCESSES 16
+#define MAX_CPUS_SCHED 32
 process_t processes[MAX_PROCESSES] __attribute__((aligned(16)));
 int process_count = 0;
-static process_t* current_process = NULL;
+static process_t* current_process[MAX_CPUS_SCHED] = {0}; // Per-CPU
 static uint32_t next_pid = 0;
 static void *free_kernel_stack_later = NULL;
 static spinlock_t runqueue_lock = SPINLOCK_INIT;
+static uint32_t next_cpu_assign = 1; // Round-robin CPU assignment (start from CPU 1)
 
 void process_init(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
@@ -49,7 +53,8 @@ void process_init(void) {
     kernel_proc->used_memory = 32768; // Kernel stack
 
     kernel_proc->next = kernel_proc; // Circular linked list
-    current_process = kernel_proc;
+    kernel_proc->cpu_affinity = 0;   // Kernel always on BSP
+    current_process[0] = kernel_proc;
 }
 
 void process_create(void* entry_point, bool is_user) {
@@ -133,10 +138,12 @@ void process_create(void* entry_point, bool is_user) {
     asm volatile("fninit");
     new_proc->fpu_initialized = true;
     
+    new_proc->cpu_affinity = 0; // Non-ELF processes stay on BSP
+    
     // Add to linked list (Critical Section)
     uint64_t rflags = spinlock_acquire_irqsave(&runqueue_lock);
-    new_proc->next = current_process->next;
-    current_process->next = new_proc;
+    new_proc->next = current_process[0]->next;
+    current_process[0]->next = new_proc;
     spinlock_release_irqrestore(&runqueue_lock, rflags);
 }
 
@@ -316,10 +323,20 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     asm volatile("fninit");
     new_proc->fpu_initialized = true;
 
+    // Assign to an AP core via round-robin (if SMP is active)
+    uint32_t cpu_count = smp_cpu_count();
+    if (cpu_count > 1) {
+        new_proc->cpu_affinity = next_cpu_assign;
+        next_cpu_assign++;
+        if (next_cpu_assign >= cpu_count) next_cpu_assign = 1; // Wrap, skip CPU 0
+    } else {
+        new_proc->cpu_affinity = 0;
+    }
+
     // Add to linked list (Critical Section)
     uint64_t rflags = spinlock_acquire_irqsave(&runqueue_lock);
-    new_proc->next = current_process->next;
-    current_process->next = new_proc;
+    new_proc->next = current_process[0]->next;
+    current_process[0]->next = new_proc;
     spinlock_release_irqrestore(&runqueue_lock, rflags);
     
     serial_write("[PROCESS] Spawned ELF Executable: ");
@@ -329,7 +346,8 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
 }
 
 process_t* process_get_current(void) {
-    return current_process;
+    uint32_t cpu = smp_this_cpu_id();
+    return current_process[cpu];
 }
 
 uint64_t process_schedule(uint64_t current_rsp) {
@@ -338,41 +356,54 @@ uint64_t process_schedule(uint64_t current_rsp) {
         free_kernel_stack_later = NULL;
     }
 
-    if (!current_process || !current_process->next || current_process == current_process->next) 
+    uint32_t my_cpu = smp_this_cpu_id();
+    process_t *cur = current_process[my_cpu];
+    
+    if (!cur || !cur->next || cur == cur->next) 
         return current_rsp;
         
     // Save context
-    current_process->rsp = current_rsp;
+    cur->rsp = current_rsp;
 
-    // Switch to next ready process
+    // Switch to next ready process assigned to this CPU
     extern uint32_t wm_get_ticks(void);
     uint32_t now = wm_get_ticks();
     
-    process_t *start = current_process;
-    process_t *next_proc = current_process->next;
+    process_t *start = cur;
+    process_t *next_proc = cur->next;
     
     while (next_proc != start) {
-        if (next_proc->pid == 0 || next_proc->sleep_until == 0 || next_proc->sleep_until <= now) {
-            break;
+        // Only consider processes assigned to our CPU
+        if (next_proc->cpu_affinity == my_cpu) {
+            if (next_proc->pid == 0 || next_proc->sleep_until == 0 || next_proc->sleep_until <= now) {
+                break;
+            }
         }
         next_proc = next_proc->next;
     }
     
-    current_process = next_proc;
+    // If we didn't find a ready process for our CPU, stay on current
+    if (next_proc->cpu_affinity != my_cpu) {
+        return current_rsp;
+    }
+    
+    current_process[my_cpu] = next_proc;
     
     // Update Kernel Stack for User Mode interrupts and System Calls
-    if (current_process->is_user && current_process->kernel_stack) {
-        tss_set_stack(current_process->kernel_stack);
-        extern uint64_t kernel_syscall_stack;
-        kernel_syscall_stack = current_process->kernel_stack;
+    if (current_process[my_cpu]->is_user && current_process[my_cpu]->kernel_stack) {
+        tss_set_stack_cpu(my_cpu, current_process[my_cpu]->kernel_stack);
+        if (my_cpu == 0) {
+            extern uint64_t kernel_syscall_stack;
+            kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
+        }
     }
     
     // Switch page table
-    paging_switch_directory(current_process->pml4_phys);
+    paging_switch_directory(current_process[my_cpu]->pml4_phys);
     
-    current_process->ticks++;
+    current_process[my_cpu]->ticks++;
 
-    return current_process->rsp;
+    return current_process[my_cpu]->rsp;
 }
 
 process_t* process_get_by_pid(uint32_t pid) {
@@ -430,11 +461,12 @@ void process_terminate(process_t *to_delete) {
     // 3. Remove current from list
     prev->next = to_delete->next;
     
-    if (to_delete == current_process) {
-        current_process = to_delete->next;
-        // WARNING: If this was called as a regular function and not via a task switch,
-        // the stack might be in a weird state. But usually we call this via window manager
-        // or other external triggers.
+    // Update per-CPU current_process if this was the current on any CPU
+    uint32_t cpu_count = smp_cpu_count();
+    for (uint32_t c = 0; c < cpu_count && c < MAX_CPUS_SCHED; c++) {
+        if (current_process[c] == to_delete) {
+            current_process[c] = to_delete->next;
+        }
     }
 
     // Mark slot as free
@@ -442,11 +474,7 @@ void process_terminate(process_t *to_delete) {
 
     if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
     if (to_delete->kernel_stack_alloc) {
-        if (to_delete == current_process) {
-            free_kernel_stack_later = to_delete->kernel_stack_alloc;
-        } else {
-            kfree(to_delete->kernel_stack_alloc);
-        }
+        kfree(to_delete->kernel_stack_alloc);
     }
     
     extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
@@ -464,46 +492,49 @@ void process_terminate(process_t *to_delete) {
 uint64_t process_terminate_current(void) {
     uint64_t rflags = spinlock_acquire_irqsave(&runqueue_lock);
 
-    if (!current_process || current_process->pid == 0) {
+    uint32_t my_cpu = smp_this_cpu_id();
+    process_t *cur = current_process[my_cpu];
+
+    if (!cur || cur->pid == 0) {
         spinlock_release_irqrestore(&runqueue_lock, rflags);
         return 0;
     }
     
-    process_cleanup_inner(current_process);
+    process_cleanup_inner(cur);
 
     // 2. Find previous process in circular list
-    process_t *prev = current_process;
-    while (prev->next != current_process) {
+    process_t *prev = cur;
+    while (prev->next != cur) {
         prev = prev->next;
     }
 
     // 3. Remove current from list
-    process_t *to_delete = current_process;
+    process_t *to_delete = cur;
     
-    if (prev == current_process) {
+    if (prev == cur) {
         // Only one process (should be kernel), cannot terminate.
         spinlock_release_irqrestore(&runqueue_lock, rflags);
         return to_delete->rsp;
     }
 
     prev->next = to_delete->next;
-    current_process = to_delete->next;
+    current_process[my_cpu] = to_delete->next;
     
     // Mark slot as free
     to_delete->pid = 0xFFFFFFFF; 
 
     // 4. Load context for the NEXT process
-    if (current_process->is_user && current_process->kernel_stack) {
-        tss_set_stack(current_process->kernel_stack);
-        extern uint64_t kernel_syscall_stack;
-        kernel_syscall_stack = current_process->kernel_stack;
+    if (current_process[my_cpu]->is_user && current_process[my_cpu]->kernel_stack) {
+        tss_set_stack_cpu(my_cpu, current_process[my_cpu]->kernel_stack);
+        if (my_cpu == 0) {
+            extern uint64_t kernel_syscall_stack;
+            kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
+        }
     }
     
-    paging_switch_directory(current_process->pml4_phys);
+    paging_switch_directory(current_process[my_cpu]->pml4_phys);
 
-    // 5. Actually free the memory (after switching state to avoid issues)
-    // We only safely free the user stack. Immediate freeing of the current 
-    // kernel stack is unsafe while we are still running on it.
+    // 5. Free memory
     if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
     
     extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
@@ -511,15 +542,22 @@ uint64_t process_terminate_current(void) {
         paging_destroy_user_pml4_phys(to_delete->pml4_phys);
     }
     
-    // Clear pointers to avoid double-free during slot reuse
     to_delete->user_stack_alloc = NULL;
     free_kernel_stack_later = to_delete->kernel_stack_alloc;
-    to_delete->kernel_stack_alloc = NULL; // Leak the small kernel stack for safety
+    to_delete->kernel_stack_alloc = NULL;
     to_delete->pml4_phys = 0;
     
-    uint64_t next_rsp = current_process->rsp;
+    uint64_t next_rsp = current_process[my_cpu]->rsp;
     spinlock_release_irqrestore(&runqueue_lock, rflags);
     return next_rsp;
+}
+
+// SMP: IPI handler called on AP cores when BSP broadcasts scheduling IPI
+uint64_t sched_ipi_handler(registers_t *regs) {
+    lapic_eoi(); // Acknowledge the IPI
+    
+    // Run the scheduler for this CPU
+    return process_schedule((uint64_t)regs);
 }
 
 void process_push_gui_event(process_t *proc, gui_event_t *ev) {

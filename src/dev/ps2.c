@@ -5,6 +5,8 @@
 #include "io.h"
 #include "wm.h"
 #include "network.h"
+#include "lapic.h"
+#include "smp.h"
 #include <stdbool.h>
 
 extern void serial_print(const char *s);
@@ -23,7 +25,14 @@ uint64_t timer_handler(registers_t *regs) {
     
     outb(0x20, 0x20); // EOI after processing to prevent nested timer interrupts
     extern uint64_t process_schedule(uint64_t current_rsp);
-    return process_schedule((uint64_t)regs);
+    uint64_t new_rsp = process_schedule((uint64_t)regs);
+    
+    // SMP: Wake AP cores to run their assigned processes
+    if (smp_cpu_count() > 1) {
+        lapic_send_ipi_all();
+    }
+    
+    return new_rsp;
 }
 
 // --- Keyboard ---

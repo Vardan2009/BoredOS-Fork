@@ -21,6 +21,7 @@
 #include "wallpaper.h"
 #include "smp.h"
 #include "work_queue.h"
+#include "lapic.h"
 
 // --- Limine Requests ---
 __attribute__((used, section(".requests")))
@@ -240,6 +241,9 @@ void kmain(void) {
     asm("cli");
     ps2_init();
     asm("sti");
+
+    // Initialize LAPIC for IPI support
+    lapic_init();
 
     // Initialize SMP — bring up all CPU cores
     if (smp_request.response != NULL) {
