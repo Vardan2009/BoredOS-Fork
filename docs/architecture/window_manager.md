@@ -32,12 +32,17 @@ The WM acts as the central hub for input routing.
 2.  **Hit Testing**: The WM checks these coordinates against the bounding boxes of existing windows. It handles dragging logic (if the user clicks a title bar) or focus changes.
 3.  **Event Queue**: If a userland application owns the window that was clicked, the WM packages the input (coordinates, button state) into an event message and drops it into the owning process's event queue. The application can retrieve these via the custom libc UI functions.
 
-## 🔌 Userland API (`libui.c`)
+- **Event Polling**: The UI loop inside an app continuously calls `ui_poll_event()` to respond to mouse clicks and window movement dispatched by the kernel WM.
 
-Applications do not talk to the hardware directly. Instead, they use a library (`libui.c`) which makes specialized system calls (`SYS_GUI`).
+## 🧵 Multi-Core Safety & Performance
 
--   **Window Creation**: `ui_create_window()` asks the kernel to instantiate a new window object and returns a handle.
--   **Drawing**: Applications can request the kernel to fill rectangles or plot pixels inside their designated window area.
--   **Event Polling**: The UI loop inside an app continuously calls `ui_poll_event()` to respond to mouse clicks and window movement dispatched by the kernel WM.
+With the introduction of Symmetric Multi-Processing (SMP), the Window Manager (WM) was redesigned to ensure stability and high performance across multiple cores.
+
+1.  **Global GUI Lock (`wm_lock`)**: To prevent race conditions when multiple cores attempt to create windows, move cursors, or update pixels, the WM utilizes a central spinlock. All `GUI_CMD` system calls are protected by this lock.
+2.  **Deferred Rendering**: Previously, the desktop was repainted inside the timer interrupt. On multi-core systems, this caused severe "core starvation" as all other CPUs would spin waiting for the GUI lock during the long draw cycle.
+3.  **Kernel Loop Integration**: Final screen composition (`wm_paint`) is now deferred to the main kernel idle loop on the Bootstrap Processor (BSP). This allows application cores to continue processing logic while the GUI asynchronously flips the framebuffer.
+
+> [!IMPORTANT]
+> Because rendering is now asynchronous to the timer, application performance is significantly higher as they are no longer bottlenecked by interrupt-context drawing.
 
 ---

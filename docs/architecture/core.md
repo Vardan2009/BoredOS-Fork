@@ -19,7 +19,7 @@ The OS heavily relies on module separation. The `src/` directory is logically sp
 - **`fs/`**: Filesystem implementations. The system uses a Virtual File System (VFS) abstraction alongside an in-memory FAT32 filesystem with support for drives over ATA that are formatted as FAT32 (plain/MBR).
 - **`mem/`**: Physical and virtual memory management. It controls page frame allocation, paging, and kernel heap operations.
 - **`net/`**: The networking stack. BoredOS relies on `lwIP` for processing IPv4 and TCP/UDP traffic, interacting with a range of NICs via `net/nic/`.
-- **`sys/`**: System calls and process management. The ELF loader resides here, parsing userland binaries and setting them up for execution.
+- **`sys/`**: System calls and process management. The ELF loader resides here, alongside the Symmetric Multi-Processing (**smp.c**) bringup and Local APIC (**lapic.c**) management logic.
 - **`wm/`**: The graphical subsystem. It handles drawing primitives, window structures, font rendering, and double-buffering.
 - **`userland/`**: Out-of-kernel components. This includes the custom SDK/compiler environment (`libc/`) and user applications (`cli/`, `gui/`, `games/`).
 
@@ -28,24 +28,31 @@ The OS heavily relies on module separation. The `src/` directory is logically sp
 BoredOS uses **Limine** as its primary bootloader.
 
 1.  **Limine Initialization**: The machine firmware (BIOS or UEFI) loads Limine. Limine parses `limine.conf`, sets up an early graphical framebuffer, and reads the kernel ELF file into memory.
-2.  **Multiboot2 Protocol**: The kernel expects the Limine boot protocol (which is compatible with modern Multiboot specifications). Passing a framebuffer and memory map is handled natively by Limine's request structures (defined locally via `limine.h`).
-3.  **Kernel Entry (`main.c`)**: The entry point `_start` is called. It immediately initializes the serial port for debugging, sets up core structures (GDT/IDT), initializes the physical memory manager based on the Limine memory map, and starts the virtual memory manager.
-4.  **Driver Initialization**: PCI buses are scanned, finding the network card or disk controllers. The filesystem is mounted.
-5.  **Window Manager**: The UI is drawn on top of the Limine-provided framebuffer.
+2.  **Multiboot2 & SMP Protocol**: The kernel expects the Limine boot protocol. It makes a specific **SMP Request** to Limine to locate and bring up all available CPU cores.
+3.  **Kernel Entry (`main.c`)**: The entry point `_start` is called on the Bootstrap Processor (BSP). It initializes the serial port, GDT/IDT, memory management, and paging.
+4.  **AP Bringup**: The BSP calls `smp_init()`, which sends the Startup Inter-Processor Interrupt (SIPI) sequence to all Application Processors (APs). Each AP initializes its own local GDT, TSS, and Page Tables before entering an idle loop.
+5.  **Driver Initialization**: PCI buses are scanned, finding the network card or disk controllers. The filesystem is mounted.
+6.  **Window Manager**: The UI is drawn on top of the Limine-provided framebuffer.
 
-> [!NOTE]
-> The kernel parses memory maps dynamically, meaning it adjusts optimally to the RAM provided by the environment or emulator.
+## 🧵 Multi-Core & Scheduling
+
+BoredOS utilizes Symmetric Multi-Processing (SMP) to distribute workloads across all available CPU cores.
+
+-   **LAPIC & IPIs**: Each CPU has its own Local APIC. The kernel uses Inter-Processor Interrupts (IPIs) for inter-core communication, specifically for triggering the scheduler on other cores (`vector 0x41`).
+-   **Scheduler**: A round-robin scheduler runs on each core. Processes are pinned to specific CPUs (CPU Affinity) to maintain cache locality. The BSP timer interrupt (`60Hz`) broadcasts a scheduling IPI to all core to ensure balanced execution.
+-   **Spinlocks**: Since multiple cores can access kernel structures (VFS, Process List) simultaneously, the kernel uses **interrupt-safe spinlocks** to prevent race conditions.
 
 ## 🛡️ Userland Transition
 
-The OS supports privilege separation (Ring 0 vs. Ring 3). When an application (like `browser.elf` or `viewer.elf`) is launched, the kernel:
+The OS supports privilege separation (Ring 0 vs. Ring 3). When an application is launched, the kernel:
 
-1.  Loads the ELF file from the filesystem using the ELF parser in `sys/elf.c`.
-2.  Allocates a new virtual address space (Page Directory) for the process.
-3.  Maps the executable segments according to the ELF headers.
-4.  Switches to User Mode (Ring 3) via the `iretq` instruction, jumping into the application's entry point (`crt0.asm`).
+1.  Loads the ELF file from the filesystem.
+2.  Assigns the process to a CPU core via a round-robin distribution strategy.
+3.  Allocates a new virtual address space (Page Directory) for the process.
+4.  Maps the executable segments according to the ELF headers.
+5.  Switches to User Mode (Ring 3) via the `iretq` instruction.
 
 > [!IMPORTANT]
-> Programs then interact with the core kernel using system calls (`syscall.c`). Isolated processes cannot directly access hardware or kernel memory structures without faulting.
+> Programs interact with the core kernel using system calls (`syscall.c`). Multitasking is achieved by pre-empting user processes on their respective cores.
 
 ---

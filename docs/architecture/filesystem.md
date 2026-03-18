@@ -15,6 +15,7 @@ Key VFS functionalities include:
 -   **File Descriptors**: Mapping integer IDs to internal file structures for userland processes.
 -   **Standard Operations**: Standardizing `open()`, `read()`, `write()`, `close()`, `seek()`, and directory listings.
 -   **Path Parsing**: Resolving absolute and relative paths.
+-   **SMP Safety**: All VFS and underlying FAT32 operations are protected by a global **Spinlock**. This ensures that multiple cores can safely read from the filesystem simultaneously without corrupting internal file seek pointers or directory cache states.
 
 ## 💾 FAT32 Implementation
 

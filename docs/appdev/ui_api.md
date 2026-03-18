@@ -68,7 +68,9 @@ Applications must continuously poll for events inside an infinite `$while(1)` lo
     Returns `true` if an event was waiting in the queue, populating the `ev` structure. Returns `false` if the queue is empty.
 
 > [!IMPORTANT]
-> Because `ui_get_event` is non-blocking, you must call `sys_yield();` inside your event loop if no event was received, otherwise your app will consume 100% of the CPU timeslice.
+> Because `ui_get_event` is non-blocking, you must call `sys_yield();` inside your event loop if no event was received. In BoredOS's **Multi-Core (SMP)** architecture, failing to yield will pin a CPU core to 100% usage, potentially starving other processes.
+> 
+> All UI syscalls are **Thread-Safe** at the kernel level via the global GUI spinlock.
 
 ### Graphical Event Structure
 

@@ -23,6 +23,9 @@ BoredOS is a functional x86_64 operating system featuring a custom Desktop Envir
 
 ### ⚙️ System Architecture
 * **64-bit Long Mode:** Fully utilizing the x86_64 architecture.
+* **Symmetric Multi-Processing (SMP):** Full support for multi-core CPUs via Limine SMP.
+* **LAPIC & IPI Scheduling:** Advanced interrupt handling and inter-processor communication for task distribution.
+* **SMP-Safe Spinlocks:** Robust kernel-wide synchronization for VFS, process management, and the GUI.
 * **Multiboot2 Compliant:** Bootable on real hardware and modern emulators.
 * **Kernel Core:** Interrupt Descriptor Table (IDT) management and a robust syscall interface.
 * **Filesystem:** Full **FAT32** support for persistent and in-memory storage.
