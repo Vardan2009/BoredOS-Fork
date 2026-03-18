@@ -39,7 +39,7 @@ BoredOS is a functional x86_64 operating system featuring a custom Desktop Envir
 ### 🛠️ Included Applications
 * **Productivity:** GUI Text Editor calculator, Markdown Viewer, a simple browser and BoredWord.
 * **Creativity:** A Paint application.
-* **Utilities:** Terminal,Task Manager, File Explorer, Clock and a (limited) C Compiler.
+* **Utilities:** Terminal, Task Manager, File Explorer, Clock and a (limited) C Compiler.
 * **Games:** Minesweeper and DOOM.
 
 ---
