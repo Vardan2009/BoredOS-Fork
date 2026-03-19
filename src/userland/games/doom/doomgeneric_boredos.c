@@ -13,19 +13,6 @@ static uint32_t scaled_buffer[600 * 900]; // DOOMGENERIC_RESX * DOOMGENERIC_RESY
 
 void DG_DrawFrame(void) {
     if (doom_win) {
-        // Doom's internal rendering is always 320x200.
-        // But doomgeneric seems to expect DOOMGENERIC_RESX x DOOMGENERIC_RESY.
-        // Actually, if we set DOOMGENERIC_RESX = 600, doom builds its internal tables based on DOOMGENERIC_RESX.
-        // Wait, Doom's standard resolution is 320x200. Let's find out what DG_ScreenBuffer dimensions are.
-        // According to Doom source, SCREENWIDTH and SCREENHEIGHT define the buffer size.
-        // So DG_ScreenBuffer is indeed DOOMGENERIC_RESX x DOOMGENERIC_RESY.
-        // However, the issue shown in the image is that the *game itself* only drew a 320x200 or 640x400 block in the corner!
-        
-        // So the image wasn't scaled by Doom. Let's let LibUI do the scaling!
-        // We will tell Doom its resolution is 640x400 (which it knows how to handle correctly for the 16:10 aspect ratio),
-        // but we'll scale it to 600x900 (or whatever window size) before sending it to ui_draw_image.
-        
-        // Wait, ui_draw_image doesn't scale natively yet. Let's do nearest-neighbor scaling.
         int src_w = 640;
         int src_h = 400;
         int dst_w = DOOMGENERIC_RESX;
