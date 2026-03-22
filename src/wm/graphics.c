@@ -34,9 +34,11 @@ static uint32_t g_back_buffer[MAX_FB_WIDTH * MAX_FB_HEIGHT] __attribute__((align
 static int g_clip_x = 0, g_clip_y = 0, g_clip_w = 0, g_clip_h = 0;
 static bool g_clip_enabled = false;
 
-static uint32_t *g_render_target = NULL;
-static int g_rt_width = 0;
-static int g_rt_height = 0;
+extern uint32_t smp_this_cpu_id(void);
+#define MAX_RENDER_CPUS 32
+static uint32_t *g_render_target[MAX_RENDER_CPUS] = {0};
+static int g_rt_width[MAX_RENDER_CPUS] = {0};
+static int g_rt_height[MAX_RENDER_CPUS] = {0};
 
 static ttf_font_t *g_current_ttf = NULL;
 
@@ -176,15 +178,19 @@ void graphics_clear_dirty_no_lock(void) {
 }
 
 void graphics_set_render_target(uint32_t *buffer, int w, int h) {
-    g_render_target = buffer;
-    g_rt_width = w;
-    g_rt_height = h;
+    uint32_t cpu = smp_this_cpu_id();
+    if (cpu < MAX_RENDER_CPUS) {
+        g_render_target[cpu] = buffer;
+        g_rt_width[cpu] = w;
+        g_rt_height[cpu] = h;
+    }
 }
 
 void put_pixel(int x, int y, uint32_t color) {
-    if (g_render_target) {
-        if (x >= 0 && x < g_rt_width && y >= 0 && y < g_rt_height) {
-            g_render_target[y * g_rt_width + x] = color;
+    uint32_t cpu = smp_this_cpu_id();
+    if (cpu < MAX_RENDER_CPUS && g_render_target[cpu]) {
+        if (x >= 0 && x < g_rt_width[cpu] && y >= 0 && y < g_rt_height[cpu]) {
+            g_render_target[cpu][y * g_rt_width[cpu] + x] = color;
         }
         return;
     }
@@ -204,9 +210,10 @@ void put_pixel(int x, int y, uint32_t color) {
 }
 
 uint32_t graphics_get_pixel(int x, int y) {
-    if (g_render_target) {
-        if (x >= 0 && x < g_rt_width && y >= 0 && y < g_rt_height) {
-            return g_render_target[y * g_rt_width + x];
+    uint32_t cpu = smp_this_cpu_id();
+    if (cpu < MAX_RENDER_CPUS && g_render_target[cpu]) {
+        if (x >= 0 && x < g_rt_width[cpu] && y >= 0 && y < g_rt_height[cpu]) {
+            return g_render_target[cpu][y * g_rt_width[cpu] + x];
         }
         return 0;
     }
@@ -220,15 +227,16 @@ uint32_t graphics_get_pixel(int x, int y) {
 void draw_rect(int x, int y, int w, int h, uint32_t color) {
     int x1 = x, y1 = y, x2 = x + w, y2 = y + h;
 
-    if (g_render_target) {
+    uint32_t cpu = smp_this_cpu_id();
+    if (cpu < MAX_RENDER_CPUS && g_render_target[cpu]) {
         if (x1 < 0) x1 = 0;
         if (y1 < 0) y1 = 0;
-        if (x2 > g_rt_width) x2 = g_rt_width;
-        if (y2 > g_rt_height) y2 = g_rt_height;
+        if (x2 > g_rt_width[cpu]) x2 = g_rt_width[cpu];
+        if (y2 > g_rt_height[cpu]) y2 = g_rt_height[cpu];
         if (x1 >= x2 || y1 >= y2) return;
         
         for (int i = y1; i < y2; i++) {
-            uint32_t *row = &g_render_target[i * g_rt_width + x1];
+            uint32_t *row = &g_render_target[cpu][i * g_rt_width[cpu] + x1];
             int len = x2 - x1;
             for (int j = 0; j < len; j++) {
                 row[j] = color;
@@ -461,7 +469,9 @@ void draw_char(int x, int y, char c, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return;
 
-    if (g_clip_enabled && !g_render_target) {
+    uint32_t cpu = smp_this_cpu_id();
+    bool has_rt = (cpu < MAX_RENDER_CPUS && g_render_target[cpu]);
+    if (g_clip_enabled && !has_rt) {
         if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
             y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
             return;
@@ -484,7 +494,9 @@ void draw_char_bitmap(int x, int y, char c, uint32_t color) {
     unsigned char uc = (unsigned char)c;
     if (uc > 127) return;
 
-    if (g_clip_enabled && !g_render_target) {
+    uint32_t cpu = smp_this_cpu_id();
+    bool has_rt = (cpu < MAX_RENDER_CPUS && g_render_target[cpu]);
+    if (g_clip_enabled && !has_rt) {
         if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
             y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
             return;

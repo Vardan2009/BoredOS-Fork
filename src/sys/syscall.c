@@ -215,6 +215,7 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
             win->cursor_pos = 0;
             win->data = proc;
             win->font = NULL;
+            win->lock = SPINLOCK_INIT;
             
             serial_write("Kernel: Dims initialized.\n");
             
@@ -269,7 +270,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 extern void graphics_set_render_target(uint32_t *buffer, int w, int h);
                 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 if (win->pixels) {
                     // Strict user-to-window relative clamping
@@ -289,7 +292,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     draw_rect(win->x + params[0], win->y + params[1], params[2], params[3], color);
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == GUI_CMD_DRAW_ROUNDED_RECT_FILLED) {
             Window *win = (Window *)arg2;
@@ -303,7 +307,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 extern void graphics_set_render_target(uint32_t *buffer, int w, int h);
                 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 if (win->pixels) {
                     int rx = (int)params[0]; int ry = (int)params[1];
@@ -321,7 +327,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     }
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == GUI_CMD_DRAW_STRING) {
             Window *win = (Window *)arg2;
@@ -344,7 +351,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 kernel_str[i] = 0;
 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 ttf_font_t *font = win->font ? (ttf_font_t*)win->font : graphics_get_current_ttf();
 
@@ -380,7 +389,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     }
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == 10) { // GUI_CMD_DRAW_STRING_BITMAP
             Window *win = (Window *)arg2;
@@ -403,7 +413,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 kernel_str[i] = 0;
 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 if (win->pixels) {
                     if (ux >= -100 && ux < win->w && uy >= -100 && uy < (win->h - 20)) {
@@ -415,7 +427,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     draw_string_bitmap(win->x + ux, win->y + uy, kernel_str, color);
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == 11) { // GUI_CMD_DRAW_STRING_SCALED
             Window *win = (Window *)arg2;
@@ -442,7 +455,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 kernel_str[i] = 0;
 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 ttf_font_t *font = win->font ? (ttf_font_t*)win->font : graphics_get_current_ttf();
 
@@ -478,7 +493,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     }
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == 18) { // GUI_CMD_DRAW_STRING_SCALED_SLOPED
             Window *win = (Window *)arg2;
@@ -515,7 +531,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 kernel_str[i] = 0;
 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 ttf_font_t *font = win->font ? (ttf_font_t*)win->font : graphics_get_current_ttf();
 
@@ -553,7 +571,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     }
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == GUI_CMD_DRAW_IMAGE) {
             Window *win = (Window *)arg2;
@@ -564,7 +583,9 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 for (int i = 0; i < 4; i++) params[i] = u_params[i];
                 
                 uint64_t rflags;
-                rflags = wm_lock_acquire();
+                bool use_wm_lock = (win->pixels == NULL);
+                if (use_wm_lock) rflags = wm_lock_acquire();
+                else rflags = spinlock_acquire_irqsave(&win->lock);
                 
                 if (win->pixels) {
                     int rx = (int)params[0]; int ry = (int)params[1];
@@ -599,7 +620,8 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                     }
                 }
                 
-                wm_lock_release(rflags);
+                if (use_wm_lock) wm_lock_release(rflags);
+                else spinlock_release_irqrestore(&win->lock, rflags);
             }
         } else if (cmd == GUI_CMD_MARK_DIRTY) {
             uint64_t rflags = wm_lock_acquire();
@@ -611,8 +633,10 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
 
                 // Dual-buffer commit: copy pixels to comp_pixels
                 if (win->pixels && win->comp_pixels) {
+                    uint64_t win_rflags = spinlock_acquire_irqsave(&win->lock);
                     extern void mem_memcpy(void *dest, const void *src, size_t len);
                     mem_memcpy(win->comp_pixels, win->pixels, (size_t)win->w * (win->h - 20) * 4);
+                    spinlock_release_irqrestore(&win->lock, win_rflags);
                 }
                 wm_mark_dirty(win->x + (int)params[0], win->y + (int)params[1], (int)params[2], (int)params[3]);
             }

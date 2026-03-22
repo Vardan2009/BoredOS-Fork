@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "../sys/spinlock.h"
 
 uint64_t wm_lock_acquire(void);
 void wm_lock_release(uint64_t flags);
@@ -55,6 +56,7 @@ struct Window {
     uint32_t *pixels; 
     uint32_t *comp_pixels; 
     void *font;
+    spinlock_t lock;
     
     // Callbacks
     void (*paint)(Window *win);

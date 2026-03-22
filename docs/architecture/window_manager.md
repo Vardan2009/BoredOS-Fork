@@ -38,11 +38,11 @@ The WM acts as the central hub for input routing.
 
 With the introduction of Symmetric Multi-Processing (SMP), the Window Manager (WM) was redesigned to ensure stability and high performance across multiple cores.
 
-1.  **Global GUI Lock (`wm_lock`)**: To prevent race conditions when multiple cores attempt to create windows, move cursors, or update pixels, the WM utilizes a central spinlock. All `GUI_CMD` system calls are protected by this lock.
-2.  **Deferred Rendering**: Previously, the desktop was repainted inside the timer interrupt. On multi-core systems, this caused severe "core starvation" as all other CPUs would spin waiting for the GUI lock during the long draw cycle.
-3.  **Kernel Loop Integration**: Final screen composition (`wm_paint`) is now deferred to the main kernel idle loop on the Bootstrap Processor (BSP). This allows application cores to continue processing logic while the GUI asynchronously flips the framebuffer.
+1.  **Granular Window Locks**: Each `Window` object possesses its own `spinlock_t lock;`. User applications concurrently draw directly into their own window buffers without stalling the rest of the system. The global `wm_lock` is reserved strictly for altering global structures like window z-order or syncing buffers to the screen compositing layer.
+2.  **Per-CPU Rendering State**: To facilitate simultaneous GUI system calls across all CPU cores, the low-level rendering context (`g_render_target` array) is isolated per-CPU using the core ID. This allows completely lockless multi-core pixel rasterization, drastically reducing rendering bottlenecks.
+3.  **Deferred Compositing**: Final screen composition (`wm_paint`) is scheduled to the main kernel idle loop on the Bootstrap Processor (BSP). This enables application cores to continue processing logic seamlessly while the GUI asynchronously handles flipping the physical framebuffer.
 
 > [!IMPORTANT]
-> Because rendering is now asynchronous to the timer, application performance is significantly higher as they are no longer bottlenecked by interrupt-context drawing.
+> Because application rendering (rasterizing geometry into a window's backbuffer) is SMP-safe and lock-free across cores, GUI performance scales linearly with the number of CPUs active.
 
 ---
