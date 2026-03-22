@@ -42,6 +42,28 @@ static int dropdown_menu_item_height = 25;
 #define FILE_CONTEXT_MENU_HEIGHT 50
 #define CONTEXT_MENU_ITEM_HEIGHT 25
 
+static void wm_draw_rect(void *user_data, int x, int y, int w, int h, uint32_t color) {
+    (void)user_data; draw_rect(x, y, w, h, color);
+}
+static void wm_draw_rounded_rect_filled(void *user_data, int x, int y, int w, int h, int r, uint32_t color) {
+    (void)user_data; draw_rounded_rect_filled(x, y, w, h, r, color);
+}
+static void wm_draw_string(void *user_data, int x, int y, const char *str, uint32_t color) {
+    (void)user_data; draw_string(x, y, str, color);
+}
+static int wm_measure_string_width(void *user_data, const char *str) {
+    (void)user_data;
+    return font_manager_get_string_width(graphics_get_current_ttf(), str);
+}
+static widget_context_t wm_widget_ctx = {
+    .user_data = NULL,
+    .draw_rect = wm_draw_rect,
+    .draw_rounded_rect_filled = wm_draw_rounded_rect_filled,
+    .draw_string = wm_draw_string,
+    .measure_string_width = wm_measure_string_width,
+    .mark_dirty = NULL
+};
+
 static char clipboard_path[FAT32_MAX_PATH] = "";
 static int clipboard_action = 0; 
 #define FILE_CONTEXT_ITEMS 2 
@@ -950,16 +972,15 @@ static void explorer_paint(Window *win) {
     draw_string(path_x + 6 + path_label_w + 6, offset_y + 8, state->current_path, COLOR_DARK_TEXT);
     
     int dropdown_btn_x = win->x + win->w - 90;
-    draw_rounded_rect_filled(dropdown_btn_x, offset_y + 3, 35, 22, 5, COLOR_DARK_PANEL);
-    draw_string(dropdown_btn_x + 10, offset_y + 8, "...", COLOR_DARK_TEXT);
+    widget_button_init(&state->btn_dropdown, dropdown_btn_x, offset_y + 3, 35, 22, "...");
+    widget_button_init(&state->btn_back, win->x + win->w - 40, offset_y + 3, 30, 22, "<");
+    widget_button_init(&state->btn_up, win->x + win->w - 160, offset_y + 3, 30, 22, "^");
+    widget_button_init(&state->btn_fwd, win->x + win->w - 125, offset_y + 3, 30, 22, "v");
     
-    draw_rounded_rect_filled(win->x + win->w - 40, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 32, offset_y + 8, "<", COLOR_DARK_TEXT);
-    
-    draw_rounded_rect_filled(win->x + win->w - 160, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 150, offset_y + 8, "^", COLOR_DARK_TEXT);
-    draw_rounded_rect_filled(win->x + win->w - 125, offset_y + 3, 30, 22, 5, COLOR_DARK_PANEL);
-    draw_string(win->x + win->w - 115, offset_y + 8, "v", COLOR_DARK_TEXT);
+    widget_button_draw(&wm_widget_ctx, &state->btn_dropdown);
+    widget_button_draw(&wm_widget_ctx, &state->btn_back);
+    widget_button_draw(&wm_widget_ctx, &state->btn_up);
+    widget_button_draw(&wm_widget_ctx, &state->btn_fwd);
     
     int content_start_y = offset_y + 30;
     
@@ -1043,25 +1064,15 @@ static void explorer_paint(Window *win) {
         
         draw_string(dlg_x + 10, dlg_y + 10, "Create New File", COLOR_WHITE);
         
-        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        { int max_w = 265; 
-          ttf_font_t *ttf_ = graphics_get_current_ttf();
-          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
-          int scroll_x = 0;
-          if (total_w > max_w) scroll_x = total_w - max_w;
-          char sub_[128]; int k_=0;
-          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
-          sub_[k_]=0;
-          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
-          if (cx_ < 0) cx_ = 0;
-          if (cx_ > max_w) cx_ = max_w;
-          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
+        widget_textbox_init(&state->dialog_textbox, dlg_x + 10, dlg_y + 35, 280, 25, state->dialog_input, DIALOG_INPUT_MAX);
+        state->dialog_textbox.focused = true;
+        state->dialog_textbox.cursor_pos = state->dialog_input_cursor;
+        widget_textbox_draw(&wm_widget_ctx, &state->dialog_textbox);
         
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 70, dlg_y + 72, "Create", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Create");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     } else if (state->dialog_state == DIALOG_CREATE_FOLDER) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1070,25 +1081,15 @@ static void explorer_paint(Window *win) {
         
         draw_string(dlg_x + 10, dlg_y + 10, "Create New Folder", COLOR_WHITE);
         
-        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        { int max_w = 265; 
-          ttf_font_t *ttf_ = graphics_get_current_ttf();
-          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
-          int scroll_x = 0;
-          if (total_w > max_w) scroll_x = total_w - max_w;
-          char sub_[128]; int k_=0;
-          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
-          sub_[k_]=0;
-          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
-          if (cx_ < 0) cx_ = 0;
-          if (cx_ > max_w) cx_ = max_w;
-          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
+        widget_textbox_init(&state->dialog_textbox, dlg_x + 10, dlg_y + 35, 280, 25, state->dialog_input, DIALOG_INPUT_MAX);
+        state->dialog_textbox.focused = true;
+        state->dialog_textbox.cursor_pos = state->dialog_input_cursor;
+        widget_textbox_draw(&wm_widget_ctx, &state->dialog_textbox);
         
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 70, dlg_y + 72, "Create", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Create");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     } else if (state->dialog_state == DIALOG_DELETE_CONFIRM) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1107,8 +1108,14 @@ static void explorer_paint(Window *win) {
         }
         draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, 0xFF8B2020);
         draw_string(dlg_x + 68, dlg_y + 72, "Delete", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
+        
+        // Use libwidget only for the cancel button, or do we want to use libwidget for the delete button too?
+        // Let's use libwidget but the delete button needs red styling so maybe just keep it manual or make it secondary.
+        // Actually wait, I will use libwidget for both and let the text dictate the action, we can't style individual buttons yet.
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Delete");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     } else if (state->dialog_state == DIALOG_REPLACE_CONFIRM) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1120,10 +1127,10 @@ static void explorer_paint(Window *win) {
         draw_string(dlg_x + 10, dlg_y + 35, "Replace existing file?", 0xFFAAAAAA);
         draw_string(dlg_x + 10, dlg_y + 48, "This cannot be undone.", 0xFFAAAAAA);
         
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 70, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 63, dlg_y + 77, "Replace", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 70, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 77, "Cancel", COLOR_WHITE);
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Replace");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     } else if (state->dialog_state == DIALOG_REPLACE_MOVE_CONFIRM) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1150,10 +1157,10 @@ static void explorer_paint(Window *win) {
         draw_string(dlg_x + 10, dlg_y + 35, "Overwrite existing file?", 0xFFAAAAAA);
         draw_string(dlg_x + 10, dlg_y + 48, "This cannot be undone.", 0xFFAAAAAA);
         
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 70, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 57, dlg_y + 77, "Overwrite", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 70, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 77, "Cancel", COLOR_WHITE);
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Overwrite");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     } else if (state->dialog_state == DIALOG_ERROR) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
@@ -1163,32 +1170,23 @@ static void explorer_paint(Window *win) {
         draw_string(dlg_x + 10, dlg_y + 10, "Error", 0xFFFF6B6B);
         draw_string(dlg_x + 10, dlg_y + 40, state->dialog_input, 0xFFAAAAAA);
         
-        draw_rounded_rect_filled(dlg_x + 110, dlg_y + 70, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 138, dlg_y + 77, "OK", COLOR_WHITE);
+        widget_button_init(&state->btn_primary, dlg_x + 110, dlg_y + 70, 80, 25, "OK");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
     } else if (state->dialog_state == DIALOG_RENAME) {
         int dlg_x = win->x + win->w / 2 - 150;
         int dlg_y = win->y + win->h / 2 - 60;
         
         draw_rounded_rect_filled(dlg_x, dlg_y, 300, 110, 8, COLOR_DARK_PANEL);
         draw_string(dlg_x + 10, dlg_y + 10, "Rename", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
-        draw_string(dlg_x + 15, dlg_y + 40, state->dialog_input, COLOR_WHITE);
-        { int max_w = 265; 
-          ttf_font_t *ttf_ = graphics_get_current_ttf();
-          int total_w = font_manager_get_string_width(ttf_, state->dialog_input);
-          int scroll_x = 0;
-          if (total_w > max_w) scroll_x = total_w - max_w;
-          char sub_[128]; int k_=0;
-          for(k_=0; k_<state->dialog_input_cursor && state->dialog_input[k_]; k_++) sub_[k_]=state->dialog_input[k_];
-          sub_[k_]=0;
-          int cx_ = font_manager_get_string_width(ttf_, sub_) - scroll_x;
-          if (cx_ < 0) cx_ = 0;
-          if (cx_ > max_w) cx_ = max_w;
-          draw_rect(dlg_x+15+cx_, dlg_y+39, 2, 12, COLOR_WHITE); }
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 68, dlg_y + 72, "Rename", COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 6, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
+        widget_textbox_init(&state->dialog_textbox, dlg_x + 10, dlg_y + 35, 280, 25, state->dialog_input, DIALOG_INPUT_MAX);
+        state->dialog_textbox.focused = true;
+        state->dialog_textbox.cursor_pos = state->dialog_input_cursor;
+        widget_textbox_draw(&wm_widget_ctx, &state->dialog_textbox);
+        
+        widget_button_init(&state->btn_primary, dlg_x + 50, dlg_y + 70, 80, 25, "Rename");
+        widget_button_init(&state->btn_secondary, dlg_x + 170, dlg_y + 70, 80, 25, "Cancel");
+        widget_button_draw(&wm_widget_ctx, &state->btn_primary);
+        widget_button_draw(&wm_widget_ctx, &state->btn_secondary);
     }
     
     if (state->file_context_menu_visible) {
@@ -1220,6 +1218,9 @@ static void explorer_paint(Window *win) {
 }
 
 
+#define WIDGET_CLICKED(btn, cx, cy) ((cx) >= (btn)->x && (cx) < (btn)->x + (btn)->w && (cy) >= (btn)->y && (cy) < (btn)->y + (btn)->h)
+#define TEXTBOX_CLICKED(tb, cx, cy) ((cx) >= (tb)->x && (cx) < (tb)->x + (tb)->w && (cy) >= (tb)->y && (cy) < (tb)->y + (tb)->h)
+
 static void explorer_handle_click(Window *win, int x, int y) {
     ExplorerState *state = (ExplorerState*)win->data;
     if (state->file_context_menu_visible) {
@@ -1228,106 +1229,90 @@ static void explorer_handle_click(Window *win, int x, int y) {
     }
     
     if (state->dialog_state == DIALOG_CREATE_FILE || state->dialog_state == DIALOG_CREATE_FOLDER) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 &&
-            y >= dlg_y + 65 && y < dlg_y + 90) {
-            if (state->dialog_state == DIALOG_CREATE_FILE) {
-                dialog_confirm_create_file(win);
-            } else {
-                dialog_confirm_create_folder(win);
-            }
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
+            if (state->dialog_state == DIALOG_CREATE_FILE) dialog_confirm_create_file(win);
+            else dialog_confirm_create_folder(win);
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 &&
-            y >= dlg_y + 65 && y < dlg_y + 90) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
         
-        if (x >= dlg_x + 10 && x < dlg_x + 290 &&
-            y >= dlg_y + 35 && y < dlg_y + 55) {
-            state->dialog_input_cursor = (x - dlg_x - 15) / 8;
+        if (TEXTBOX_CLICKED(&state->dialog_textbox, win->x + x, win->y + y)) {
+            state->dialog_input_cursor = (win->x + x - state->dialog_textbox.x - 5) / 8;
             if (state->dialog_input_cursor > (int)explorer_strlen(state->dialog_input)) {
                 state->dialog_input_cursor = explorer_strlen(state->dialog_input);
             }
+            if (state->dialog_input_cursor < 0) state->dialog_input_cursor = 0;
             return;
         }
         return; 
     } else if (state->dialog_state == DIALOG_DELETE_CONFIRM) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80; 
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 &&
-            y >= dlg_y + 65 && y < dlg_y + 90) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             dialog_confirm_delete(win);
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 &&
-            y >= dlg_y + 65 && y < dlg_y + 90) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
         return; 
     } else if (state->dialog_state == DIALOG_REPLACE_CONFIRM) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             dialog_confirm_replace(win);
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y + 20)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
         return;
     } else if (state->dialog_state == DIALOG_REPLACE_MOVE_CONFIRM) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             dialog_confirm_replace_move(win);
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y + 20)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
         return;
     } else if (state->dialog_state == DIALOG_CREATE_REPLACE_CONFIRM) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             dialog_force_create_file(win);
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y + 20)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
         return;
     } else if (state->dialog_state == DIALOG_ERROR) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 110 && x < dlg_x + 190 && y >= dlg_y + 70 && y < dlg_y + 95) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             dialog_close(win);
             return;
         }
         return;
     } else if (state->dialog_state == DIALOG_RENAME) {
-        int dlg_x = win->w / 2 - 150;
-        int dlg_y = win->h / 2 - 80;
-        
-        if (x >= dlg_x + 50 && x < dlg_x + 130 && y >= dlg_y + 65 && y < dlg_y + 90) {
+        if (WIDGET_CLICKED(&state->btn_primary, win->x + x, win->y + y + 20)) {
+            state->btn_primary.pressed = false;
             char new_path[FAT32_MAX_PATH];
             explorer_strcpy(new_path, state->current_path);
             if (new_path[explorer_strlen(new_path)-1] != '/') explorer_strcat(new_path, "/");
@@ -1338,16 +1323,17 @@ static void explorer_handle_click(Window *win, int x, int y) {
             return;
         }
         
-        if (x >= dlg_x + 170 && x < dlg_x + 250 && y >= dlg_y + 65 && y < dlg_y + 90) {
+        if (WIDGET_CLICKED(&state->btn_secondary, win->x + x, win->y + y + 20)) {
+            state->btn_secondary.pressed = false;
             dialog_close(win);
             return;
         }
-
-        if (x >= dlg_x + 10 && x < dlg_x + 290 && y >= dlg_y + 35 && y < dlg_y + 55) {
-            state->dialog_input_cursor = (x - dlg_x - 15) / 8;
+        if (TEXTBOX_CLICKED(&state->dialog_textbox, win->x + x, win->y + y + 20)) {
+            state->dialog_input_cursor = (win->x + x - state->dialog_textbox.x - 5) / 8;
             if (state->dialog_input_cursor > (int)explorer_strlen(state->dialog_input)) {
                 state->dialog_input_cursor = explorer_strlen(state->dialog_input);
             }
+            if (state->dialog_input_cursor < 0) state->dialog_input_cursor = 0;
             return;
         }
         return; 
@@ -1420,27 +1406,27 @@ static void explorer_handle_click(Window *win, int x, int y) {
         return;
     }
     
-    if (x >= win->w - 90 && x < win->w - 55 &&
-        y >= button_y && y < button_y + 22) {
+    if (WIDGET_CLICKED(&state->btn_dropdown, win->x + x, win->y + y + 20)) {
+        state->btn_dropdown.pressed = false;
         dropdown_menu_toggle(win);
         state->drive_menu_visible = false; 
         return;
     }
     
-    if (x >= win->w - 40 && x < win->w - 10 &&
-        y >= button_y && y < button_y + 22) {
+    if (WIDGET_CLICKED(&state->btn_back, win->x + x, win->y + y + 20)) {
+        state->btn_back.pressed = false;
         explorer_navigate_to(win, "..");
         return;
     }
     
-    if (x >= win->w - 160 && x < win->w - 130 &&
-        y >= button_y && y < button_y + 22) {
+    if (WIDGET_CLICKED(&state->btn_up, win->x + x, win->y + y + 20)) {
+        state->btn_up.pressed = false;
         if (state->explorer_scroll_row > 0) state->explorer_scroll_row--;
         return;
     }
     
-    if (x >= win->w - 125 && x < win->w - 95 &&
-        y >= button_y && y < button_y + 22) {
+    if (WIDGET_CLICKED(&state->btn_fwd, win->x + x, win->y + y + 20)) {
+        state->btn_fwd.pressed = false;
         int total_rows = (state->item_count + EXPLORER_COLS - 1) / EXPLORER_COLS;
         if (total_rows == 0) total_rows = 1;
         if (state->explorer_scroll_row < total_rows - (EXPLORER_ROWS - 1)) state->explorer_scroll_row++;

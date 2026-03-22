@@ -11,7 +11,7 @@ LDFLAGS = -m elf_x86_64 -nostdlib -static -no-pie -Ttext=0x40000000 --no-dynamic
 BIN_DIR = bin
 
 LIBC_SOURCES = $(wildcard libc/*.c)
-LIBC_OBJS = $(patsubst libc/%.c, $(BIN_DIR)/%.o, $(LIBC_SOURCES)) $(BIN_DIR)/crt0.o
+LIBC_OBJS = $(patsubst libc/%.c, $(BIN_DIR)/%.o, $(LIBC_SOURCES)) $(BIN_DIR)/crt0.o $(BIN_DIR)/libwidget.o
 
 VPATH = cli gui sys games libc net
 vpath %.c cli gui sys games libc net
@@ -32,6 +32,9 @@ $(BIN_DIR)/crt0.o: crt0.asm
 	$(AS) -f elf64 $< -o $@
 
 $(BIN_DIR)/%.o: libc/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BIN_DIR)/libwidget.o: ../wm/libwidget.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BIN_DIR)/stb_image.o: stb_image.c

@@ -137,6 +137,38 @@ static int scroll_y = 0;
 static int total_content_height = 0;
 static int focused_element = -1; 
 
+#include "../../wm/libwidget.h"
+
+static void browser_draw_rect(void *user_data, int x, int y, int w, int h, uint32_t color) {
+    ui_draw_rect((ui_window_t)user_data, x, y, w, h, color);
+}
+static void browser_draw_rounded_rect_filled(void *user_data, int x, int y, int w, int h, int r, uint32_t color) {
+    ui_draw_rounded_rect_filled((ui_window_t)user_data, x, y, w, h, r, color);
+}
+static void browser_draw_string(void *user_data, int x, int y, const char *str, uint32_t color) {
+    ui_draw_string((ui_window_t)user_data, x, y, str, color);
+}
+static int browser_measure_string_width(void *user_data, const char *str) {
+    (void)user_data;
+    return (int)ui_get_string_width(str);
+}
+static void browser_mark_dirty(void *user_data, int x, int y, int w, int h) {
+    ui_mark_dirty((ui_window_t)user_data, x, y, w, h);
+}
+
+static widget_context_t browser_ctx = {
+    .draw_rect = browser_draw_rect,
+    .draw_rounded_rect_filled = browser_draw_rounded_rect_filled,
+    .draw_string = browser_draw_string,
+    .measure_string_width = browser_measure_string_width,
+    .mark_dirty = browser_mark_dirty
+};
+
+static widget_scrollbar_t browser_scrollbar;
+static widget_textbox_t url_tb;
+static widget_button_t btn_back;
+static widget_button_t btn_home;
+
 static void parse_html(const char *html);
 static void parse_html_incremental(const char *html, int safe_len);
 static void browser_reflow(void);
@@ -1506,6 +1538,7 @@ static void parse_html_incremental(const char *html, int safe_len) {
 }
 
 static void browser_paint(void) {
+    browser_ctx.user_data = (void *)win_browser;
     ui_draw_rect(win_browser, 0, 0, win_w, win_h, COLOR_BG);
     
     for (int i = 0; i < element_count; i++) {
@@ -1520,53 +1553,35 @@ static void browser_paint(void) {
             if (pixels) ui_draw_image(win_browser, el->x, draw_y, el->img_w, el->img_h, pixels);
             else ui_draw_rect(win_browser, el->x, draw_y, 100, 80, 0xFFCCCCCC);
         } else if (el->tag == TAG_INPUT) {
-            ui_draw_rect(win_browser, el->x, draw_y, el->w, el->h, 0xFFFFFFFF);
-            uint32_t border = (focused_element == i) ? 0xFF0000FF : 0xFF808080;
-            ui_draw_rect(win_browser, el->x, draw_y, el->w, 1, border);
-            ui_draw_rect(win_browser, el->x, draw_y + el->h - 1, el->w, 1, border);
-            ui_draw_rect(win_browser, el->x, draw_y, 1, el->h, border);
-            ui_draw_rect(win_browser, el->x + el->w - 1, draw_y, 1, el->h, border);
-            
-            char visible[64];
+            char visible[128];
             int v_len = 0;
             int max_v = (el->w - 10) / 8;
-            if (max_v > 63) max_v = 63;
+            if (max_v > 127) max_v = 127;
             for (int k = el->input_scroll; el->attr_value[k] && v_len < max_v; k++) {
                 visible[v_len++] = el->attr_value[k];
             }
             visible[v_len] = 0;
-            ui_draw_string(win_browser, el->x + 5, draw_y + 2, visible, (focused_element == i) ? 0xFF000000 : 0xFF808080);
-            
-            if (focused_element == i) {
-                int cursor_pos = el->input_cursor - el->input_scroll;
-                if (cursor_pos >= 0 && cursor_pos < max_v) {
-                    char sub[64];
-                    int k;
-                    for (k = 0; k < cursor_pos && visible[k]; k++) sub[k] = visible[k];
-                    sub[k] = 0;
-                    int cx = ui_get_string_width(sub);
-                    ui_draw_rect(win_browser, el->x + 5 + cx, draw_y + 16, 8, 2, 0xFF000000);
-                }
-            }
+
+            widget_textbox_t tb;
+            widget_textbox_init(&tb, el->x, draw_y, el->w, el->h, visible, max_v);
+            tb.cursor_pos = el->input_cursor - el->input_scroll;
+            if (tb.cursor_pos < 0) tb.cursor_pos = 0;
+            tb.focused = (focused_element == i);
+            widget_textbox_draw(&browser_ctx, &tb);
         } else if (el->tag == TAG_BUTTON) {
-            ui_draw_rect(win_browser, el->x, draw_y, el->w, el->h, 0xFFDDDDDD);
-            ui_draw_rect(win_browser, el->x, draw_y, el->w, 1, 0xFFFFFFFF);
-            ui_draw_rect(win_browser, el->x, draw_y + el->h - 1, el->w, 1, 0xFF888888);
-            ui_draw_rect(win_browser, el->x, draw_y, 1, el->h, 0xFFFFFFFF);
-            ui_draw_rect(win_browser, el->x + el->w - 1, draw_y, 1, el->h, 0xFF888888);
-            ui_draw_string(win_browser, el->x + 10, draw_y + 4, el->attr_value, 0xFF000000);
+            widget_button_t btn;
+            widget_button_init(&btn, el->x, draw_y, el->w, el->h, el->attr_value);
+            widget_button_draw(&browser_ctx, &btn);
         } else if (el->tag == TAG_RADIO) {
-            ui_draw_rounded_rect_filled(win_browser, el->x, draw_y, el->w, el->h, el->w/2, 0xFF808080);
-            ui_draw_rounded_rect_filled(win_browser, el->x + 1, draw_y + 1, el->w - 2, el->h - 2, (el->w-2)/2, 0xFFFFFFFF);
-            if (el->checked) {
-                ui_draw_rounded_rect_filled(win_browser, el->x + 4, draw_y + 4, el->w - 8, el->h - 8, (el->w-8)/2, 0xFF000000);
-            }
+            widget_checkbox_t cb;
+            widget_checkbox_init(&cb, el->x, draw_y, el->w, el->h, "", true);
+            cb.checked = el->checked;
+            widget_checkbox_draw(&browser_ctx, &cb);
         } else if (el->tag == TAG_CHECKBOX) {
-            ui_draw_rect(win_browser, el->x, draw_y, el->w, el->h, 0xFF808080);
-            ui_draw_rect(win_browser, el->x + 1, draw_y + 1, el->w - 2, el->h - 2, 0xFFFFFFFF);
-            if (el->checked) {
-                ui_draw_rect(win_browser, el->x + 4, draw_y + 4, el->w - 8, el->h - 8, 0xFF000000);
-            }
+            widget_checkbox_t cb;
+            widget_checkbox_init(&cb, el->x, draw_y, el->w, el->h, "", false);
+            cb.checked = el->checked;
+            widget_checkbox_draw(&browser_ctx, &cb);
         } else if (el->tag == TAG_HR) {
             ui_draw_rect(win_browser, el->x, draw_y + el->h / 2, el->w, 2, 0xFF888888);
             ui_draw_rect(win_browser, el->x, draw_y + (el->h / 2) + 2, el->w, 1, 0xFFFFFFFF);
@@ -1588,40 +1603,26 @@ static void browser_paint(void) {
     }
 
     ui_draw_rect(win_browser, 0, 0, win_w, URL_BAR_H, COLOR_URL_BAR);
-    ui_draw_string(win_browser, 10, 8, url_input_buffer, COLOR_URL_TEXT);
-    if (focused_element == -1) {
-        char sub[512];
-        int k;
-        for (k = 0; k < url_cursor && url_input_buffer[k]; k++) sub[k] = url_input_buffer[k];
-        sub[k] = 0;
-        int cx = ui_get_string_width(sub);
-        ui_draw_rect(win_browser, 10 + cx, 22, 8, 2, COLOR_URL_TEXT);
-    }
+    
+    widget_textbox_init(&url_tb, 10, 5, win_w - SCROLL_BAR_W - BTN_W*2 - BTN_PAD*2 - 20, 20, url_input_buffer, 511);
+    url_tb.cursor_pos = url_cursor;
+    url_tb.focused = (focused_element == -1);
+    widget_textbox_draw(&browser_ctx, &url_tb);
 
     // Back button
     int btn_y = (URL_BAR_H - BTN_H) / 2;
-    uint32_t back_col = history_count > 0 ? 0xFF505050 : 0xFF404040;
-    ui_draw_rect(win_browser, BACK_BTN_X, btn_y, BTN_W, BTN_H, back_col);
-    ui_draw_rect(win_browser, BACK_BTN_X, btn_y, BTN_W, 1, 0xFF606060);
-    ui_draw_rect(win_browser, BACK_BTN_X, btn_y, 1, BTN_H, 0xFF606060);
-    ui_draw_rect(win_browser, BACK_BTN_X, btn_y + BTN_H - 1, BTN_W, 1, 0xFF202020);
-    ui_draw_rect(win_browser, BACK_BTN_X + BTN_W - 1, btn_y, 1, BTN_H, 0xFF202020);
-    ui_draw_string(win_browser, BACK_BTN_X + 10, btn_y + 4, "<", history_count > 0 ? 0xFFFFFFFF : 0xFF808080);
+    widget_button_init(&btn_back, BACK_BTN_X, btn_y, BTN_W, BTN_H, "<");
+    widget_button_draw(&browser_ctx, &btn_back);
 
     // Home button
-    ui_draw_rect(win_browser, HOME_BTN_X, btn_y, BTN_W, BTN_H, 0xFF505050);
-    ui_draw_rect(win_browser, HOME_BTN_X, btn_y, BTN_W, 1, 0xFF606060);
-    ui_draw_rect(win_browser, HOME_BTN_X, btn_y, 1, BTN_H, 0xFF606060);
-    ui_draw_rect(win_browser, HOME_BTN_X, btn_y + BTN_H - 1, BTN_W, 1, 0xFF202020);
-    ui_draw_rect(win_browser, HOME_BTN_X + BTN_W - 1, btn_y, 1, BTN_H, 0xFF202020);
-    ui_draw_string(win_browser, HOME_BTN_X + 10, btn_y + 4, "H", 0xFFFFFFFF);
+    widget_button_init(&btn_home, HOME_BTN_X, btn_y, BTN_W, BTN_H, "H");
+    widget_button_draw(&browser_ctx, &btn_home);
     
     // Scroll bar
-    ui_draw_rect(win_browser, win_w - SCROLL_BAR_W, URL_BAR_H, SCROLL_BAR_W, win_h - URL_BAR_H, COLOR_SCROLL_BG);
-    int thumb_h = (win_h - URL_BAR_H) * (win_h - URL_BAR_H) / (total_content_height > win_h ? total_content_height : win_h);
-    if (thumb_h < 20) thumb_h = 20;
-    int thumb_y = URL_BAR_H + (scroll_y * (win_h - URL_BAR_H - thumb_h)) / (total_content_height > win_h - URL_BAR_H ? total_content_height - (win_h - URL_BAR_H) : 1);
-    ui_draw_rect(win_browser, win_w - SCROLL_BAR_W + 2, thumb_y, SCROLL_BAR_W - 4, thumb_h, COLOR_SCROLL_BTN);
+    int viewport_h = win_h - URL_BAR_H;
+    widget_scrollbar_init(&browser_scrollbar, win_w - SCROLL_BAR_W, URL_BAR_H, SCROLL_BAR_W, viewport_h);
+    widget_scrollbar_update(&browser_scrollbar, total_content_height, scroll_y);
+    widget_scrollbar_draw(&browser_ctx, &browser_scrollbar);
 }
 
 static void navigate(const char *url) {
@@ -1670,34 +1671,52 @@ int main(int argc, char **argv) {
                 continue;
             }
 
-            else if (ev.type == GUI_EVENT_CLICK) {
+            else if (ev.type == GUI_EVENT_CLICK || ev.type == GUI_EVENT_MOUSE_DOWN || ev.type == GUI_EVENT_MOUSE_UP || ev.type == GUI_EVENT_MOUSE_MOVE) {
                 int mx = ev.arg1;
-                if (mx >= win_w - SCROLL_BAR_W) {
-                    if (ev.arg2 < URL_BAR_H + (win_h - URL_BAR_H)/2) scroll_y -= 100;
-                    else scroll_y += 100;
-                    if (scroll_y < 0) scroll_y = 0;
-                    needs_repaint = true;
+                int my = ev.arg2;
+                bool is_down = (ev.type == GUI_EVENT_MOUSE_DOWN || (ev.type == GUI_EVENT_MOUSE_MOVE && browser_scrollbar.is_dragging));
+                bool is_click = (ev.type == GUI_EVENT_CLICK);
+                
+                if (widget_scrollbar_handle_mouse(&browser_scrollbar, mx, my, is_down, &browser_ctx)) {
+                    if (scroll_y != browser_scrollbar.scroll_y) {
+                        scroll_y = browser_scrollbar.scroll_y;
+                        needs_repaint = true;
+                    }
+                    if (ev.type == GUI_EVENT_MOUSE_MOVE) continue;
+                    if (is_down || is_click) continue;
+                }
+                
+                if (ev.type != GUI_EVENT_CLICK && ev.type != GUI_EVENT_MOUSE_DOWN) continue;
+
+                if (my < URL_BAR_H) {
+                    if (widget_textbox_handle_mouse(&url_tb, mx, my, is_click, NULL)) {
+                        focused_element = -1;
+                        needs_repaint = true;
+                        continue;
+                    }
+                    if (widget_button_handle_mouse(&btn_back, mx, my, is_down, is_click, NULL)) {
+                        if (is_click && history_count > 0) {
+                            history_count--;
+                            int j=0; while(history_stack[history_count][j]) { url_input_buffer[j] = history_stack[history_count][j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
+                            navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
+                        }
+                        needs_repaint = true; continue;
+                    }
+                    if (widget_button_handle_mouse(&btn_home, mx, my, is_down, is_click, NULL)) {
+                        if (is_click) {
+                            if (history_count < HISTORY_MAX) { int j=0; while(url_input_buffer[j]) { history_stack[history_count][j] = url_input_buffer[j]; j++; } history_stack[history_count][j] = 0; history_count++; }
+                            const char *home = "http://find.boreddev.nl";
+                            int j=0; while(home[j]) { url_input_buffer[j] = home[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
+                            navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
+                        }
+                        needs_repaint = true; continue;
+                    }
+                    if (is_click) {
+                        focused_element = -1; needs_repaint = true; 
+                    }
                     continue;
                 }
-                if (ev.arg2 < URL_BAR_H) {
-                    // Check back button
-                    if (mx >= BACK_BTN_X && mx < BACK_BTN_X + BTN_W && history_count > 0) {
-                        history_count--;
-                        int j=0; while(history_stack[history_count][j]) { url_input_buffer[j] = history_stack[history_count][j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
-                        navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
-                        needs_repaint = true; continue;
-                    }
-                    // Check home button
-                    if (mx >= HOME_BTN_X && mx < HOME_BTN_X + BTN_W) {
-                        if (history_count < HISTORY_MAX) { int j=0; while(url_input_buffer[j]) { history_stack[history_count][j] = url_input_buffer[j]; j++; } history_stack[history_count][j] = 0; history_count++; }
-                        const char *home = "http://find.boreddev.nl";
-                        int j=0; while(home[j]) { url_input_buffer[j] = home[j]; j++; } url_input_buffer[j] = 0; url_cursor = j;
-                        navigate(url_input_buffer); scroll_y = 0; focused_element = -1;
-                        needs_repaint = true; continue;
-                    }
-                    focused_element = -1; needs_repaint = true; continue;
-                }
-                int my = ev.arg2 - URL_BAR_H + scroll_y;
+                my = ev.arg2 - URL_BAR_H + scroll_y;
                 bool found = false;
                 for (int i = 0; i < element_count; i++) {
                     RenderElement *el = &elements[i];

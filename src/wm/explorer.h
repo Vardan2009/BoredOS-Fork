@@ -7,6 +7,7 @@
 #include "wm.h"
 #include "fat32.h"
 #include <stddef.h>
+#include "libwidget.h"
 
 // External windows references (for opening other apps)
 extern Window win_explorer;
@@ -54,6 +55,16 @@ typedef struct {
     int file_context_menu_x;
     int file_context_menu_y;
     int file_context_menu_item;
+
+    // GUI widgets
+    widget_button_t btn_primary;
+    widget_button_t btn_secondary;
+    widget_button_t btn_dropdown;
+    widget_button_t btn_back;
+    widget_button_t btn_up;
+    widget_button_t btn_fwd;
+
+    widget_textbox_t dialog_textbox;
 
 } ExplorerState;
 

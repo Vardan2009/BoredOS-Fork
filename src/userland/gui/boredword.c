@@ -4,6 +4,7 @@
 #include "libc/syscall.h"
 #include "libc/libui.h"
 #include "libc/stdlib.h"
+#include "../../wm/libwidget.h"
 #include <stddef.h>
 
 #define COLOR_DARK_PANEL  0xFF202020
@@ -90,8 +91,30 @@ static char open_filename[256] = "";
 static _Bool file_modified = 0;
 static int scroll_y = 0;
 
-static _Bool is_dragging_scrollbar = 0;
-static int scrollbar_drag_offset_y = 0;
+static widget_scrollbar_t doc_scrollbar;
+
+static void word_draw_rect(void *user_data, int x, int y, int w, int h, uint32_t color) {
+    ui_draw_rect((ui_window_t)user_data, x, y, w, h, color);
+}
+static void word_draw_rounded_rect_filled(void *user_data, int x, int y, int w, int h, int r, uint32_t color) {
+    ui_draw_rounded_rect_filled((ui_window_t)user_data, x, y, w, h, r, color);
+}
+static void word_draw_string(void *user_data, int x, int y, const char *str, uint32_t color) {
+    ui_draw_string((ui_window_t)user_data, x, y, str, color);
+}
+
+static widget_context_t word_ctx = {
+    .user_data = 0,
+    .draw_rect = word_draw_rect,
+    .draw_rounded_rect_filled = word_draw_rounded_rect_filled,
+    .draw_string = word_draw_string,
+    .mark_dirty = NULL
+};
+
+static void word_on_scroll(void *user_data, int new_scroll_y) {
+    (void)user_data;
+    scroll_y = new_scroll_y;
+}
 
 static _Bool is_in_selection(int p, int r, int c);
 
@@ -1301,20 +1324,13 @@ static void draw_document(ui_window_t win) {
     set_active_font(win, 0);
     
     int content_h = current_page * (page_h + 20) + page_h + 20;
-    if (content_h > win_h - 40) {
-        int sb_x = win_w - 12;
-        int sb_w = 12;
-        int sb_h = win_h - 40;
-        float ratio = (float)(win_h - 40) / (float)content_h;
-        int thumb_h = (int)(sb_h * ratio);
-        if (thumb_h < 20) thumb_h = 20;
-        int max_scroll = content_h - (win_h - 40);
-        if (scroll_y > max_scroll) scroll_y = max_scroll;
-        int thumb_y = 40 + (int)(((float)scroll_y / max_scroll) * (sb_h - thumb_h));
-        
-        ui_draw_rect(win, sb_x, 40, sb_w, sb_h, 0xFF303030);
-        ui_draw_rounded_rect_filled(win, sb_x+2, thumb_y+2, sb_w-4, thumb_h-4, 4, 0xFF606060);
-    }
+    doc_scrollbar.x = win_w - 12;
+    doc_scrollbar.y = 40;
+    doc_scrollbar.w = 12;
+    doc_scrollbar.h = win_h - 40;
+    doc_scrollbar.on_scroll = word_on_scroll;
+    widget_scrollbar_update(&doc_scrollbar, content_h, scroll_y);
+    widget_scrollbar_draw(&word_ctx, &doc_scrollbar);
 }
 
 static void ensure_cursor_visible(ui_window_t win) {
@@ -1645,32 +1661,8 @@ static void handle_click(ui_window_t win, int x, int y) {
             }
         }
         content_h = dummy_page * (page_h + 20) + page_h + 20;
-
-        int sb_x = win_w - 12;
-        int sb_w = 12;
-        int sb_h = win_h - 40;
-        int thumb_y = 40;
-        int thumb_h = 0;
-        int max_scroll = 0;
-        if (content_h > win_h - 40) {
-            float ratio = (float)(win_h - 40) / (float)content_h;
-            thumb_h = (int)(sb_h * ratio);
-            if (thumb_h < 20) thumb_h = 20;
-            max_scroll = content_h - (win_h - 40);
-            if (scroll_y > max_scroll) scroll_y = max_scroll;
-            thumb_y = 40 + (int)(((float)scroll_y / max_scroll) * (sb_h - thumb_h));
-        }
-
-        if (content_h > win_h - 40 && x >= sb_x && x < sb_x + sb_w) {
-            if (y >= thumb_y && y < thumb_y + thumb_h) {
-                is_dragging_scrollbar = 1;
-                scrollbar_drag_offset_y = y - thumb_y;
-            } else {
-                if (y < thumb_y) scroll_y -= (win_h - 40);
-                else scroll_y += (win_h - 40);
-                if (scroll_y < 0) scroll_y = 0;
-                if (scroll_y > max_scroll) scroll_y = max_scroll;
-            }
+        widget_scrollbar_update(&doc_scrollbar, content_h, scroll_y);
+        if (widget_scrollbar_handle_mouse(&doc_scrollbar, x, y, true, NULL)) {
             return;
         }
 
@@ -1848,11 +1840,14 @@ int main(int argc, char **argv) {
     (void)argv;
     ui_window_t win = ui_window_create("BoredWord", 100, 100, win_w, win_h);
     if (!win) return 1;
+    word_ctx.user_data = (void*)win;
     ui_window_set_resizable(win, 1);
 
     load_fonts();
     set_active_font(win, 0);
     init_doc();
+    
+    widget_scrollbar_init(&doc_scrollbar, win_w - 12, 40, 12, win_h - 40);
     
     if (argc > 1) {
         load_file(win, argv[1]);
@@ -1892,61 +1887,12 @@ int main(int argc, char **argv) {
                 needs_repaint = 1;
             } else if (ev.type == GUI_EVENT_MOUSE_UP) {
                 is_dragging = 0;
-                is_dragging_scrollbar = 0;
+                widget_scrollbar_handle_mouse(&doc_scrollbar, ev.arg1, ev.arg2, false, NULL);
                 needs_repaint = 1;
             } else if (ev.type == GUI_EVENT_MOUSE_MOVE) {
-                if (is_dragging_scrollbar) {
-                    int pw, ph; get_page_size(&pw, &ph);
-                    int doc_view_w = win_w - 40;
-                    float scale = (float)doc_view_w / (float)pw; if (scale > 1.0f) scale = 1.0f;
-                    int page_w = (int)(pw * scale);
-                    int page_h = (int)(ph * scale);
-
-                    int content_h = 0;
-                    int dummy_y = 10; int dummy_page = 0;
-                    for(int p=0; p<para_count; p++) {
-                        Paragraph *para = &paragraphs[p]; int start_run = 0; int start_char = 0;
-                        while(start_run < para->run_count) {
-                            int max_h = 16; int end_run = start_run; int end_char = start_char; int line_w = 0;
-                            int r_idx = start_run; int c_idx = start_char; int last_space_run = -1; int last_space_char = -1; int last_space_w = 0;
-                            while(r_idx < para->run_count) {
-                                TextRun *run = &para->runs[r_idx]; set_active_font(win, run->font_idx);
-                                int fh = ui_get_font_height_scaled(run->font_size); if (fh > max_h) max_h = fh;
-                                while(c_idx < run->len) {
-                                    char buf[2] = {run->text[c_idx], 0}; int cw = ui_get_string_width_scaled(buf, run->font_size);
-                                    if (run->text[c_idx] == ' ') { last_space_run = r_idx; last_space_char = c_idx; last_space_w = line_w + cw; }
-                                    if (line_w + cw > page_w - 20) break;
-                                    line_w += cw; c_idx++;
-                                }
-                                if (c_idx < run->len) break;
-                                r_idx++; c_idx = 0;
-                            }
-                            if (r_idx < para->run_count || (r_idx == para->run_count - 1 && c_idx < para->runs[r_idx].len)) {
-                                if (last_space_run != -1 && (last_space_run > start_run || last_space_char > start_char)) { end_run = last_space_run; end_char = last_space_char; line_w = last_space_w; }
-                                else { end_run = r_idx; end_char = c_idx; }
-                            } else { end_run = para->run_count; end_char = 0; }
-                            int line_h = (int)(max_h * para->spacing) + 4;
-                            if (dummy_y + line_h > dummy_page * (page_h + 20) + page_h - 10) { dummy_page++; dummy_y = dummy_page * (page_h + 20) + 10; }
-                            dummy_y += line_h; start_run = end_run; start_char = end_char;
-                            if (start_run < para->run_count && para->runs[start_run].text[start_char] == ' ') { start_char++; if (start_char >= para->runs[start_run].len) { start_char = 0; start_run++; } }
-                        }
-                    }
-                    content_h = dummy_page * (page_h + 20) + page_h + 20;
-                    
-                    if (content_h > win_h - 40) {
-                        int sb_h = win_h - 40;
-                        float ratio = (float)(win_h - 40) / (float)content_h;
-                        int thumb_h = (int)(sb_h * ratio);
-                        if (thumb_h < 20) thumb_h = 20;
-                        int max_scroll = content_h - (win_h - 40);
-                        
-                        int new_thumb_y = ev.arg2 - scrollbar_drag_offset_y;
-                        if (new_thumb_y < 40) new_thumb_y = 40;
-                        if (new_thumb_y > 40 + sb_h - thumb_h) new_thumb_y = 40 + sb_h - thumb_h;
-                        
-                        scroll_y = (int)(((float)(new_thumb_y - 40) / (sb_h - thumb_h)) * max_scroll);
-                        needs_repaint = 1;
-                    }
+                if (doc_scrollbar.is_dragging) {
+                    widget_scrollbar_handle_mouse(&doc_scrollbar, ev.arg1, ev.arg2, true, NULL);
+                    needs_repaint = 1;
                 } else if (is_dragging && ev.arg2 >= 40 && active_dialog == 0 && active_dropdown == 0) {
                     handle_click(win, ev.arg1, ev.arg2);
                     needs_repaint = 1;

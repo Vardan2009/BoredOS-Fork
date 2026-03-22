@@ -3,6 +3,7 @@
 // This header needs to maintain in any file it is present in, as per the GPL license terms.
 #include "syscall.h"
 #include "libui.h"
+#include "../../wm/libwidget.h"
 #include <stdbool.h>
 #include "stdlib.h"
 
@@ -24,6 +25,33 @@ static bool calc_decimal_mode = false;
 static long long calc_decimal_divisor = 10;
 static char display_buffer[1024];
 static int display_buf_len = 0;
+
+static widget_button_t buttons[20];
+static const char *labels[] = {
+    "C", "sqr", "rt", "/",
+    "7", "8", "9", "*",
+    "4", "5", "6", "-",
+    "1", "2", "3", "+",
+    "0", ".", "BS", "="
+};
+
+static void calc_draw_rect(void *user_data, int x, int y, int w, int h, uint32_t color) {
+    ui_draw_rect((ui_window_t)user_data, x, y, w, h, color);
+}
+static void calc_draw_rounded_rect_filled(void *user_data, int x, int y, int w, int h, int r, uint32_t color) {
+    ui_draw_rounded_rect_filled((ui_window_t)user_data, x, y, w, h, r, color);
+}
+static void calc_draw_string(void *user_data, int x, int y, const char *str, uint32_t color) {
+    ui_draw_string((ui_window_t)user_data, x, y, str, color);
+}
+
+static widget_context_t calc_ctx = {
+    .user_data = 0,
+    .draw_rect = calc_draw_rect,
+    .draw_rounded_rect_filled = calc_draw_rounded_rect_filled,
+    .draw_string = calc_draw_string,
+    .mark_dirty = NULL
+};
 
 static long long isqrt(long long n) {
     if (n < 0) return -1;
@@ -97,27 +125,8 @@ static void calculator_paint(void) {
     int text_x = w - 15 - text_w;
     ui_draw_string(win_calculator, text_x, 18, display_buffer, COLOR_DARK_TEXT);
     
-    const char *labels[] = {
-        "C", "sqr", "rt", "/",
-        "7", "8", "9", "*",
-        "4", "5", "6", "-",
-        "1", "2", "3", "+",
-        "0", ".", "BS", "="
-    };
-    
-    int bw = 35;
-    int bh = 25;
-    int gap = 5;
-    int start_x = 10;
-    int start_y = 40;
-    
     for (int i = 0; i < 20; i++) {
-        int r = i / 4;
-        int c = i % 4;
-        ui_draw_rounded_rect_filled(win_calculator, start_x + c*(bw+gap), start_y + r*(bh+gap), bw, bh, 4, COLOR_DARK_BORDER);
-        int label_x = start_x + c*(bw+gap) + 5;
-        int label_y = start_y + r*(bh+gap) + 9;
-        ui_draw_string(win_calculator, label_x, label_y, labels[i], COLOR_DARK_TEXT);
+        widget_button_draw(&calc_ctx, &buttons[i]);
     }
 }
 
@@ -135,105 +144,93 @@ static void do_op(void) {
     }
 }
 
-static void calculator_click(int x, int y) {
-    int bw = 35;
-    int bh = 25;
-    int gap = 5;
-    int start_x = 10;
-    int start_y = 35; // Matches the hitboxes
+static void handle_button_click(int idx) {
+    const char *labels_map[] = {
+        "C", "s", "r", "/",
+        "7", "8", "9", "*",
+        "4", "5", "6", "-",
+        "1", "2", "3", "+",
+        "0", ".", "B", "="
+    };
+    char lbl = labels_map[idx][0];
     
-    for (int i = 0; i < 20; i++) {
-        int r = i / 4;
-        int c = i % 4;
-        int bx = start_x + c*(bw+gap);
-        int by = start_y + r*(bh+gap);
-        
-        if (x >= bx && x < bx + bw && y >= by && y < by + bh) {
-             const char *labels[] = {
-                "C", "s", "r", "/",
-                "7", "8", "9", "*",
-                "4", "5", "6", "-",
-                "1", "2", "3", "+",
-                "0", ".", "B", "="
-            };
-            char lbl = labels[i][0];
-            
-            if (lbl >= '0' && lbl <= '9') {
-                if (calc_new_entry || calc_error) {
-                    calc_curr = (lbl - '0') * SCALE;
-                    calc_new_entry = false;
-                    calc_decimal_mode = false;
-                } else {
-                    if (calc_decimal_mode) {
-                         if (calc_decimal_divisor <= SCALE) {
-                             long long digit_val = ((long long)(lbl - '0') * SCALE) / calc_decimal_divisor;
-                             if (calc_curr >= 0) calc_curr += digit_val;
-                             else calc_curr -= digit_val;
-                             calc_decimal_divisor *= 10;
-                         }
-                    } else {
-                        if (calc_curr >= 0) calc_curr = calc_curr * 10 + (lbl - '0') * SCALE;
-                        else calc_curr = calc_curr * 10 - (lbl - '0') * SCALE;
-                    }
-                }
-                calc_error = false;
-            } else if (lbl == '.') {
-                if (calc_new_entry) {
-                    calc_curr = 0;
-                    calc_new_entry = false;
-                }
-                if (!calc_decimal_mode) {
-                    calc_decimal_mode = true;
-                    calc_decimal_divisor = 10;
-                }
-            } else if (lbl == 'C') {
-                calc_curr = 0; calc_acc = 0; calc_op = 0;
-                calc_new_entry = true; calc_error = false; calc_decimal_mode = false;
-            } else if (lbl == 'B') {
-                if (!calc_new_entry && !calc_error) {
-                    if (calc_decimal_mode) {
-                        if (calc_decimal_divisor > 10) {
-                            calc_decimal_divisor /= 10;
-                            long long unit = SCALE / calc_decimal_divisor;
-                            calc_curr = (calc_curr / (unit * 10)) * (unit * 10);
-                        } else {
-                            calc_decimal_mode = false;
-                            calc_decimal_divisor = 10;
-                            calc_curr = (calc_curr / SCALE) * SCALE;
-                        }
-                    } else {
-                        calc_curr = (calc_curr / SCALE / 10) * SCALE;
-                    }
-                }
-            } else if (lbl == 's') { // sqr
-                calc_curr = (calc_curr * calc_curr) / SCALE; calc_new_entry = true;
-            } else if (lbl == 'r') { // rt
-                long long s = isqrt(calc_curr);
-                if (s == -1) calc_error = true;
-                else calc_curr = s * 1000;
-                calc_new_entry = true;
-            } else if (lbl == '=') {
-                do_op();
-                calc_curr = calc_acc; calc_op = 0; calc_new_entry = true; calc_decimal_mode = false;
+    if (lbl >= '0' && lbl <= '9') {
+        if (calc_new_entry || calc_error) {
+            calc_curr = (lbl - '0') * SCALE;
+            calc_new_entry = false;
+            calc_decimal_mode = false;
+        } else {
+            if (calc_decimal_mode) {
+                 if (calc_decimal_divisor <= SCALE) {
+                     long long digit_val = ((long long)(lbl - '0') * SCALE) / calc_decimal_divisor;
+                     if (calc_curr >= 0) calc_curr += digit_val;
+                     else calc_curr -= digit_val;
+                     calc_decimal_divisor *= 10;
+                 }
             } else {
-                if (!calc_new_entry) {
-                    if (calc_op) do_op();
-                    else calc_acc = calc_curr;
-                }
-                calc_op = lbl; calc_new_entry = true; calc_decimal_mode = false;
+                if (calc_curr >= 0) calc_curr = calc_curr * 10 + (lbl - '0') * SCALE;
+                else calc_curr = calc_curr * 10 - (lbl - '0') * SCALE;
             }
-            
-            update_display();
-            calculator_paint();
-            ui_mark_dirty(win_calculator, 0, 0, 180, 230);
-            return;
         }
+        calc_error = false;
+    } else if (lbl == '.') {
+        if (calc_new_entry) {
+            calc_curr = 0;
+            calc_new_entry = false;
+        }
+        if (!calc_decimal_mode) {
+            calc_decimal_mode = true;
+            calc_decimal_divisor = 10;
+        }
+    } else if (lbl == 'C') {
+        calc_curr = 0; calc_acc = 0; calc_op = 0;
+        calc_new_entry = true; calc_error = false; calc_decimal_mode = false;
+    } else if (lbl == 'B') {
+        if (!calc_new_entry && !calc_error) {
+            if (calc_decimal_mode) {
+                if (calc_decimal_divisor > 10) {
+                    calc_decimal_divisor /= 10;
+                    long long unit = SCALE / calc_decimal_divisor;
+                    calc_curr = (calc_curr / (unit * 10)) * (unit * 10);
+                } else {
+                    calc_decimal_mode = false;
+                    calc_decimal_divisor = 10;
+                    calc_curr = (calc_curr / SCALE) * SCALE;
+                }
+            } else {
+                calc_curr = (calc_curr / SCALE / 10) * SCALE;
+            }
+        }
+    } else if (lbl == 's') { // sqr
+        calc_curr = (calc_curr * calc_curr) / SCALE; calc_new_entry = true;
+    } else if (lbl == 'r') { // rt
+        long long s = isqrt(calc_curr);
+        if (s == -1) calc_error = true;
+        else calc_curr = s * 1000;
+        calc_new_entry = true;
+    } else if (lbl == '=') {
+        do_op();
+        calc_curr = calc_acc; calc_op = 0; calc_new_entry = true; calc_decimal_mode = false;
+    } else {
+        if (!calc_new_entry) {
+            if (calc_op) do_op();
+            else calc_acc = calc_curr;
+        }
+        calc_op = lbl; calc_new_entry = true; calc_decimal_mode = false;
     }
 }
 
 int main(void) {
     win_calculator = ui_window_create("Calculator", 200, 200, 180, 230);
+    calc_ctx.user_data = (void *)win_calculator;
     
+    int bw = 35, bh = 25, gap = 5, start_x = 10, start_y = 40;
+    for (int i = 0; i < 20; i++) {
+        int r = i / 4;
+        int c = i % 4;
+        widget_button_init(&buttons[i], start_x + c*(bw+gap), start_y + r*(bh+gap), bw, bh, labels[i]);
+    }
+
     calc_curr = 0;
     calc_acc = 0;
     calc_op = 0;
@@ -249,8 +246,21 @@ int main(void) {
             if (ev.type == GUI_EVENT_PAINT) {
                 calculator_paint();
                 ui_mark_dirty(win_calculator, 0, 0, 180, 230);
-            } else if (ev.type == GUI_EVENT_CLICK) {
-                calculator_click(ev.arg1, ev.arg2);
+            } else if (ev.type == GUI_EVENT_CLICK || ev.type == GUI_EVENT_MOUSE_DOWN || ev.type == GUI_EVENT_MOUSE_UP) {
+                bool needs_paint = false;
+                for (int i=0; i<20; i++) {
+                    if (widget_button_handle_mouse(&buttons[i], ev.arg1, ev.arg2, ev.type == GUI_EVENT_MOUSE_DOWN, ev.type == GUI_EVENT_CLICK, NULL)) {
+                        needs_paint = true;
+                        if (ev.type == GUI_EVENT_CLICK) {
+                            handle_button_click(i);
+                            update_display();
+                        }
+                    }
+                }
+                if (needs_paint) {
+                    calculator_paint();
+                    ui_mark_dirty(win_calculator, 0, 0, 180, 230);
+                }
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
             }

@@ -287,28 +287,39 @@ static int isqrt(int n) {
 void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color) {
     if (radius > w / 2) radius = w / 2;
     if (radius > h / 2) radius = h / 2;
-    if (radius < 1) radius = 1;
+    if (radius < 1) {
+        // Draw a simple rect outline if no radius
+        draw_rect(x, y, w, 1, color);
+        draw_rect(x, y + h - 1, w, 1, color);
+        draw_rect(x, y + 1, 1, h - 2, color);
+        draw_rect(x + w - 1, y + 1, 1, h - 2, color);
+        return;
+    }
     
-    // Draw top and bottom edges
+    // Draw top and bottom straight edges
     draw_rect(x + radius, y, w - 2*radius, 1, color);
     draw_rect(x + radius, y + h - 1, w - 2*radius, 1, color);
     
-    // Draw left and right edges
+    // Draw left and right straight edges
     draw_rect(x, y + radius, 1, h - 2*radius, color);
     draw_rect(x + w - 1, y + radius, 1, h - 2*radius, color);
     
-    // Draw corner circles using integer approximation
-    for (int i = 0; i < radius; i++) {
-        int j = isqrt(radius*radius - i*i);
+    // Draw four corner arcs
+    for (int dy = 0; dy < radius; dy++) {
+        int y_dist = radius - 1 - dy;
+        int dx = isqrt(radius*radius - y_dist*y_dist);
+        int next_dx = (dy < radius - 1) ? isqrt(radius*radius - (y_dist - 1)*(y_dist - 1)) : radius;
         
-        // Top-left corner
-        put_pixel(x + radius - i - 1, y + radius - j, color);
-        // Top-right corner
-        put_pixel(x + w - radius + i, y + radius - j, color);
-        // Bottom-left corner
-        put_pixel(x + radius - i - 1, y + h - radius + j - 1, color);
-        // Bottom-right corner
-        put_pixel(x + w - radius + i, y + h - radius + j - 1, color);
+        for (int i = dx; i < next_dx && i <= radius; i++) {
+            // Top-left
+            put_pixel(x + radius - 1 - i, y + dy, color);
+            // Top-right
+            put_pixel(x + w - radius + i, y + dy, color);
+            // Bottom-left
+            put_pixel(x + radius - 1 - i, y + h - 1 - dy, color);
+            // Bottom-right
+            put_pixel(x + w - radius + i, y + h - 1 - dy, color);
+        }
     }
 }
 
@@ -316,25 +327,21 @@ void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color) {
 void draw_rounded_rect_filled(int x, int y, int w, int h, int radius, uint32_t color) {
     if (radius > w / 2) radius = w / 2;
     if (radius > h / 2) radius = h / 2;
-    if (radius < 1) radius = 1;
+    if (radius < 1) {
+        draw_rect(x, y, w, h, color);
+        return;
+    }
     
-    // Draw main rectangle body (center part without corners)
-    draw_rect(x + radius, y, w - 2*radius, h, color);
-    draw_rect(x, y + radius, radius, h - 2*radius, color);
-    draw_rect(x + w - radius, y + radius, radius, h - 2*radius, color);
+    // Draw main rectangle body
+    draw_rect(x, y + radius, w, h - 2*radius, color);
     
+    // Draw rounded top and bottom caps
     for (int dy = 0; dy < radius; dy++) {
-        int dx_top = isqrt(radius*radius - (radius - dy) * (radius - dy));
+        int y_dist = radius - 1 - dy;
+        int dx = isqrt(radius*radius - y_dist*y_dist);
         
-        int dx_bottom = isqrt(radius*radius - dy*dy);
-        
-        draw_rect(x + radius - dx_top, y + dy, dx_top, 1, color);
-        
-        draw_rect(x + w - radius, y + dy, dx_top, 1, color);
-        
-        draw_rect(x + radius - dx_bottom, y + h - radius + dy, dx_bottom, 1, color);
-        
-        draw_rect(x + w - radius, y + h - radius + dy, dx_bottom, 1, color);
+        draw_rect(x + radius - dx, y + dy, w - 2*radius + 2*dx, 1, color);
+        draw_rect(x + radius - dx, y + h - 1 - dy, w - 2*radius + 2*dx, 1, color);
     }
 }
 
