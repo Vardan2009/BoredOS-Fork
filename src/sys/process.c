@@ -469,6 +469,9 @@ static void process_cleanup_inner(process_t *proc) {
     extern void cmd_process_finished(void);
     cmd_process_finished();
     
+    extern void network_cleanup(void);
+    network_cleanup();
+    
     extern void network_cleanup_pcb(void *pcb);
     // TODO: We need per-process PCB tracking to call this safely
     // For now, let's NOT call global network_cleanup

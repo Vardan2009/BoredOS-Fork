@@ -224,7 +224,7 @@ int network_tcp_connect(const ipv4_address_t *ip, uint16_t port) {
     
     uint32_t start = sys_now();
     asm volatile("sti");
-    while (sys_now() - start < 5000) { // 5 second timeout
+    while (sys_now() - start < 15000) { // 15 second timeout
         network_poll_internal();
         if (tcp_connect_done) { asm volatile("cli"); network_processing = 0; return 0; }
         if (tcp_connect_error) { asm volatile("cli"); network_processing = 0; return -1; }
@@ -253,7 +253,7 @@ int network_tcp_recv(void *buf, size_t max_len) {
         if (tcp_closed) { network_processing = 0; return 0; } // End of stream
         uint32_t start = sys_now();
         asm volatile("sti");
-        while (sys_now() - start < 5000) { // 5 second timeout
+        while (sys_now() - start < 30000) { // 30 second timeout
             network_poll_internal();
             if (tcp_recv_queue) break;
             if (tcp_closed) break;
@@ -281,7 +281,10 @@ int network_tcp_recv_nb(void *buf, size_t max_len) {
     if (network_processing) return -1;
     network_processing = 1;
 
+    network_poll_internal();
+
     if (!tcp_recv_queue) {
+        if (tcp_closed) { network_processing = 0; return -2; }
         network_processing = 0;
         return 0;
     }

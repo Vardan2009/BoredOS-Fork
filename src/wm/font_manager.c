@@ -71,12 +71,13 @@ static int loaded_font_count = 0;
 
 #define FONT_CACHE_SIZE 2048
 typedef struct {
-    char c;
-    float pixel_height;
+    uint32_t codepoint;
+    float scale;
+    void *font;
     int w, h, xoff, yoff;
     unsigned char *bitmap;
 } font_cache_entry_t;
-
+static font_cache_entry_t font_cache[FONT_CACHE_SIZE] = {0};
 
 bool font_manager_init(void) {
     return true;
@@ -200,19 +201,33 @@ void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, uint32_t co
     if (!font) font = default_font;
     if (!font) return;
 
-    stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
+    uint32_t hash = (codepoint * 31 + (uint32_t)scale * 73) % FONT_CACHE_SIZE;
+    font_cache_entry_t *entry = &font_cache[hash];
     
     unsigned char *bitmap = NULL;
     int w, h, xoff, yoff;
     
-    float real_scale = stbtt_ScaleForPixelHeight(info, scale);
-    
-    if (stbtt_FindGlyphIndex(info, codepoint) == 0 && fallback_font) {
-        info = (stbtt_fontinfo *)fallback_font->info;
-        real_scale = stbtt_ScaleForPixelHeight(info, scale);
-    }
+    if (entry->bitmap && entry->codepoint == codepoint && entry->scale == scale && entry->font == font) {
+        bitmap = entry->bitmap;
+        w = entry->w; h = entry->h; xoff = entry->xoff; yoff = entry->yoff;
+    } else {
+        stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
+        float real_scale = stbtt_ScaleForPixelHeight(info, scale);
+        
+        if (stbtt_FindGlyphIndex(info, codepoint) == 0 && fallback_font) {
+            info = (stbtt_fontinfo *)fallback_font->info;
+            real_scale = stbtt_ScaleForPixelHeight(info, scale);
+        }
 
-    bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, codepoint, &w, &h, &xoff, &yoff);
+        bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, codepoint, &w, &h, &xoff, &yoff);
+        
+        if (entry->bitmap) stbtt_FreeBitmap(entry->bitmap, NULL);
+        entry->codepoint = codepoint;
+        entry->scale = scale;
+        entry->font = font;
+        entry->w = w; entry->h = h; entry->xoff = xoff; entry->yoff = yoff;
+        entry->bitmap = bitmap;
+    }
 
     if (bitmap) {
         for (int row = 0; row < h; row++) {
@@ -226,7 +241,6 @@ void font_manager_render_char_scaled(ttf_font_t *font, int x, int y, uint32_t co
                 }
             }
         }
-        stbtt_FreeBitmap(bitmap, NULL);
     }
 }
 
@@ -234,19 +248,33 @@ void font_manager_render_char_sloped(ttf_font_t *font, int x, int y, uint32_t co
     if (!font) font = default_font;
     if (!font) return;
 
-    stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
+    uint32_t hash = (codepoint * 31 + (uint32_t)scale * 73) % FONT_CACHE_SIZE;
+    font_cache_entry_t *entry = &font_cache[hash];
     
     unsigned char *bitmap = NULL;
     int w, h, xoff, yoff;
     
-    float real_scale = stbtt_ScaleForPixelHeight(info, scale);
-    
-    if (stbtt_FindGlyphIndex(info, codepoint) == 0 && fallback_font) {
-        info = (stbtt_fontinfo *)fallback_font->info;
-        real_scale = stbtt_ScaleForPixelHeight(info, scale);
-    }
+    if (entry->bitmap && entry->codepoint == codepoint && entry->scale == scale && entry->font == font) {
+        bitmap = entry->bitmap;
+        w = entry->w; h = entry->h; xoff = entry->xoff; yoff = entry->yoff;
+    } else {
+        stbtt_fontinfo *info = (stbtt_fontinfo *)font->info;
+        float real_scale = stbtt_ScaleForPixelHeight(info, scale);
+        
+        if (stbtt_FindGlyphIndex(info, codepoint) == 0 && fallback_font) {
+            info = (stbtt_fontinfo *)fallback_font->info;
+            real_scale = stbtt_ScaleForPixelHeight(info, scale);
+        }
 
-    bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, codepoint, &w, &h, &xoff, &yoff);
+        bitmap = stbtt_GetCodepointBitmap(info, 0, real_scale, codepoint, &w, &h, &xoff, &yoff);
+        
+        if (entry->bitmap) stbtt_FreeBitmap(entry->bitmap, NULL);
+        entry->codepoint = codepoint;
+        entry->scale = scale;
+        entry->font = font;
+        entry->w = w; entry->h = h; entry->xoff = xoff; entry->yoff = yoff;
+        entry->bitmap = bitmap;
+    }
 
     if (bitmap) {
         for (int row = 0; row < h; row++) {
@@ -262,7 +290,6 @@ void font_manager_render_char_sloped(ttf_font_t *font, int x, int y, uint32_t co
                 }
             }
         }
-        stbtt_FreeBitmap(bitmap, NULL);
     }
 }
 

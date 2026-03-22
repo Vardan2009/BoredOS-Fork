@@ -280,18 +280,93 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
     int total = 0;
     int last_render = 0;
     if (progressive) inc_parse_offset = 0; 
+    long long last_data_tick = sys_system(16, 0, 0, 0, 0);
+
     while (1) {
-        int len = sys_tcp_recv(dest_buf + total, max_len - 1 - total);
-        if (len <= 0) break;
+        int len = sys_tcp_recv_nb(dest_buf + total, max_len - 1 - total);
+        if (len < 0 && len != -2) break;
+        if (len == -2) break;
+        
+        if (len == 0) {
+            long long now = sys_system(16, 0, 0, 0, 0);
+            if (now > last_data_tick + 1800) break; // 30 sec timeout
+            
+            gui_event_t ev;
+            bool scrolled = false;
+            while (ui_get_event(win_browser, &ev)) {
+                if (ev.type == 9) { // GUI_EVENT_MOUSE_WHEEL
+                    scroll_y += ev.arg1 * 20;
+                    int max_scroll = total_content_height - (win_h - URL_BAR_H);
+                    if (max_scroll < 0) max_scroll = 0;
+                    if (scroll_y > max_scroll) scroll_y = max_scroll;
+                    if (scroll_y < 0) scroll_y = 0;
+                    scrolled = true;
+                } else if (ev.type == 12) { // GUI_EVENT_CLOSE
+                    sys_exit(0);
+                }
+            }
+            if (scrolled) {
+                browser_paint(); 
+                ui_mark_dirty(win_browser, 0, 0, win_w, win_h);
+            }
+            sleep(10);
+            continue;
+        }
+
+        last_data_tick = sys_system(16, 0, 0, 0, 0);
         total += len;
         if (total >= max_len - 1) break;
+
+        dest_buf[total] = 0;
+        char *body = strstr(dest_buf, "\r\n\r\n");
+        if (body) {
+            char temp = body[0];
+            body[0] = 0; // Null-terminate headers
+
+            int expected = -1;
+            char *cl = str_istrstr(dest_buf, "Content-Length:");
+            if (cl) {
+                cl += 15;
+                while (*cl == ' ') cl++;
+                expected = 0;
+                while (*cl >= '0' && *cl <= '9') {
+                    expected = expected * 10 + (*cl - '0');
+                    cl++;
+                }
+            }
+            
+            int is_chunked = 0;
+            char *te = str_istrstr(dest_buf, "Transfer-Encoding:");
+            if (te && str_istrstr(te, "chunked")) {
+                is_chunked = 1;
+            }
+
+            body[0] = temp; // Restore body
+            
+            body += 4;
+            int body_len = total - (body - dest_buf);
+            
+            if (expected != -1) {
+                if (body_len >= expected) break;
+            } else if (is_chunked) {
+                if (total >= 5 && dest_buf[total-5] == '0' && dest_buf[total-4] == '\r' && 
+                    dest_buf[total-3] == '\n' && dest_buf[total-2] == '\r' && dest_buf[total-1] == '\n') {
+                    break;
+                }
+            }
+        }
 
         if (progressive && total - last_render > 32768) {
             dest_buf[total] = 0;
             char *body = strstr(dest_buf, "\r\n\r\n");
             if (body) {
+                char temp = body[0];
+                body[0] = 0;
+                int is_chunked = strstr(dest_buf, "Transfer-Encoding: chunked") != NULL;
+                body[0] = temp;
+                
                 body += 4;
-                if (!strstr(dest_buf, "Transfer-Encoding: chunked")) {
+                if (!is_chunked) {
                     int body_len = total - (body - dest_buf);
                     int safe_len = body_len;
                     while (safe_len > 0 && body[safe_len - 1] != '>') safe_len--;
@@ -1436,7 +1511,9 @@ static void browser_paint(void) {
     for (int i = 0; i < element_count; i++) {
         RenderElement *el = &elements[i];
         int draw_y = el->y - scroll_y + URL_BAR_H;
-        if (draw_y < URL_BAR_H - 400 || draw_y > win_h) continue;
+        int el_h = el->h;
+        if (el->tag == TAG_IMG && el->img_h > el_h) el_h = el->img_h;
+        if (draw_y + el_h < URL_BAR_H || draw_y > win_h) continue;
         if (el->tag == TAG_IMG) {
             uint32_t *pixels = el->img_pixels;
             if (el->img_frames) pixels = el->img_frames[el->img_current_frame];
@@ -1759,6 +1836,7 @@ int main(int argc, char **argv) {
                     if (c == 13 || c == 10) {
                         if (history_count < HISTORY_MAX) { int j=0; while(url_input_buffer[j]) { history_stack[history_count][j] = url_input_buffer[j]; j++; } history_stack[history_count][j] = 0; history_count++; }
                         navigate(url_input_buffer); scroll_y = 0;
+                        needs_repaint = true;
                     }
                     else if (c == 19) { if (url_cursor > 0) url_cursor--; }
                     else if (c == 20) { int len = 0; while(url_input_buffer[len]) len++; if (url_cursor < len) url_cursor++; }
