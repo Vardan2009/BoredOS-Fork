@@ -113,6 +113,7 @@ typedef struct {
     float scale;
     int list_depth;
     int blockquote_depth; 
+    int attr_w;
     bool img_loading;
     bool img_failed;
     uint32_t **img_frames;
@@ -460,8 +461,13 @@ static void decode_image(unsigned char *data, int len, RenderElement *el) {
 
     if (rgba && img_w_orig > 0 && img_h_orig > 0) {
         int fit_w = img_w_orig; int fit_h = img_h_orig;
-        if (fit_w > win_w - 60) { fit_h = fit_h * (win_w - 60) / fit_w; fit_w = win_w - 60; }
-        if (fit_h > 400) { fit_w = fit_w * 400 / fit_h; fit_h = 400; }
+        if (el->attr_w > 0) {
+            fit_w = el->attr_w;
+            fit_h = (img_h_orig * fit_w) / img_w_orig;
+        } else {
+            if (fit_w > win_w - 60) { fit_h = fit_h * (win_w - 60) / fit_w; fit_w = win_w - 60; }
+            if (fit_h > 400) { fit_w = fit_w * 400 / fit_h; fit_h = 400; }
+        }
         
         if (frame_count > 1 && delays) {
             el->img_frames = malloc(frame_count * sizeof(uint32_t *));
@@ -606,6 +612,7 @@ static int inc_list_type[16];
 static int inc_list_index[16];
 static int inc_center_depth = 0;
 static int inc_table_depth = 0;
+static int inc_table_float_depth = 0;
 static int inc_blockquote_depth = 0; 
 static bool inc_is_bold = false;
 static bool inc_is_italic = false;
@@ -677,9 +684,41 @@ static void browser_reflow(void) {
     line_element_count = 0;
     total_content_height = 0;
     
+    int float_right_bottom_y = 0;
+    int float_start_idx = -1;
+    int float_start_y = 0;
+    
     for (int i = 0; i < element_count; i++) {
         RenderElement *el = &elements[i];
         
+        if (el->tag == 8) {
+            flush_line();
+            float_start_idx = i;
+            float_start_y = cur_line_y;
+            continue;
+        } else if (el->tag == 9) {
+            if (float_start_idx != -1) {
+                flush_line();
+                float_right_bottom_y = cur_line_y;
+                int float_offset = win_w - SCROLL_BAR_W - 320 - 10;
+                
+                elements[float_start_idx].x = float_offset > 0 ? float_offset + 10 : 10;
+                elements[float_start_idx].y = float_start_y;
+                elements[float_start_idx].w = 320;
+                elements[float_start_idx].h = cur_line_y - float_start_y;
+
+                if (float_offset > 0) {
+                    for (int j = float_start_idx; j < i; j++) {
+                        elements[j].x += float_offset;
+                    }
+                }
+                cur_line_y = float_start_y;
+                cur_line_x = 10;
+                float_start_idx = -1;
+            }
+            continue;
+        }
+
         if (el->tag == TAG_BR) {
             flush_line();
             cur_line_x = 10 + (el->list_depth * 20) + (el->blockquote_depth * 20); 
@@ -689,18 +728,24 @@ static void browser_reflow(void) {
         if (el->tag == TAG_HR) {
             flush_line();
             el->w = win_w - SCROLL_BAR_W - 40 - (el->blockquote_depth * 40); 
+            if (float_start_idx != -1) el->w = 300 - 20;
+            else if (cur_line_y < float_right_bottom_y) el->w = win_w - 320 - SCROLL_BAR_W - 20;
             line_elements[line_element_count++] = i;
             flush_line();
             cur_line_x = 10 + (el->list_depth * 20) + (el->blockquote_depth * 20); 
             continue;
         }
         
+        int max_x = win_w - SCROLL_BAR_W - 20 - (el->blockquote_depth * 40);
+        if (float_start_idx != -1) max_x = 310;
+        else if (cur_line_y < float_right_bottom_y) max_x = win_w - 320 - SCROLL_BAR_W - 20;
+
         if (el->tag == TAG_NONE && el->content[0] == ' ' && el->content[1] == 0) {
             if (line_element_count == 0) continue;
-            if (cur_line_x + el->w > win_w - SCROLL_BAR_W - 20 - (el->blockquote_depth * 40)) continue;
+            if (cur_line_x + el->w > max_x) continue;
         }
 
-        if (cur_line_x + el->w > win_w - SCROLL_BAR_W - 20 - (el->blockquote_depth * 40)) {
+        if (cur_line_x + el->w > max_x) {
             flush_line();   
             cur_line_x = 10 + (el->list_depth * 20) + (el->blockquote_depth * 20); 
         }
@@ -841,7 +886,7 @@ static void parse_html(const char *html) {
     browser_clear();
     list_depth = 0;
     cur_line_y = 10; cur_line_x = 10; line_element_count = 0;
-    int i = 0; int center_depth = 0; int table_depth = 0; int blockquote_depth = 0; bool is_bold = false; bool is_italic = false; bool is_underline = false;
+    int i = 0; int center_depth = 0; int table_depth = 0; int table_float_depth = 0; int blockquote_depth = 0; bool is_bold = false; bool is_italic = false; bool is_underline = false;
     uint32_t current_color = COLOR_TEXT;
     char current_link[256] = "";
     float current_scale = 15.0f; float base_scale = 15.0f;
@@ -885,7 +930,14 @@ static void parse_html(const char *html) {
 
             if (tag_name[0] == '/') {
                 if (str_iequals(tag_name+1, "center")) { emit_br(); if (center_depth > 0) center_depth--; }
-                else if (str_iequals(tag_name+1, "table")) { emit_br(); if (table_depth > 0) table_depth--; table_col = 0; }
+                else if (str_iequals(tag_name+1, "table")) { 
+                    emit_br();
+                    if (table_depth > 0 && table_depth == table_float_depth) {
+                        table_float_depth = 0;
+                        if (element_count < MAX_ELEMENTS) { RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement)); el->tag = 9; }
+                    }
+                    if (table_depth > 0) table_depth--; table_col = 0; 
+                }
                 else if (str_iequals(tag_name+1, "tr")) { emit_br(); table_col = 0; }
                 else if (str_iequals(tag_name+1, "td") || str_iequals(tag_name+1, "th")) { 
                     table_col++;
@@ -923,7 +975,7 @@ static void parse_html(const char *html) {
                     current_form_id = 0; current_form_action[0] = 0;
                 }
                 else if (str_iequals(tag_name+1, "a")) current_link[0] = 0;
-                else if (str_iequals(tag_name+1, "p") || str_iequals(tag_name+1, "li") || str_iequals(tag_name+1, "div") || str_iequals(tag_name+1, "address")) emit_br();
+                else if (str_iequals(tag_name+1, "p") || str_iequals(tag_name+1, "li") || str_iequals(tag_name+1, "div") || str_iequals(tag_name+1, "address")) { emit_br(); }
                 else if (str_iequals(tag_name+1, "pre") || str_iequals(tag_name+1, "xmp") || str_iequals(tag_name+1, "listing")) { emit_br(); is_pre = false; }
                 else if (str_iequals(tag_name+1, "font") || str_iequals(tag_name+1, "tt") || str_iequals(tag_name+1, "code") || str_iequals(tag_name+1, "samp") || str_iequals(tag_name+1, "kbd")) {
                     if (font_ptr > 0) {
@@ -943,7 +995,17 @@ static void parse_html(const char *html) {
                 }
             } else {
                 if (str_iequals(tag_name, "center")) { emit_br(); center_depth++; }
-                else if (str_iequals(tag_name, "table")) { emit_br(); table_depth++; table_col = 0; }
+                else if (str_iequals(tag_name, "table")) { 
+                    emit_br(); table_depth++; table_col = 0; 
+                    if (str_istrstr(attr_buf, "align=\"right\"") && table_float_depth == 0) {
+                        table_float_depth = table_depth;
+                        if (element_count < MAX_ELEMENTS) { 
+                            RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement)); el->tag = 8;
+                            char *bg_str = str_istrstr(attr_buf, "bgcolor=\"");
+                            if (bg_str) el->color = parse_html_color(bg_str + 9);
+                        }
+                    }
+                }
                 else if (str_iequals(tag_name, "tr")) { emit_br(); table_col = 0; }
                 else if (str_iequals(tag_name, "td") || str_iequals(tag_name, "th")) {
                     if (table_col > 0) {
@@ -1047,7 +1109,9 @@ static void parse_html(const char *html) {
                     }
                 }
                 else if (str_iequals(tag_name, "br")) emit_br();
-                else if (str_iequals(tag_name, "p") || str_iequals(tag_name, "div")) emit_br();
+                else if (str_iequals(tag_name, "p") || str_iequals(tag_name, "div")) {
+                    emit_br();
+                }
                 else if (str_iequals(tag_name, "pre")) { emit_br(); is_pre = true; current_scale = 14.0f; }
                 else if (str_iequals(tag_name, "li")) {
                     emit_br();
@@ -1110,6 +1174,8 @@ static void parse_html(const char *html) {
                     RenderElement *el = &elements[element_count++];
                     memset(el, 0, sizeof(RenderElement));
                     el->tag = TAG_IMG; el->w = 100; el->h = 80; el->centered = EFF_CENTER;
+                    char *width_str = str_istrstr(attr_buf, "width=\"");
+                    if (width_str) { int w = atoi(width_str + 7); if (w > 0) el->attr_w = w; }
                     char *src = str_istrstr(attr_buf, "src=\"");
                     if (src) {
                         src += 5; int l = 0;
@@ -1122,6 +1188,8 @@ static void parse_html(const char *html) {
                     RenderElement *el = &elements[element_count++];
                     memset(el, 0, sizeof(RenderElement));
                     el->tag = TAG_INPUT; el->w = 160; el->h = 20; el->centered = EFF_CENTER;
+                    char *size_str = str_istrstr(attr_buf, "size=\"");
+                    if (size_str) { int sz = atoi(size_str + 6); if (sz > 0) el->w = sz * 8; }
                     char *val = str_istrstr(attr_buf, "value=\"");
                     char *ph = str_istrstr(attr_buf, "placeholder=\"");
                     char *type = str_istrstr(attr_buf, "type=\"");
@@ -1272,7 +1340,7 @@ static void parse_html_incremental(const char *html, int safe_len) {
         browser_clear();
         list_depth = 0;
         cur_line_y = 10; cur_line_x = 10; line_element_count = 0;
-        inc_center_depth = 0; inc_table_depth = 0; inc_blockquote_depth = 0; 
+        inc_center_depth = 0; inc_table_depth = 0; inc_table_float_depth = 0; inc_blockquote_depth = 0; 
         inc_is_bold = false; inc_is_italic = false; inc_is_underline = false;
         inc_current_color = COLOR_TEXT; inc_current_link[0] = 0;
         inc_current_scale = 15.0f; inc_base_scale = 15.0f;
@@ -1289,6 +1357,7 @@ static void parse_html_incremental(const char *html, int safe_len) {
     int i = inc_parse_offset;
     int center_depth = inc_center_depth;
     int table_depth = inc_table_depth;
+    int table_float_depth = inc_table_float_depth;
     int blockquote_depth = inc_blockquote_depth;
     bool is_bold = inc_is_bold;
     bool is_italic = inc_is_italic;
@@ -1334,7 +1403,14 @@ static void parse_html_incremental(const char *html, int safe_len) {
 
             if (tag_name[0] == '/') {
                 if (str_iequals(tag_name+1, "center")) { emit_br(); if (center_depth > 0) center_depth--; }
-                else if (str_iequals(tag_name+1, "table")) { emit_br(); if (table_depth > 0) table_depth--; table_col = 0; }
+                else if (str_iequals(tag_name+1, "table")) { 
+                    emit_br();
+                    if (table_depth > 0 && table_depth == table_float_depth) {
+                        table_float_depth = 0;
+                        if (element_count < MAX_ELEMENTS) { RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement)); el->tag = 9; }
+                    }
+                    if (table_depth > 0) table_depth--; table_col = 0; 
+                }
                 else if (str_iequals(tag_name+1, "tr")) { emit_br(); table_col = 0; }
                 else if (str_iequals(tag_name+1, "td") || str_iequals(tag_name+1, "th")) {
                     table_col++;
@@ -1362,7 +1438,7 @@ static void parse_html_incremental(const char *html, int safe_len) {
                 else if (tag_name[1] == 'h' && tag_name[2] >= '1' && tag_name[2] <= '6') { emit_br(); emit_br(); is_bold = false; is_italic = false; is_underline = false; base_scale = 15.0f; current_scale = 15.0f; }
                 else if (str_iequals(tag_name+1, "form")) { emit_br(); current_form_id = 0; current_form_action[0] = 0; }
                 else if (str_iequals(tag_name+1, "a")) current_link[0] = 0;
-                else if (str_iequals(tag_name+1, "p") || str_iequals(tag_name+1, "li") || str_iequals(tag_name+1, "div")) emit_br();
+                else if (str_iequals(tag_name+1, "p") || str_iequals(tag_name+1, "li") || str_iequals(tag_name+1, "div")) { emit_br(); }
                 else if (str_iequals(tag_name+1, "pre") || str_iequals(tag_name+1, "xmp") || str_iequals(tag_name+1, "listing")) { emit_br(); is_pre = false; }
                 else if (str_iequals(tag_name+1, "font") || str_iequals(tag_name+1, "tt") || str_iequals(tag_name+1, "code") || str_iequals(tag_name+1, "samp") || str_iequals(tag_name+1, "kbd")) {
                     if (inc_font_ptr > 0) {
@@ -1380,9 +1456,19 @@ static void parse_html_incremental(const char *html, int safe_len) {
                     ui_window_set_title(win_browser, page_title);
                     skip_content = true;
                 }
-            } else {
+                } else {
                 if (str_iequals(tag_name, "center")) { emit_br(); center_depth++; }
-                else if (str_iequals(tag_name, "table")) { emit_br(); table_depth++; table_col = 0; }
+                else if (str_iequals(tag_name, "table")) { 
+                    emit_br(); table_depth++; table_col = 0; 
+                    if (str_istrstr(attr_buf, "align=\"right\"") && table_float_depth == 0) {
+                        table_float_depth = table_depth;
+                        if (element_count < MAX_ELEMENTS) { 
+                            RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement)); el->tag = 8;
+                            char *bg_str = str_istrstr(attr_buf, "bgcolor=\"");
+                            if (bg_str) el->color = parse_html_color(bg_str + 9);
+                        }
+                    }
+                }
                 else if (str_iequals(tag_name, "tr")) { emit_br(); table_col = 0; }
                 else if (str_iequals(tag_name, "td") || str_iequals(tag_name, "th")) {
                     if (table_col > 0) {
@@ -1441,10 +1527,13 @@ static void parse_html_incremental(const char *html, int safe_len) {
                     }
                 }
                 else if (str_iequals(tag_name, "br")) emit_br();
-                else if (str_iequals(tag_name, "p") || str_iequals(tag_name, "div")) emit_br();
+                else if (str_iequals(tag_name, "p") || str_iequals(tag_name, "div")) { 
+                    emit_br();
+                }
                 else if (str_iequals(tag_name, "pre")) { emit_br(); is_pre = true; current_scale = 14.0f; }
                 else if (str_iequals(tag_name, "li")) {
-                    emit_br(); RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement));
+                    emit_br();
+                    RenderElement *el = &elements[element_count++]; memset(el, 0, sizeof(RenderElement));
                     el->tag = TAG_NONE; if (list_depth > 0 && list_type[list_depth - 1] == 1) { char num[16]; itoa(list_index[list_depth - 1]++, num); int l=0; while(num[l]) { el->content[l] = num[l]; l++; } el->content[l++] = '.'; el->content[l++] = ' '; el->content[l] = 0; }
                     else if (list_depth > 0 && list_type[list_depth - 1] == 2) { el->content[0] = ' '; el->content[1] = 0; } else { el->content[0] = (char)130; el->content[1] = ' '; el->content[2] = 0; }
                     el->w = ui_get_string_width_scaled(el->content, current_scale); el->h = ui_get_font_height_scaled(current_scale); el->color = current_color; el->centered = EFF_CENTER; el->bold = is_bold; el->scale = current_scale; el->list_depth = list_depth; el->blockquote_depth = blockquote_depth;
@@ -1457,11 +1546,13 @@ static void parse_html_incremental(const char *html, int safe_len) {
                 else if (str_iequals(tag_name, "hr")) { emit_br(); RenderElement *el = &elements[element_count++]; for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0; el->tag = TAG_HR; el->list_depth = list_depth; el->blockquote_depth = blockquote_depth; el->h = 10; el->centered = true; emit_br(); }
                 else if (str_iequals(tag_name, "img")) {
                     RenderElement *el = &elements[element_count++]; for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0; el->tag = TAG_IMG; el->w = 100; el->h = 80; el->centered = EFF_CENTER;
+                    char *width_str = str_istrstr(attr_buf, "width=\""); if (width_str) { int w = atoi(width_str + 7); if (w > 0) el->attr_w = w; }
                     char *src = str_istrstr(attr_buf, "src=\""); if (src) { src += 5; int l = 0; while(src[l] && src[l] != '"' && l < 255) { el->attr_value[l] = src[l]; l++; } el->attr_value[l] = 0; el->img_loading = true; }
                     el->blockquote_depth = blockquote_depth;
                 }
                 else if (str_iequals(tag_name, "input")) {
                     RenderElement *el = &elements[element_count++]; for (int k=0; k<(int)sizeof(RenderElement); k++) ((char*)el)[k] = 0; el->tag = TAG_INPUT; el->w = 160; el->h = 20; el->centered = EFF_CENTER;
+                    char *size_str = str_istrstr(attr_buf, "size=\""); if (size_str) { int sz = atoi(size_str + 6); if (sz > 0) el->w = sz * 8; }
                     char *val = str_istrstr(attr_buf, "value=\""); char *ph = str_istrstr(attr_buf, "placeholder=\""); char *type = str_istrstr(attr_buf, "type=\""); char *name = str_istrstr(attr_buf, "name=\"");
                     el->form_id = current_form_id; el->input_cursor = 0; el->input_scroll = 0; int l; l = 0; while(current_form_action[l]) { el->form_action[l] = current_form_action[l]; l++; } el->form_action[l] = 0;
                     if (name) { name += 6; l = 0; while(name[l] && name[l] != '"' && l < 63) { el->input_name[l] = name[l]; l++; } el->input_name[l] = 0; } else { l = 0; const char *dn = "q"; while(dn[l]) { el->input_name[l] = dn[l]; l++; } el->input_name[l] = 0; }
@@ -1547,7 +1638,7 @@ static void parse_html_incremental(const char *html, int safe_len) {
     }
     emit_br();
 
-    inc_parse_offset = i; inc_center_depth = center_depth; inc_table_depth = table_depth; inc_blockquote_depth = blockquote_depth;
+    inc_parse_offset = i; inc_center_depth = center_depth; inc_table_depth = table_depth; inc_table_float_depth = table_float_depth; inc_blockquote_depth = blockquote_depth;
     inc_is_bold = is_bold; inc_is_italic = is_italic; inc_is_underline = is_underline; inc_current_color = current_color;
     { int k=0; while(current_link[k]) { inc_current_link[k] = current_link[k]; k++; } inc_current_link[k] = 0; }
     inc_current_scale = current_scale; inc_base_scale = base_scale; inc_is_space_pending = is_space_pending;
@@ -1567,6 +1658,14 @@ static void browser_paint(void) {
         int el_h = el->h;
         if (el->tag == TAG_IMG && el->img_h > el_h) el_h = el->img_h;
         if (draw_y + el_h < URL_BAR_H || draw_y > win_h) continue;
+        
+        if (el->tag == 8) {
+            if (el->color != 0 && el->color != COLOR_BG) {
+                ui_draw_rect(win_browser, el->x, draw_y, el->w, el->h + 10, el->color);
+            }
+            continue;
+        }
+        
         if (el->tag == TAG_IMG) {
             uint32_t *pixels = el->img_pixels;
             if (el->img_frames) pixels = el->img_frames[el->img_current_frame];
