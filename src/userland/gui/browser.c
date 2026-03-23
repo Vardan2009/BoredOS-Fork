@@ -165,6 +165,10 @@ static widget_context_t browser_ctx = {
 };
 
 static widget_scrollbar_t browser_scrollbar;
+static void browser_on_scroll(void *user_data, int new_scroll_y) {
+    (void)user_data;
+    scroll_y = new_scroll_y;
+}
 static widget_textbox_t url_tb;
 static widget_button_t btn_back;
 static widget_button_t btn_home;
@@ -251,6 +255,9 @@ static int parse_ip(const char* str, net_ipv4_address_t* ip) {
     return 0;
 }
 
+static char dns_cache_host[256] = "";
+static net_ipv4_address_t dns_cache_ip;
+
 static int fetch_content(const char *url, char *dest_buf, int max_len, bool progressive) {
     const char* host_start = url;
     if (url[0] == 'h' && url[1] == 't' && url[2] == 't' && url[3] == 'p') {
@@ -285,7 +292,13 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
     
     net_ipv4_address_t ip;
     if (parse_ip(hostname, &ip) != 0) {
-        if (sys_dns_lookup(hostname, &ip) != 0) return 0;
+        if (str_iequals(hostname, dns_cache_host)) {
+            ip = dns_cache_ip;
+        } else {
+            if (sys_dns_lookup(hostname, &ip) != 0) return 0;
+            int k=0; while(hostname[k]) { dns_cache_host[k] = hostname[k]; k++; } dns_cache_host[k] = 0;
+            dns_cache_ip = ip;
+        }
     }
     
     if (sys_tcp_connect(&ip, port) != 0) return 0;
@@ -328,16 +341,23 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
             while (ui_get_event(win_browser, &ev)) {
                 if (ev.type == 9) { // GUI_EVENT_MOUSE_WHEEL
                     scroll_y += ev.arg1 * 20;
-                    int max_scroll = total_content_height - (win_h - URL_BAR_H);
-                    if (max_scroll < 0) max_scroll = 0;
-                    if (scroll_y > max_scroll) scroll_y = max_scroll;
-                    if (scroll_y < 0) scroll_y = 0;
                     scrolled = true;
                 } else if (ev.type == 12) { // GUI_EVENT_CLOSE
                     sys_exit(0);
+                } else if (ev.type == GUI_EVENT_MOUSE_DOWN || ev.type == GUI_EVENT_MOUSE_UP || ev.type == GUI_EVENT_MOUSE_MOVE) {
+                    bool is_down = (ev.type == GUI_EVENT_MOUSE_DOWN || (ev.type == GUI_EVENT_MOUSE_MOVE && browser_scrollbar.is_dragging));
+                    if (widget_scrollbar_handle_mouse(&browser_scrollbar, ev.arg1, ev.arg2, is_down, &browser_ctx)) {
+                        scroll_y = browser_scrollbar.scroll_y;
+                        scrolled = true;
+                    }
                 }
             }
             if (scrolled) {
+                int max_scroll = total_content_height - (win_h - URL_BAR_H);
+                if (max_scroll < 0) max_scroll = 0;
+                if (scroll_y > max_scroll) scroll_y = max_scroll;
+                if (scroll_y < 0) scroll_y = 0;
+                browser_reflow(); // Needs reflow in case of dimensions changing, but mostly just paint
                 browser_paint(); 
                 ui_mark_dirty(win_browser, 0, 0, win_w, win_h);
             }
@@ -1628,7 +1648,11 @@ static void browser_paint(void) {
     
     // Scroll bar
     int viewport_h = win_h - URL_BAR_H;
-    widget_scrollbar_init(&browser_scrollbar, win_w - SCROLL_BAR_W, URL_BAR_H, SCROLL_BAR_W, viewport_h);
+    browser_scrollbar.x = win_w - SCROLL_BAR_W;
+    browser_scrollbar.y = URL_BAR_H;
+    browser_scrollbar.w = SCROLL_BAR_W;
+    browser_scrollbar.h = viewport_h;
+    browser_scrollbar.on_scroll = browser_on_scroll;
     widget_scrollbar_update(&browser_scrollbar, total_content_height, scroll_y);
     widget_scrollbar_draw(&browser_ctx, &browser_scrollbar);
 }
@@ -1685,9 +1709,10 @@ int main(int argc, char **argv) {
                 bool is_down = (ev.type == GUI_EVENT_MOUSE_DOWN || (ev.type == GUI_EVENT_MOUSE_MOVE && browser_scrollbar.is_dragging));
                 bool is_click = (ev.type == GUI_EVENT_CLICK);
                 
+                int old_scroll = scroll_y;
+                bool was_dragging = browser_scrollbar.is_dragging;
                 if (widget_scrollbar_handle_mouse(&browser_scrollbar, mx, my, is_down, &browser_ctx)) {
-                    if (scroll_y != browser_scrollbar.scroll_y) {
-                        scroll_y = browser_scrollbar.scroll_y;
+                    if (scroll_y != old_scroll || browser_scrollbar.is_dragging || was_dragging) {
                         needs_repaint = true;
                     }
                     if (ev.type == GUI_EVENT_MOUSE_MOVE) continue;

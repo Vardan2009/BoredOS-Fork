@@ -114,8 +114,16 @@ void widget_scrollbar_update(widget_scrollbar_t *sb, int content_height, int scr
 }
 
 void widget_scrollbar_draw(widget_context_t *ctx, widget_scrollbar_t *sb) {
-    // Only draw thumb if content is larger than view
+    // Only draw scrollbar if content is larger than view
     if (sb->content_height > sb->h) {
+        // Draw the track background
+        uint32_t track_color = ctx->use_light_theme ? 0xFFE0E0E0 : 0xFF2A2A2A;
+        if (ctx->draw_rounded_rect_filled) {
+            ctx->draw_rounded_rect_filled(ctx->user_data, sb->x, sb->y, sb->w, sb->h, 4, track_color);
+        } else if (ctx->draw_rect) {
+            ctx->draw_rect(ctx->user_data, sb->x, sb->y, sb->w, sb->h, track_color);
+        }
+
         int thumb_h = (sb->h * sb->h) / sb->content_height;
         if (thumb_h < 20) thumb_h = 20;
         
