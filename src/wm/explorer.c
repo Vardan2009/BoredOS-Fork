@@ -408,7 +408,7 @@ bool explorer_delete_recursive(const char *path) {
         for (int k = i + 1; k < len; k++) filename[j++] = path[k];
         filename[j] = 0;
         
-        char drive_prefix[3] = "A:";
+        char drive_prefix[3] = "/";
         if (path[0] && path[1] == ':') {
             drive_prefix[0] = path[0];
         }
@@ -810,15 +810,15 @@ static void explorer_open_target(const char *path) {
         if (explorer_str_ends_with(path, ".elf")) {
             process_create_elf(path, NULL);
         } else if (explorer_str_ends_with(path, ".pdf")) {
-            process_create_elf("A:/bin/boredword.elf", path);
+            process_create_elf("/bin/boredword.elf", path);
         } else if (explorer_is_markdown_file(path)) {
-            process_create_elf("A:/bin/markdown.elf", path);
+            process_create_elf("/bin/markdown.elf", path);
         } else if (explorer_str_ends_with(path, ".pnt")) {
-            process_create_elf("A:/bin/paint.elf", path);
+            process_create_elf("/bin/paint.elf", path);
         } else if (explorer_is_image_file(path)) {
-            process_create_elf("A:/bin/viewer.elf", path);
+            process_create_elf("/bin/viewer.elf", path);
         } else {
-            process_create_elf("A:/bin/txtedit.elf", path);
+            process_create_elf("/bin/txtedit.elf", path);
         }
     }
 }
@@ -1702,7 +1702,7 @@ static void explorer_handle_file_context_menu_click(Window *win, int x, int y) {
         state->dialog_input_cursor = explorer_strlen(state->dialog_input);
         explorer_strcpy(state->dialog_target_path, full_path);
     } else if (clicked_action == 110) { // Open with Text Editor
-        process_create_elf("A:/bin/txtedit.elf", full_path);
+        process_create_elf("/bin/txtedit.elf", full_path);
     } else if (clicked_action == ACTION_RESTORE) {
         explorer_restore_file(win, state->file_context_menu_item);
     } else if (clicked_action == ACTION_CREATE_SHORTCUT) {
@@ -1886,7 +1886,7 @@ Window* explorer_create_window(const char *path) {
     state->explorer_scroll_row = 0;
     state->dialog_state = DIALOG_NONE;
     
-    if (explorer_strcmp(path, "/") == 0) explorer_load_directory(win, "A:/");
+    if (explorer_strcmp(path, "/") == 0) explorer_load_directory(win, "/");
     else explorer_load_directory(win, path);
     
     explorer_wins[explorer_win_count++] = win;
@@ -1923,11 +1923,11 @@ void explorer_init(void) {
     state->dialog_state = DIALOG_NONE;
 
     explorer_wins[explorer_win_count++] = &win_explorer;
-    explorer_load_directory(&win_explorer, "A:/");
+    explorer_load_directory(&win_explorer, "/");
 }
 void explorer_reset(void) {
     ExplorerState *state = (ExplorerState*)win_explorer.data;
-    explorer_load_directory(&win_explorer, "A:/");
+    explorer_load_directory(&win_explorer, "/");
     state->explorer_scroll_row = 0;
     win_explorer.focused = false;
 }
