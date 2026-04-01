@@ -232,6 +232,16 @@ static uint32_t ramfs_allocate_cluster(void) {
     return cluster;
 }
 
+static int ramfs_count_files_in_dir(const char *normalized_path) {
+    int count = 0;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].used && fs_strcmp(files[i].parent_path, normalized_path) == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
 static bool check_desktop_limit(const char *normalized_path) {
     if (desktop_file_limit < 0) return true;
     if (fs_strlen(normalized_path) > 9 && 
@@ -245,10 +255,8 @@ static bool check_desktop_limit(const char *normalized_path) {
             if (*p == '/') return true; 
             p++;
         }
-        FAT32_FileInfo *info = (FAT32_FileInfo*)kmalloc(256 * sizeof(FAT32_FileInfo));
-        if (!info) return true;
-        int count = fat32_list_directory("/Desktop", info, 256);
-        kfree(info);
+        
+        int count = ramfs_count_files_in_dir("/Desktop");
         if (count >= desktop_file_limit) return false;
     }
     return true;

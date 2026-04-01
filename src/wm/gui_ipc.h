@@ -14,10 +14,11 @@
 #define GUI_CMD_GET_STRING_WIDTH 8
 #define GUI_CMD_GET_FONT_HEIGHT  9
 #define GUI_CMD_WINDOW_SET_RESIZABLE 14
-#define GUI_CMD_GET_SCREEN_SIZE  17
-#define GUI_CMD_GET_SCREENBUFFER 18
-#define GUI_CMD_SHOW_NOTIFICATION 19
-#define GUI_CMD_GET_DATETIME     20
+// Remapped Screenshot API Commands to avoid collisions (Originals 17, 18, 19 conflicted with magic numbers)
+#define GUI_CMD_GET_SCREEN_SIZE  50
+#define GUI_CMD_GET_SCREENBUFFER 51
+#define GUI_CMD_SHOW_NOTIFICATION 52
+#define GUI_CMD_GET_DATETIME     53
 
 #define GUI_EVENT_NONE        0
 #define GUI_EVENT_PAINT       1

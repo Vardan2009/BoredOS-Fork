@@ -81,7 +81,7 @@ void (*wm_custom_paint_hook)(void) = NULL;
 // Notification state
 static char notif_text[256] = {0};
 static int notif_timer = 0;
-static int notif_x_offset = 300; // Starts offscreen
+static int notif_x_offset = 420; // Starts offscreen
 static bool notif_active = false;
 extern bool ps2_ctrl_pressed;
 
@@ -1502,9 +1502,9 @@ void wm_paint(void) {
     
     // Notification (dark mode)
     if (notif_active) {
-        int nx = sw - 280 + notif_x_offset;
+        int nx = sw - 400 + notif_x_offset;
         int ny = 40;
-        int nw = 260;
+        int nw = 380;
         int nh = 50;
         
         draw_rounded_rect_filled(nx, ny, nw, nh, 8, COLOR_DARK_PANEL);
@@ -2679,7 +2679,7 @@ void wm_show_notification(const char *msg) {
     notif_text[i] = 0;
     
     notif_timer = 180; // ~3 seconds at 60Hz
-    notif_x_offset = 300;
+    notif_x_offset = 420;
     notif_active = true;
     force_redraw = true;
 }
@@ -2811,19 +2811,19 @@ void wm_timer_tick(void) {
             notif_timer--;
             // Slide in
             if (notif_timer > 165 && notif_x_offset > 0) { // First 15 ticks (1/4 sec) slide in
-                notif_x_offset -= 20;
+                notif_x_offset -= 28; // Slightly faster slide for larger distance
                 if (notif_x_offset < 0) notif_x_offset = 0;
             }
             // Slide out
-            else if (notif_timer < 15 && notif_x_offset < 300) { // Last 15 ticks slide out
-                notif_x_offset += 20;
+            else if (notif_timer < 15 && notif_x_offset < 420) { // Last 15 ticks slide out
+                notif_x_offset += 28;
             }
         } else {
             notif_active = false;
         }
         
         int sw = get_screen_width();
-        wm_mark_dirty(sw - 280, 40, 275, 60); 
+        wm_mark_dirty(sw - 420, 40, 415, 60); 
     }
 }
 

@@ -374,7 +374,7 @@ static void cmd_init_config_defaults(void) {
     shell_config.default_text_color = 0xFFFFFFFF; // White
     shell_config.bg_color = 0xFF1E1E1E;          // Dark background
     shell_config.cursor_color = 0xFFFFFFFF;
-    shell_config.show_drive = true;
+    shell_config.show_drive = false;
     shell_config.show_dir = true;
     shell_config.dir_color = 0xFF569CD6;
     shell_config.file_color = 0xFFFFFFFF;
