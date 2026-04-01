@@ -119,15 +119,18 @@ static void user_window_resize(Window *win, int w, int h) {
     extern void kfree(void* ptr);
     extern void serial_write(const char *str);
     
-    
     if (win->pixels) kfree(win->pixels);
     if (win->comp_pixels) kfree(win->comp_pixels);
     
     win->pixels = (uint32_t *)kmalloc(w * h * sizeof(uint32_t));
     win->comp_pixels = (uint32_t *)kmalloc(w * h * sizeof(uint32_t));
     
+    win->w = w;
+    win->h = h;
+    
     if (win->pixels) {
-        for (int i = 0; i < w * h; i++) win->pixels[i] = 0;
+        extern void mem_memset(void *dest, int val, size_t len);
+        mem_memset(win->pixels, 0, w * h * sizeof(uint32_t));
     }
 }
 
