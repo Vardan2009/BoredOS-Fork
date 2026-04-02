@@ -31,11 +31,16 @@ static DirtyRect g_dirty = {0, 0, 0, 0, false};
 #define MAX_FB_HEIGHT 2048
 static uint32_t g_back_buffer[MAX_FB_WIDTH * MAX_FB_HEIGHT] __attribute__((aligned(4096)));
 
-static int g_clip_x = 0, g_clip_y = 0, g_clip_w = 0, g_clip_h = 0;
-static bool g_clip_enabled = false;
+#define MAX_RENDER_CPUS 32
+#define CLIP_STACK_DEPTH 8
+static int g_clip_stack_x[MAX_RENDER_CPUS][CLIP_STACK_DEPTH];
+static int g_clip_stack_y[MAX_RENDER_CPUS][CLIP_STACK_DEPTH];
+static int g_clip_stack_w[MAX_RENDER_CPUS][CLIP_STACK_DEPTH];
+static int g_clip_stack_h[MAX_RENDER_CPUS][CLIP_STACK_DEPTH];
+static int g_clip_stack_ptr[MAX_RENDER_CPUS] = {0};
+static bool g_clip_enabled[MAX_RENDER_CPUS] = {false};
 
 extern uint32_t smp_this_cpu_id(void);
-#define MAX_RENDER_CPUS 32
 static uint32_t *g_render_target[MAX_RENDER_CPUS] = {0};
 static int g_rt_width[MAX_RENDER_CPUS] = {0};
 static int g_rt_height[MAX_RENDER_CPUS] = {0};
@@ -198,9 +203,10 @@ void put_pixel(int x, int y, uint32_t color) {
     if (!g_fb) return;
     if (x < 0 || x >= (int)g_fb->width || y < 0 || y >= (int)g_fb->height) return;
     
-    if (g_clip_enabled) {
-        if (x < g_clip_x || x >= g_clip_x + g_clip_w ||
-            y < g_clip_y || y >= g_clip_y + g_clip_h) {
+    if (g_clip_enabled[cpu]) {
+        int ptr = g_clip_stack_ptr[cpu];
+        if (x < g_clip_stack_x[cpu][ptr] || x >= g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr] ||
+            y < g_clip_stack_y[cpu][ptr] || y >= g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr]) {
             return;
         }
     }
@@ -247,11 +253,12 @@ void draw_rect(int x, int y, int w, int h, uint32_t color) {
 
     if (!g_fb) return;
     
-    if (g_clip_enabled) {
-        if (x1 < g_clip_x) x1 = g_clip_x;
-        if (y1 < g_clip_y) y1 = g_clip_y;
-        if (x2 > g_clip_x + g_clip_w) x2 = g_clip_x + g_clip_w;
-        if (y2 > g_clip_y + g_clip_h) y2 = g_clip_y + g_clip_h;
+    if (g_clip_enabled[cpu]) {
+        int ptr = g_clip_stack_ptr[cpu];
+        if (x1 < g_clip_stack_x[cpu][ptr]) x1 = g_clip_stack_x[cpu][ptr];
+        if (y1 < g_clip_stack_y[cpu][ptr]) y1 = g_clip_stack_y[cpu][ptr];
+        if (x2 > g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr]) x2 = g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr];
+        if (y2 > g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr]) y2 = g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr];
     }
 
     if (x1 < 0) x1 = 0;
@@ -409,18 +416,25 @@ void draw_rounded_rect_blurred(int x, int y, int w, int h, int radius, uint32_t 
         }
     }
     
-    for (int c = 0; c < w; c++) {
-        for (int r = 0; r < h; r++) {
-            int g_y = y + r;
-            int g_x = x + c;
-            
-            if (g_clip_enabled) {
-                if (g_x < g_clip_x || g_x >= g_clip_x + g_clip_w ||
-                    g_y < g_clip_y || g_y >= g_clip_y + g_clip_h) {
-                    continue;
-                }
-            }
+    for (int r = 0; r < h; r++) {
+        int g_y = y + r;
+        if (g_y < 0 || g_y >= sh) continue;
+        
+        uint32_t cpu = smp_this_cpu_id();
+        if (g_clip_enabled[cpu]) {
+            int ptr = g_clip_stack_ptr[cpu];
+            if (g_y < g_clip_stack_y[cpu][ptr] || g_y >= g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr]) continue;
+        }
 
+        for (int c = 0; c < w; c++) {
+            int g_x = x + c;
+            if (g_x < 0 || g_x >= sw) continue;
+
+            if (g_clip_enabled[cpu]) {
+                int ptr = g_clip_stack_ptr[cpu];
+                if (g_x < g_clip_stack_x[cpu][ptr] || g_x >= g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr]) continue;
+            }
+            
             bool in_corner = false;
             int dx = 0, dy = 0;
             if (c < radius && r < radius) {
@@ -478,9 +492,10 @@ void draw_char(int x, int y, char c, uint32_t color) {
 
     uint32_t cpu = smp_this_cpu_id();
     bool has_rt = (cpu < MAX_RENDER_CPUS && g_render_target[cpu]);
-    if (g_clip_enabled && !has_rt) {
-        if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
-            y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
+    if (g_clip_enabled[cpu] && !has_rt) {
+        int ptr = g_clip_stack_ptr[cpu];
+        if (x + 8 <= g_clip_stack_x[cpu][ptr] || x >= g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr] ||
+            y + 8 <= g_clip_stack_y[cpu][ptr] || y >= g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr]) {
             return;
         }
     }
@@ -502,9 +517,10 @@ void draw_char_bitmap(int x, int y, char c, uint32_t color) {
 
     uint32_t cpu = smp_this_cpu_id();
     bool has_rt = (cpu < MAX_RENDER_CPUS && g_render_target[cpu]);
-    if (g_clip_enabled && !has_rt) {
-        if (x + 8 <= g_clip_x || x >= g_clip_x + g_clip_w ||
-            y + 8 <= g_clip_y || y >= g_clip_y + g_clip_h) {
+    if (g_clip_enabled[cpu] && !has_rt) {
+        int ptr = g_clip_stack_ptr[cpu];
+        if (x + 8 <= g_clip_stack_x[cpu][ptr] || x >= g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr] ||
+            y + 8 <= g_clip_stack_y[cpu][ptr] || y >= g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr]) {
             return;
         }
     }
@@ -640,9 +656,11 @@ void draw_desktop_background(void) {
     if (g_use_image && g_bg_image) {
         // Draw wallpaper image (stretch/scale to screen)
         int x1 = 0, y1 = 0, x2 = g_fb->width, y2 = g_fb->height;
-        if (g_clip_enabled) {
-            x1 = g_clip_x; y1 = g_clip_y;
-            x2 = g_clip_x + g_clip_w; y2 = g_clip_y + g_clip_h;
+        uint32_t cpu = smp_this_cpu_id();
+        if (g_clip_enabled[cpu]) {
+            int ptr = g_clip_stack_ptr[cpu];
+            x1 = g_clip_stack_x[cpu][ptr]; y1 = g_clip_stack_y[cpu][ptr];
+            x2 = g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr]; y2 = g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr];
         }
         for (int y = y1; y < y2; y++) {
             int src_y = y * g_bg_image_h / (int)g_fb->height;
@@ -657,9 +675,11 @@ void draw_desktop_background(void) {
     } else if (g_use_pattern) {
         // Optimized tiled pattern: only draw within the clipping/dirty rect
         int x1 = 0, y1 = 0, x2 = g_fb->width, y2 = g_fb->height;
-        if (g_clip_enabled) {
-            x1 = g_clip_x; y1 = g_clip_y;
-            x2 = g_clip_x + g_clip_w; y2 = g_clip_y + g_clip_h;
+        uint32_t cpu = smp_this_cpu_id();
+        if (g_clip_enabled[cpu]) {
+            int ptr = g_clip_stack_ptr[cpu];
+            x1 = g_clip_stack_x[cpu][ptr]; y1 = g_clip_stack_y[cpu][ptr];
+            x2 = g_clip_stack_x[cpu][ptr] + g_clip_stack_w[cpu][ptr]; y2 = g_clip_stack_y[cpu][ptr] + g_clip_stack_h[cpu][ptr];
         }
 
         for (int y = y1; y < y2; y++) {
@@ -889,33 +909,94 @@ void graphics_set_clipping(int x, int y, int w, int h) {
     if (w < 0) w = 0;
     if (h < 0) h = 0;
 
-    g_clip_x = x;
-    g_clip_y = y;
-    g_clip_w = w;
-    g_clip_h = h;
-    g_clip_enabled = true;
+    uint32_t cpu = smp_this_cpu_id();
+    g_clip_stack_x[cpu][0] = x;
+    g_clip_stack_y[cpu][0] = y;
+    g_clip_stack_w[cpu][0] = w;
+    g_clip_stack_h[cpu][0] = h;
+    g_clip_stack_ptr[cpu] = 0; // Reset to base
+    g_clip_enabled[cpu] = true;
+}
+
+void graphics_push_clipping(int x, int y, int w, int h) {
+    uint32_t cpu = smp_this_cpu_id();
+    int cur_ptr = g_clip_stack_ptr[cpu];
+    if (cur_ptr + 1 >= CLIP_STACK_DEPTH) return; // Stack overflow
+
+    // Intersect with current top
+    int cx1 = g_clip_stack_x[cpu][cur_ptr];
+    int cy1 = g_clip_stack_y[cpu][cur_ptr];
+    int cx2 = cx1 + g_clip_stack_w[cpu][cur_ptr];
+    int cy2 = cy1 + g_clip_stack_h[cpu][cur_ptr];
+
+    int nx1 = x;
+    int ny1 = y;
+    int nx2 = x + w;
+    int ny2 = y + h;
+
+    if (nx1 < cx1) nx1 = cx1;
+    if (ny1 < cy1) ny1 = cy1;
+    if (nx2 > cx2) nx2 = cx2;
+    if (ny2 > cy2) ny2 = cy2;
+
+    int nw = nx2 - nx1;
+    int nh = ny2 - ny1;
+    if (nw < 0) nw = 0;
+    if (nh < 0) nh = 0;
+
+    g_clip_stack_ptr[cpu]++;
+    g_clip_stack_x[cpu][cur_ptr + 1] = nx1;
+    g_clip_stack_y[cpu][cur_ptr + 1] = ny1;
+    g_clip_stack_w[cpu][cur_ptr + 1] = nw;
+    g_clip_stack_h[cpu][cur_ptr + 1] = nh;
+    g_clip_enabled[cpu] = true;
+}
+
+void graphics_pop_clipping(void) {
+    uint32_t cpu = smp_this_cpu_id();
+    if (g_clip_stack_ptr[cpu] > 0) {
+        g_clip_stack_ptr[cpu]--;
+    } else {
+        g_clip_enabled[cpu] = false;
+    }
 }
 
 void graphics_clear_clipping(void) {
-    g_clip_enabled = false;
+    uint32_t cpu = smp_this_cpu_id();
+    g_clip_stack_ptr[cpu] = 0;
+    g_clip_enabled[cpu] = false;
 }
 void graphics_blit_buffer(uint32_t *src, int dst_x, int dst_y, int w, int h) {
     if (!g_fb || !src) return;
     int sw = get_screen_width();
     int sh = get_screen_height();
     
-    for (int y = 0; y < h; y++) {
-        int vy = dst_y + y;
-        if (vy < 0 || vy >= sh) continue;
-        
-        for (int x = 0; x < w; x++) {
-            int vx = dst_x + x;
-            if (vx < 0 || vx >= sw) continue;
-            
-            uint32_t pcol = src[y * w + x];
+    uint32_t cpu = smp_this_cpu_id();
+    int cx1 = 0, cy1 = 0, cx2 = sw, cy2 = sh;
+    if (g_clip_enabled[cpu]) {
+        int ptr = g_clip_stack_ptr[cpu];
+        cx1 = g_clip_stack_x[cpu][ptr];
+        cy1 = g_clip_stack_y[cpu][ptr];
+        cx2 = cx1 + g_clip_stack_w[cpu][ptr];
+        cy2 = cy1 + g_clip_stack_h[cpu][ptr];
+    }
 
+    int x1 = dst_x, y1 = dst_y, x2 = dst_x + w, y2 = dst_y + h;
+    if (x1 < cx1) x1 = cx1;
+    if (y1 < cy1) y1 = cy1;
+    if (x2 > cx2) x2 = cx2;
+    if (y2 > cy2) y2 = cy2;
+
+    if (x1 >= x2 || y1 >= y2) return;
+
+    for (int y = y1; y < y2; y++) {
+        uint32_t *dst_row = &g_back_buffer[y * sw + x1];
+        uint32_t *src_row = &src[(y - dst_y) * w + (x1 - dst_x)];
+        int len = x2 - x1;
+        for (int x = 0; x < len; x++) {
+            uint32_t pcol = src_row[x];
             if ((pcol & 0xFF000000) != 0 || (pcol & 0xFFFFFF) != 0) {
-                g_back_buffer[vy * sw + vx] = pcol;
+                dst_row[x] = pcol;
             }
         }
     }

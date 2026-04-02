@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include "stdlib.h"
 
+// External syscalls from libc
+extern void sys_parallel_run(void (*fn)(void*), void **args, int count);
+
 // =========
 // Constants
 // =========
@@ -464,6 +467,10 @@ static double surf_z2[GRID_3D][GRID_3D]; // Back root
 static bool surf_v1[GRID_3D][GRID_3D];
 static bool surf_v2[GRID_3D][GRID_3D];
 
+// Screen-space vertex cache for parallel rasterization
+static int surf_sx1[GRID_3D][GRID_3D], surf_sy1[GRID_3D][GRID_3D];
+static int surf_sx2[GRID_3D][GRID_3D], surf_sy2[GRID_3D][GRID_3D];
+
 static bool surface_needs_eval = true;
 
 // Cached trig values for performance
@@ -500,7 +507,9 @@ static widget_context_t wctx = { 0, gfx_draw_rect, gfx_draw_rr, gfx_draw_str, NU
 // ================
 static void gfb_clear(uint32_t c) {
     int total = graph_w * graph_h;
-    for (int i = 0; i < total; i++) graph_fb[i] = c;
+    uint32_t *p = graph_fb;
+    // Simple but often faster for compilers to vectorize than raw loop
+    for (int i = 0; i < total; i++) p[i] = c;
 }
 
 static void gfb_pixel(int x, int y, uint32_t c) {
@@ -865,6 +874,7 @@ typedef struct {
     int start_j, end_j;
     double range;
     double step;
+    double z_scale;
 } eval_job_t;
 
 static void eval_3d_explicit_job(void *arg) {
@@ -923,73 +933,81 @@ static void eval_3d_implicit_job(void *arg) {
     }
 }
 
-static void render_3d_explicit(void) {
-    double step = range_3d * 2.0 / (GRID_3D - 1);
-    double zmin = 1e30, zmax = -1e30;
-// why are you reading this lol
-    if (surface_needs_eval) {
-        int num_chunks = 4; // Parallelize into 4 chunks (matching typical core count)
-        eval_job_t jobs[4];
-        void *job_args[4];
-        int rows_per_chunk = GRID_3D / num_chunks;
-        
-        for (int c = 0; c < num_chunks; c++) {
-            jobs[c].start_j = c * rows_per_chunk;
-            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
-            jobs[c].range = range_3d;
-            jobs[c].step = step;
-            job_args[c] = &jobs[c];
-        }
-
-        extern void sys_parallel_run(void (*fn)(void*), void **args, int count);
-        sys_parallel_run(eval_3d_explicit_job, job_args, num_chunks);
-    }
-    
-    // Compute min/max for coloring based on what's visible
-    for (int j = 0; j < GRID_3D; j++) {
+// Parallel Projection Job
+static void eval_3d_project_job(void *arg) {
+    eval_job_t *job = (eval_job_t *)arg;
+    for (int j = job->start_j; j < job->end_j; j++) {
         for (int i = 0; i < GRID_3D; i++) {
             if (surf_v1[j][i]) {
-                if (surf_z1[j][i] < zmin) zmin = surf_z1[j][i];
-                if (surf_z1[j][i] > zmax) zmax = surf_z1[j][i];
+                project_3d(surf_x[j][i], surf_z1[j][i] * job->z_scale, surf_y_3d[j][i], &surf_sx1[j][i], &surf_sy1[j][i]);
             }
-        }
-    }
-
-    double z_scale = 1.0;
-    if (zmax > zmin && (zmax - zmin) > 0.001) {
-        // Auto-fit Z bounds to X/Y bounds to prevent vertical spikes in explicit graphing
-        z_scale = (range_3d * 2.0) / (zmax - zmin);
-    }
-
-    // Draw wireframe
-    for (int j = 0; j < GRID_3D; j++) {
-        for (int i = 0; i < GRID_3D; i++) {
-            if (!surf_v1[j][i]) continue;
-            int sx0, sy0;
-            project_3d(surf_x[j][i], surf_z1[j][i] * z_scale, surf_y_3d[j][i], &sx0, &sy0);
-            uint32_t col = color_by_height(surf_z1[j][i], zmin, zmax);
-
-            if (i + 1 < GRID_3D && surf_v1[j][i+1]) {
-                int sx1, sy1;
-                project_3d(surf_x[j][i+1], surf_z1[j][i+1] * z_scale, surf_y_3d[j][i+1], &sx1, &sy1);
-                gfb_line(sx0, sy0, sx1, sy1, col);
-            }
-            if (j + 1 < GRID_3D && surf_v1[j+1][i]) {
-                int sx1, sy1;
-                project_3d(surf_x[j+1][i], surf_z1[j+1][i] * z_scale, surf_y_3d[j+1][i], &sx1, &sy1);
-                gfb_line(sx0, sy0, sx1, sy1, col);
+            if (surf_v2[j][i]) {
+                project_3d(surf_x[j][i], surf_z2[j][i] * job->z_scale, surf_y_3d[j][i], &surf_sx2[j][i], &surf_sy2[j][i]);
             }
         }
     }
 }
 
-static void render_3d_implicit(void) {
+typedef struct {
+    int start_j, end_j;
+    double zmin, zmax;
+} draw_job_t;
+
+// Parallel Draw Job
+static void render_3d_draw_job(void *arg) {
+    draw_job_t *job = (draw_job_t *)arg;
+    for (int j = job->start_j; j < job->end_j; j++) {
+        for (int i = 0; i < GRID_3D; i++) {
+            for (int s = 0; s < 2; s++) {
+                bool *v = (s == 0) ? surf_v1[j] : surf_v2[j];
+                int *sx_row = (s == 0) ? surf_sx1[j] : surf_sx2[j];
+                int *sy_row = (s == 0) ? surf_sy1[j] : surf_sy2[j];
+                double *z_row = (s == 0) ? surf_z1[j] : surf_z2[j];
+                
+                if (!v[i]) continue;
+                
+                int sx0 = sx_row[i], sy0 = sy_row[i];
+                uint32_t col = color_by_height(z_row[i], job->zmin, job->zmax);
+
+                if (i + 1 < GRID_3D) {
+                    bool v_next = (s == 0) ? surf_v1[j][i+1] : surf_v2[j][i+1];
+                    if (v_next) {
+                        int *sx_next_row = (s == 0) ? surf_sx1[j] : surf_sx2[j];
+                        int *sy_next_row = (s == 0) ? surf_sy1[j] : surf_sy2[j];
+                        gfb_line(sx0, sy0, sx_next_row[i+1], sy_next_row[i+1], col);
+                    }
+                }
+                if (j + 1 < GRID_3D) {
+                    bool v_next = (s == 0) ? surf_v1[j+1][i] : surf_v2[j+1][i];
+                    if (v_next) {
+                        int *sx_next_row = (s == 0) ? surf_sx1[j+1] : surf_sx2[j+1];
+                        int *sy_next_row = (s == 0) ? surf_sy1[j+1] : surf_sy2[j+1];
+                        gfb_line(sx0, sy0, sx_next_row[i], sy_next_row[i], col);
+                    }
+                }
+                
+                if (s == 0 && surf_v1[j][i] && surf_v2[j][i]) {
+                    bool edge = false;
+                    if (i+1 < GRID_3D && !surf_v1[j][i+1]) edge = true;
+                    if (i-1 >= 0      && !surf_v1[j][i-1]) edge = true;
+                    if (j+1 < GRID_3D && !surf_v1[j+1][i]) edge = true;
+                    if (j-1 >= 0      && !surf_v1[j-1][i]) edge = true;
+                    if (edge) {
+                        gfb_line(sx0, sy0, surf_sx2[j][i], surf_sy2[j][i], col);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void render_3d_explicit(void) {
     double step = range_3d * 2.0 / (GRID_3D - 1);
-    int z_steps = 100; 
-    double z_step = range_3d * 2.0 / z_steps;
     double zmin = 1e30, zmax = -1e30;
 
     if (surface_needs_eval) {
+        for (int j = 0; j < GRID_3D; j++) { for (int i = 0; i < GRID_3D; i++) { surf_v1[j][i] = false; surf_v2[j][i] = false; } }
+
         int num_chunks = 4;
         eval_job_t jobs[4];
         void *job_args[4];
@@ -1003,10 +1021,99 @@ static void render_3d_implicit(void) {
             job_args[c] = &jobs[c];
         }
 
-        extern void sys_parallel_run(void (*fn)(void*), void **args, int count);
+        sys_parallel_run(eval_3d_explicit_job, job_args, num_chunks);
+    }
+    
+    // Compute min/max for coloring
+    for (int j = 0; j < GRID_3D; j++) {
+        for (int i = 0; i < GRID_3D; i++) {
+            if (surf_v1[j][i]) {
+                if (surf_z1[j][i] < zmin) zmin = surf_z1[j][i];
+                if (surf_z1[j][i] > zmax) zmax = surf_z1[j][i];
+            }
+        }
+    }
+
+    double z_scale = 1.0;
+    if (zmax > zmin && (zmax - zmin) > 0.001) {
+        z_scale = (range_3d * 2.0) / (zmax - zmin);
+    }
+
+    // Pass 2: Parallel Projection
+    {
+        int num_chunks = 4;
+        eval_job_t jobs[4];
+        void *job_args[4];
+        int rows_per_chunk = GRID_3D / num_chunks;
+        for (int c = 0; c < num_chunks; c++) {
+            jobs[c].start_j = c * rows_per_chunk;
+            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
+            jobs[c].range = range_3d;
+            jobs[c].step = step;
+            jobs[c].z_scale = z_scale;
+            job_args[c] = &jobs[c];
+        }
+        sys_parallel_run(eval_3d_project_job, job_args, num_chunks);
+    }
+    
+    // Pass 3: Parallel Drawing
+    {
+        int num_chunks = 4;
+        draw_job_t jobs[4];
+        void *job_args[4];
+        int rows_per_chunk = GRID_3D / num_chunks;
+        for (int c = 0; c < num_chunks; c++) {
+            jobs[c].start_j = c * rows_per_chunk;
+            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
+            jobs[c].zmin = zmin;
+            jobs[c].zmax = zmax;
+            job_args[c] = &jobs[c];
+        }
+        sys_parallel_run(render_3d_draw_job, job_args, num_chunks);
+    }
+}
+
+static void render_3d_implicit(void) {
+    double step = range_3d * 2.0 / (GRID_3D - 1);
+    int z_steps = 100; 
+    double zmin = 1e30, zmax = -1e30;
+
+    if (surface_needs_eval) {
+        int num_chunks = 4;
+        eval_job_t jobs[4];
+        void *job_args[4];
+        for (int j = 0; j < GRID_3D; j++) { for (int i = 0; i < GRID_3D; i++) { surf_v1[j][i] = false; surf_v2[j][i] = false; } }
+
+        int rows_per_chunk = GRID_3D / num_chunks;
+        
+        for (int c = 0; c < num_chunks; c++) {
+            jobs[c].start_j = c * rows_per_chunk;
+            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
+            jobs[c].range = range_3d;
+            jobs[c].step = step;
+            job_args[c] = &jobs[c];
+        }
+
         sys_parallel_run(eval_3d_implicit_job, job_args, num_chunks);
     }
     
+    // Pass 2: Parallel Projection
+    {
+        int num_chunks = 4;
+        eval_job_t jobs[4];
+        void *job_args[4];
+        int rows_per_chunk = GRID_3D / num_chunks;
+        for (int c = 0; c < num_chunks; c++) {
+            jobs[c].start_j = c * rows_per_chunk;
+            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
+            jobs[c].range = range_3d;
+            jobs[c].step = step;
+            jobs[c].z_scale = 1.0;
+            job_args[c] = &jobs[c];
+        }
+        sys_parallel_run(eval_3d_project_job, job_args, num_chunks);
+    }
+
     // Compute min/max for coloring based on what's visible
     for (int j = 0; j < GRID_3D; j++) {
         for (int i = 0; i < GRID_3D; i++) {
@@ -1021,45 +1128,20 @@ static void render_3d_implicit(void) {
         }
     }
     
-    // Draw mesh for both surfaces
-    for (int j = 0; j < GRID_3D; j++) {
-        for (int i = 0; i < GRID_3D; i++) {
-            for (int s = 0; s < 2; s++) {
-                bool *v = (s == 0) ? surf_v1[j] : surf_v2[j];
-                double *z = (s == 0) ? surf_z1[j] : surf_z2[j];
-                if (!v[i]) continue;
-                int sx0, sy0;
-                project_3d(surf_x[j][i], z[i], surf_y_3d[j][i], &sx0, &sy0);
-                uint32_t col = color_by_height(z[i], zmin, zmax);
-
-                if (i+1 < GRID_3D && ((s == 0 && surf_v1[j][i+1]) || (s == 1 && surf_v2[j][i+1]))) {
-                    int sx1, sy1;
-                    double *znext = (s == 0) ? surf_z1[j] : surf_z2[j];
-                    project_3d(surf_x[j][i+1], znext[i+1], surf_y_3d[j][i+1], &sx1, &sy1);
-                    gfb_line(sx0, sy0, sx1, sy1, col);
-                }
-                if (j+1 < GRID_3D && ((s == 0 && surf_v1[j+1][i]) || (s == 1 && surf_v2[j+1][i]))) {
-                    int sx1, sy1;
-                    double *znext = (s == 0) ? surf_z1[j+1] : surf_z2[j+1];
-                    project_3d(surf_x[j+1][i], znext[i], surf_y_3d[j+1][i], &sx1, &sy1);
-                    gfb_line(sx0, sy0, sx1, sy1, col);
-                }
-                
-                // Stitch the front and back roots together at the boundary to close zigzag gaps
-                if (s == 0 && surf_v1[j][i] && surf_v2[j][i]) {
-                    bool edge = false;
-                    if (i+1 < GRID_3D && !surf_v1[j][i+1]) edge = true;
-                    if (i-1 >= 0      && !surf_v1[j][i-1]) edge = true;
-                    if (j+1 < GRID_3D && !surf_v1[j+1][i]) edge = true;
-                    if (j-1 >= 0      && !surf_v1[j-1][i]) edge = true;
-                    if (edge) {
-                        int sx2, sy2;
-                        project_3d(surf_x[j][i], surf_z2[j][i], surf_y_3d[j][i], &sx2, &sy2);
-                        gfb_line(sx0, sy0, sx2, sy2, col);
-                    }
-                }
-            }
+    // Pass 3: Parallel Drawing
+    {
+        int num_chunks = 4;
+        draw_job_t jobs[4];
+        void *job_args[4];
+        int rows_per_chunk = GRID_3D / num_chunks;
+        for (int c = 0; c < num_chunks; c++) {
+            jobs[c].start_j = c * rows_per_chunk;
+            jobs[c].end_j = (c == num_chunks - 1) ? GRID_3D : (c + 1) * rows_per_chunk;
+            jobs[c].zmin = zmin;
+            jobs[c].zmax = zmax;
+            job_args[c] = &jobs[c];
         }
+        sys_parallel_run(render_3d_draw_job, job_args, num_chunks);
     }
 }
 

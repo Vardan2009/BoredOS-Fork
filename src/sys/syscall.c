@@ -9,6 +9,8 @@
 #include "wm.h"
 #include "fat32.h"
 #include "paging.h"
+#include "work_queue.h"
+#include "smp.h"
 #include "platform.h"
 #include "io.h"
 #include "pci.h"
@@ -630,26 +632,25 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
                 if (win->pixels) {
                     int rx = (int)params[0]; int ry = (int)params[1];
                     int rw = (int)params[2]; int rh = (int)params[3];
-                    
+                    int src_w = rw;
                     int src_x_offset = 0;
                     int src_y_offset = 0;
+
                     if (rx < 0) { src_x_offset = -rx; rw += rx; rx = 0; }
                     if (ry < 0) { src_y_offset = -ry; rh += ry; ry = 0; }
                     if (rx + rw > win->w) rw = win->w - rx;
                     if (ry + rh > (win->h - 20)) rh = (win->h - 20) - ry;
-                    
+
                     if (rw > 0 && rh > 0) {
                         for (int y = 0; y < rh; y++) {
                             uint32_t *dest = &win->pixels[(ry + y) * win->w + rx];
-                            uint32_t *src = &image_data[(src_y_offset + y) * (int)params[2] + src_x_offset];
+                            uint32_t *src = &image_data[(src_y_offset + y) * src_w + src_x_offset];
                             for (int x = 0; x < rw; x++) {
                                 uint32_t s = src[x];
                                 uint8_t alpha = (s >> 24) & 0xFF;
                                 if (alpha == 0xFF) {
                                     dest[x] = s;
-                                } else if (alpha == 0) {
-                                    // Skip
-                                } else {
+                                } else if (alpha > 0) {
                                     uint32_t d = dest[x];
                                     uint32_t rb = ((s & 0xFF00FF) * alpha + (d & 0xFF00FF) * (255 - alpha)) >> 8;
                                     uint32_t g = ((s & 0x00FF00) * alpha + (d & 0x00FF00) * (255 - alpha)) >> 8;

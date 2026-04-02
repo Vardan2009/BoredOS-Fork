@@ -17,6 +17,8 @@
 #include "userland/stb_image.h"
 #include "memory_manager.h"
 #include "disk.h"
+#include "../sys/work_queue.h"
+#include "../sys/smp.h"
 
 
 // Hello developer,
@@ -98,6 +100,14 @@ static int drag_offset_y = 0;
 bool is_dragging_file = false;
 static char drag_file_path[FAT32_MAX_PATH];
 static int drag_icon_type = 0; 
+
+typedef struct {
+    int y_start;
+    int y_end;
+    DirtyRect dirty;
+    volatile int *completion_counter;
+    int pass;
+} wm_strip_job_t;
 static int drag_start_x = 0;
 static int drag_start_y = 0;
 static int drag_icon_orig_x = 0;
@@ -111,10 +121,8 @@ static int window_count = 0;
 // Redraw system
 static bool force_redraw = true;  
 static uint32_t timer_ticks = 0;
-static int desktop_refresh_timer = 0;
 
 // Cursor state
-static bool cursor_visible = true;
 static int last_cursor_x = 400;
 static int last_cursor_y = 300;
 
@@ -1110,27 +1118,6 @@ static void draw_dock_clock(int x, int y) {
     draw_rect(cx, cy - 1, 10, 2, 0xFF333333);
 }
 
-static void draw_dock_editor(int x, int y) {
-    draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF0A1628);
-    draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF1565C0);
-    draw_rounded_rect_filled(x + 1, y + 24, 46, 23, 9, 0xFF0D47A1);
-    draw_rect(x + 5, y + 8, 9, 32, 0xFF1A237E);
-    draw_filled_circle(x + 10, y + 14, 2, 0xFF7986CB);
-    draw_filled_circle(x + 10, y + 22, 2, 0xFF7986CB);
-    draw_filled_circle(x + 10, y + 30, 2, 0xFF7986CB);
-    draw_rect(x + 15, y + 8, 28, 32, 0xFF1B2B3C);
-    draw_rect(x + 15, y + 8, 14, 5, 0xFF1B2B3C);
-    draw_rect(x + 15, y + 8, 14, 1, 0xFF569CD6);
-    draw_rect(x + 18, y + 13, 9, 2, 0xFF569CD6);
-    draw_rect(x + 29, y + 13, 8, 2, 0xFF4EC9B0);
-    draw_rect(x + 18, y + 18, 5, 2, 0xFFCE9178);
-    draw_rect(x + 25, y + 18, 7, 2, 0xFFCE9178);
-    draw_rect(x + 21, y + 23, 7, 2, 0xFF9CDCFE);
-    draw_rect(x + 30, y + 23, 5, 2, 0xFFD4D4D4);
-    draw_rect(x + 18, y + 28, 16, 2, 0xFF6A9955);
-    draw_rect(x + 18, y + 33, 10, 2, 0xFFD4D4D4);
-    draw_rect(x + 30, y + 33, 6, 2, 0xFF569CD6);
-}
 
 void draw_window(Window *win) {
     if (!win->visible) return;
@@ -1240,6 +1227,7 @@ static void erase_cursor(int x, int y) {
 }
 
 // --- Clock ---
+
 static uint8_t rtc_read(uint8_t reg) {
     outb(0x70, reg);
     return inb(0x71);
@@ -1274,273 +1262,261 @@ static void draw_clock(int x, int y) {
 }
 
 // --- Main Paint Function ---
-void wm_paint(void) {
+bool rect_contains(int x, int y, int w, int h, int px, int py) {
+    return px >= x && px < x + w && py >= y && py < y + h;
+}
+
+static Window *sorted_windows_cache[32];
+static int sorted_window_count_cache = 0;
+
+static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
     int sw = get_screen_width();
     int sh = get_screen_height();
     
+    int cx = 0, cy = y_start, cw = sw, ch = y_end - y_start;
+    if (dirty.active) {
+        if (cx < dirty.x) { cw -= (dirty.x - cx); cx = dirty.x; }
+        if (cy < dirty.y) { ch -= (dirty.y - cy); cy = dirty.y; }
+        if (cx + cw > dirty.x + dirty.w) cw = dirty.x + dirty.w - cx;
+        if (cy + ch > dirty.y + dirty.h) ch = dirty.y + dirty.h - cy;
+    }
+    
+    if (cw <= 0 || ch <= 0) return;
+
+    graphics_set_clipping(cx, cy, cw, ch);
+
+    if (pass == 1) {
+        draw_desktop_background();
+        
+        for (int i = 0; i < desktop_icon_count; i++) {
+            DesktopIcon *icon = &desktop_icons[i];
+            if (icon->y + 85 <= cy || icon->y >= cy + ch) continue;
+            if (dirty.active && (icon->x + 85 <= dirty.x || icon->x >= dirty.x + dirty.w)) continue;
+
+            if (icon->type == 1) draw_folder_icon(icon->x, icon->y, icon->name);
+            else if (icon->type == 2) {
+                char label[64]; int len = 0;
+                while(icon->name[len] && len < 63) { label[len] = icon->name[len]; len++; }
+                label[len] = 0;
+                if (len > 9 && str_ends_with(label, ".shortcut")) label[len-9] = 0;
+                if (str_starts_with(icon->name, "Notepad")) draw_notepad_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Calculator")) draw_calculator_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Terminal")) draw_terminal_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Minesweeper")) draw_minesweeper_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Settings")) draw_control_panel_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Clock")) draw_clock_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "About")) draw_about_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Recycle Bin")) draw_recycle_bin_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Files")) draw_folder_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Paint")) draw_paint_icon(icon->x, icon->y, label);
+                else draw_icon(icon->x, icon->y, label);
+            } else {
+                if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
+                else if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
+                else if (is_image_file(icon->name)) {
+                    char full_path[128] = "/Desktop/"; int p=9; int n=0; while(icon->name[n] && p < 127) full_path[p++] = icon->name[n++]; full_path[p]=0;
+                    draw_image_icon(icon->x, icon->y, full_path);
+                    draw_icon_label(icon->x, icon->y, icon->name);
+                }
+                else if (str_ends_with(icon->name, ".pdf")) draw_pdf_icon(icon->x, icon->y, icon->name);
+                else draw_document_icon(icon->x, icon->y, icon->name);
+            }
+        }
+        
+        for (int i = 0; i < sorted_window_count_cache; i++) {
+            Window *win = sorted_windows_cache[i];
+            if (!win || !win->visible) continue;
+            if (win->y + win->h <= cy || win->y >= cy + ch) continue;
+            if (dirty.active && !win->focused && (win->x + win->w <= dirty.x || win->x >= dirty.x + dirty.w)) continue;
+            draw_window(win);
+        }
+    } else if (pass == 2) {
+        if (0 < cy + ch && 30 > cy) {
+            draw_rect(0, 0, sw, 30, COLOR_TOPBAR_BG);
+            draw_boredos_logo(8, 8, 1);
+            draw_clock(sw - 80, 12);
+        }
+        
+        if (start_menu_open && 40 < cy + ch && 125 > cy) {
+            draw_rounded_rect_filled(8, 40, 160, 85, 8, COLOR_DARK_PANEL);
+            draw_string(20, 48, "About BoredOS", COLOR_DARK_TEXT);
+            draw_string(20, 68, "Settings", COLOR_DARK_TEXT);
+            draw_string(20, 88, "Shutdown", COLOR_DARK_TEXT);
+            draw_string(20, 108, "Restart", COLOR_DARK_TEXT);
+        }
+        
+        int dock_h = 60, dock_y = sh - dock_h - 6;   
+        if (dock_y < cy + ch && dock_y + dock_h > cy) {
+            int d_item_sz = 48, d_space = 10, d_total_w = 11 * (d_item_sz + d_space);
+            int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
+            draw_rounded_rect_blurred(d_bg_x, dock_y, d_bg_w, dock_h, 18, COLOR_DOCK_BG, 5, 140);
+            int dx = (sw - d_total_w) / 2, dy = dock_y + 6;
+            draw_dock_files(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_settings(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_notepad(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_calculator(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_terminal(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_minesweeper(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_paint(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_browser(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_taskman(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_clock(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_word(dx, dy);
+        }
+        
+        if (desktop_menu_visible) {
+            int d_mw = 140, d_mh = (desktop_menu_target_icon != -1) ? 125 : 75;
+            if (desktop_menu_y < cy + ch && desktop_menu_y + d_mh > cy) {
+                draw_rounded_rect_filled(desktop_menu_x, desktop_menu_y, d_mw, d_mh, 8, COLOR_DARK_PANEL);
+                int item_h = 25;
+                if (desktop_menu_target_icon != -1) {
+                    bool cp = explorer_clipboard_has_content();
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "Cut", COLOR_WHITE);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "Copy", COLOR_WHITE);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", cp ? COLOR_WHITE : COLOR_DKGRAY);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 3, "Delete", COLOR_TRAFFIC_RED);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 4, "Rename", COLOR_WHITE);
+                } else {
+                    bool cp = explorer_clipboard_has_content();
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "New File", COLOR_WHITE);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "New Folder", COLOR_WHITE);
+                    draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", cp ? COLOR_WHITE : COLOR_DKGRAY);
+                }
+            }
+        }
+
+        if (desktop_dialog_state != 0) {
+            int dlg_w = 300, dlg_h = 110, dg_x = (sw - dlg_w)/2, dg_y = (sh - dlg_h)/2;
+            if (dg_y < cy + ch && dg_y + dlg_h > cy) {
+                draw_rounded_rect_filled(dg_x, dg_y, dlg_w, dlg_h, 8, COLOR_DARK_PANEL);
+                const char *title = (desktop_dialog_state == 1) ? "Create New File" : (desktop_dialog_state == 2 ? "Create New Folder" : "Rename");
+                const char *btn = (desktop_dialog_state == 0) ? "Rename" : "Create";
+                draw_string(dg_x + 10, dg_y + 10, title, COLOR_WHITE);
+                draw_rounded_rect_filled(dg_x + 10, dg_y + 35, 280, 20, 4, COLOR_DARK_BG);
+                draw_string(dg_x + 15, dg_y + 40, desktop_dialog_input, COLOR_WHITE);
+                char temp_sub[64]; int k; for (k=0; k<desktop_dialog_cursor&&desktop_dialog_input[k]; k++) temp_sub[k]=desktop_dialog_input[k]; temp_sub[k]=0;
+                draw_rect(dg_x + 15 + font_manager_get_string_width(graphics_get_current_ttf(), temp_sub), dg_y + 39, 2, 12, COLOR_WHITE);
+                draw_rounded_rect_filled(dg_x + 50, dg_y + 65, 80, 25, 4, COLOR_DARK_BORDER); draw_string(dg_x + 70, dg_y + 72, btn, COLOR_WHITE);
+                draw_rounded_rect_filled(dg_x + 170, dg_y + 65, 80, 25, 4, COLOR_DARK_BORDER); draw_string(dg_x + 185, dg_y + 72, "Cancel", COLOR_WHITE);
+            }
+        }
+
+        if (msg_box_visible) {
+            int mw = 320, mh = 100, m_x = (sw - mw)/2, m_y = (sh - mh)/2;
+            if (m_y < cy + ch && m_y + mh > cy) {
+                draw_rounded_rect_filled(m_x, m_y, mw, mh, 8, COLOR_DARK_PANEL);
+                draw_string(m_x + 15, m_y + 10, msg_box_title, COLOR_DARK_TEXT);
+                draw_string(m_x + 10, m_y + 40, msg_box_text, COLOR_DARK_TEXT);
+                draw_rounded_rect_filled(m_x + mw/2 - 30, m_y + 70, 60, 20, 4, COLOR_DARK_BORDER);
+                draw_string(m_x + mw/2 - 10, m_y + 75, "OK", COLOR_WHITE);
+            }
+        }
+
+        if (notif_active) {
+            int nx = sw - 400 + notif_x_offset, ny = 40, nw = 380, nh = 50;
+            if (ny < cy + ch && ny + nh > cy) {
+                draw_rounded_rect_filled(nx, ny, nw, nh, 8, COLOR_DARK_PANEL);
+                draw_string(nx + 15, ny + 10, "Screenshot", COLOR_DARK_TEXT);
+                draw_string(nx + 15, ny + 30, notif_text, COLOR_DKGRAY);
+            }
+        }
+        
+        if (wm_custom_paint_hook) wm_custom_paint_hook();
+        
+        if (is_dragging_file) {
+            if (mx - 20 < cx + cw && mx + 20 > cx && my - 20 < cy + ch && my + 20 > cy) {
+                if (drag_icon_type == 1) draw_folder_icon(mx - 20, my - 20, "Moving...");
+                else if (drag_icon_type == 2) draw_icon(mx - 20, my - 20, "Moving...");
+                else draw_document_icon(mx - 20, my - 20, "Moving...");
+            }
+        }
+    }
+}
+
+static void wm_strip_worker_job(void *arg) {
+    wm_strip_job_t *job = (wm_strip_job_t *)arg;
+    wm_paint_region(job->y_start, job->y_end, job->dirty, job->pass);
+    __atomic_sub_fetch(job->completion_counter, 1, __ATOMIC_SEQ_CST);
+}
+
+void wm_paint(void) {
+    int sw = get_screen_width();
+    int sh = get_screen_height();
     uint64_t rflags;
     rflags = wm_lock_acquire();
-    
     wm_mark_dirty(last_cursor_x, last_cursor_y, 12, 12);
     wm_mark_dirty(mx, my, 12, 12);
 
     DirtyRect dirty = graphics_get_dirty_rect();
-    
     if (dirty.active) {
-        int d_h = 60;
-        int d_y = sh - d_h - 6;
-        int d_item_sz = 48;
-        int d_space = 10;
-        int d_tw = 10 * (d_item_sz + d_space);
-        int d_bg_x = (sw - d_tw) / 2 - 12;
-        int d_bg_w = d_tw + 24;
-        
+        int d_h = 60, d_y = sh - d_h - 6, d_total_w = 11 * (48 + 10);
+        int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
         if (!(dirty.x >= d_bg_x + d_bg_w || dirty.x + dirty.w <= d_bg_x ||
               dirty.y >= d_y + d_h || dirty.y + dirty.h <= d_y)) {
             graphics_mark_dirty(d_bg_x - 10, d_y - 10, d_bg_w + 20, d_h + 20);
             dirty = graphics_get_dirty_rect();
         }
-        graphics_set_clipping(dirty.x, dirty.y, dirty.w, dirty.h);
-    } else {
-        graphics_clear_clipping();
     }
 
-    // 1. Desktop Background (respects wallpaper color/pattern)
-    draw_desktop_background();
-    
-    // Draw Desktop Icons
-    for (int i = 0; i < desktop_icon_count; i++) {
-        DesktopIcon *icon = &desktop_icons[i];
-        if (dirty.active) {
-            if (icon->x + 80 <= dirty.x || icon->x >= dirty.x + dirty.w ||
-                icon->y + 80 <= dirty.y || icon->y >= dirty.y + dirty.h) {
-                continue;
-            }
-        }
-        if (icon->type == 1) draw_folder_icon(icon->x, icon->y, icon->name);
-        else if (icon->type == 2) {
-            // App icon - strip .shortcut for display
-            char label[64];
-            int len = 0;
-            while(icon->name[len] && len < 63) { label[len] = icon->name[len]; len++; }
-            label[len] = 0;
-            if (len > 9 && str_ends_with(label, ".shortcut")) {
-                label[len-9] = 0;
-            }
-            
-            if (str_starts_with(icon->name, "Notepad")) draw_notepad_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Calculator")) draw_calculator_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Terminal")) draw_terminal_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Minesweeper")) draw_minesweeper_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Settings")) draw_control_panel_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Clock")) draw_clock_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "About")) draw_about_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Recycle Bin")) draw_recycle_bin_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Files")) draw_folder_icon(icon->x, icon->y, label);
-            else if (str_starts_with(icon->name, "Paint")) draw_paint_icon(icon->x, icon->y, label);
-            else draw_icon(icon->x, icon->y, label);
-        } else {
-            if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
-            else if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
-            else if (is_image_file(icon->name)) {
-                char full_path[128] = "/Desktop/";
-                int p=9; int n=0; while(icon->name[n] && p < 127) full_path[p++] = icon->name[n++]; full_path[p]=0;
-                draw_image_icon(icon->x, icon->y, full_path);
-                draw_icon_label(icon->x, icon->y, icon->name);
-            }
-            else if (str_ends_with(icon->name, ".pdf")) draw_pdf_icon(icon->x, icon->y, icon->name);
-            else draw_document_icon(icon->x, icon->y, icon->name);
-        }
-    }
-    
-    // 3. Windows - sort by z-index and draw
-    int local_window_count = window_count;
-    Window *sorted_windows[32];
-    for (int i = 0; i < local_window_count; i++) {
-        sorted_windows[i] = all_windows[i];
-    }
-    
-    for (int i = 0; i < local_window_count - 1; i++) {
-        for (int j = 0; j < local_window_count - i - 1; j++) {
-            if (sorted_windows[j] && sorted_windows[j + 1] && 
-                sorted_windows[j]->z_index > sorted_windows[j + 1]->z_index) {
-                Window *temp = sorted_windows[j];
-                sorted_windows[j] = sorted_windows[j + 1];
-                sorted_windows[j + 1] = temp;
+    sorted_window_count_cache = window_count;
+    if (sorted_window_count_cache > 32) sorted_window_count_cache = 32;
+    for (int i = 0; i < sorted_window_count_cache; i++) sorted_windows_cache[i] = all_windows[i];
+    for (int i = 0; i < sorted_window_count_cache - 1; i++) {
+        for (int j = 0; j < sorted_window_count_cache - i - 1; j++) {
+            if (sorted_windows_cache[j] && sorted_windows_cache[j+1] &&
+                sorted_windows_cache[j]->z_index > sorted_windows_cache[j+1]->z_index) {
+                Window *tmp = sorted_windows_cache[j];
+                sorted_windows_cache[j] = sorted_windows_cache[j+1];
+                sorted_windows_cache[j+1] = tmp;
             }
         }
     }
     
-    for (int i = 0; i < local_window_count; i++) {
-        Window *win = sorted_windows[i];
-        if (!win || !win->visible) continue;
+    // Memory barrier to ensure APs see the sorted window list correctly
+    asm volatile("" ::: "memory");
 
-        if (dirty.active && !win->focused) {
-            if (win->x + win->w <= dirty.x || win->x >= dirty.x + dirty.w ||
-                win->y + win->h <= dirty.y || win->y >= dirty.y + dirty.h) {
-                continue;
-            }
-        }
-        draw_window(win);
+    uint32_t cpu_count = smp_cpu_count();
+    if (cpu_count > 32) cpu_count = 32;
+    if (cpu_count < 1) cpu_count = 1;
+
+    volatile int completion_counter = (int)cpu_count;
+    wm_strip_job_t jobs[32];
+    int rows_per_strip = sh / cpu_count;
+    
+    // PASS 1: BACKGROUND & WINDOWS
+    for (uint32_t i = 0; i < cpu_count; i++) {
+        jobs[i].y_start = i * rows_per_strip;
+        jobs[i].y_end = (i == cpu_count - 1) ? sh : (i + 1) * rows_per_strip;
+        jobs[i].dirty = dirty;
+        jobs[i].completion_counter = &completion_counter;
+        jobs[i].pass = 1;
+        if (i < cpu_count - 1) work_queue_submit(wm_strip_worker_job, &jobs[i]);
     }
-    
-    draw_rect(0, 0, sw, 30, COLOR_TOPBAR_BG);
-    draw_boredos_logo(8, 8, 1);
-    draw_clock(sw - 80, 12);
-    
-    if (start_menu_open) {
-        int menu_h = 85;
-        draw_rounded_rect_filled(8, 40, 160, menu_h, 8, COLOR_DARK_PANEL);
-        draw_string(20, 48, "About BoredOS", COLOR_DARK_TEXT);
-        draw_string(20, 68, "Settings", COLOR_DARK_TEXT);
-        draw_string(20, 88, "Shutdown", COLOR_DARK_TEXT);
-        draw_string(20, 108, "Restart", COLOR_DARK_TEXT);
-    }
-    
-    int dock_h = 60;
-    int dock_y = sh - dock_h - 6;   
-    int dock_item_size = 48;
-    int dock_spacing = 10;
-    int total_dock_width = 11 * (dock_item_size + dock_spacing);
-    int dock_bg_x = (sw - total_dock_width) / 2 - 12;   
-    int dock_bg_w = total_dock_width + 24;
-    
-    // Draw blurred dock background with reduced radius and tint
-    draw_rounded_rect_blurred(dock_bg_x, dock_y, dock_bg_w, dock_h, 18, COLOR_DOCK_BG, 5, 140);
-    
-    int dock_x = (sw - total_dock_width) / 2;
-    int dock_item_y = dock_y + 6;
-    
-    draw_dock_files(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_settings(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_notepad(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_calculator(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_terminal(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_minesweeper(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_paint(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_browser(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_taskman(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_clock(dock_x, dock_item_y);
-    dock_x += dock_item_size + dock_spacing;
-    draw_dock_word(dock_x, dock_item_y);
-    
-    // Desktop Context Menu (with rounded corners)
-    if (desktop_menu_visible) {
-        int menu_w = 140;
-        int item_h = 25;
-        int menu_h = (desktop_menu_target_icon != -1) ? 125 : 75;
-        
-        draw_rounded_rect_filled(desktop_menu_x, desktop_menu_y, menu_w, menu_h, 8, COLOR_DARK_PANEL);
-        
-        if (desktop_menu_target_icon != -1) {
-            bool can_paste = explorer_clipboard_has_content();
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "Cut", COLOR_WHITE);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "Copy", COLOR_WHITE);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_WHITE : COLOR_DKGRAY);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 3, "Delete", COLOR_TRAFFIC_RED);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 4, "Rename", COLOR_WHITE);
-        } else {
-            bool can_paste = explorer_clipboard_has_content();
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5, "New File", COLOR_WHITE);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h, "New Folder", COLOR_WHITE);
-            draw_string(desktop_menu_x + 10, desktop_menu_y + 5 + item_h * 2, "Paste", can_paste ? COLOR_WHITE : COLOR_DKGRAY);
-        }
+    wm_paint_region(jobs[cpu_count-1].y_start, jobs[cpu_count-1].y_end, dirty, 1);
+    __atomic_sub_fetch(&completion_counter, 1, __ATOMIC_SEQ_CST);
+    while (completion_counter > 0) {
+        if (!work_queue_drain_one()) asm volatile("pause");
     }
 
-    // Desktop Dialogs (dark mode)
-    if (desktop_dialog_state != 0) {
-        int dlg_w = 300; int dlg_h = 110;
-        int dlg_x = (sw - dlg_w) / 2;
-        int dlg_y = (sh - dlg_h) / 2;
-        
-        draw_rounded_rect_filled(dlg_x, dlg_y, dlg_w, dlg_h, 8, COLOR_DARK_PANEL);
-        
-        const char *title = "Rename";
-        const char *btn_text = "Rename";
-        if (desktop_dialog_state == 1) { title = "Create New File"; btn_text = "Create"; }
-        else if (desktop_dialog_state == 2) { title = "Create New Folder"; btn_text = "Create"; }
-        
-        draw_string(dlg_x + 10, dlg_y + 10, title, COLOR_WHITE);
-        draw_rounded_rect_filled(dlg_x + 10, dlg_y + 35, 280, 20, 4, COLOR_DARK_BG);
-        draw_string(dlg_x + 15, dlg_y + 40, desktop_dialog_input, COLOR_WHITE);
-        // Cursor
-        char sub[64];
-        int k;
-        for (k = 0; k < desktop_dialog_cursor && desktop_dialog_input[k]; k++) sub[k] = desktop_dialog_input[k];
-        sub[k] = 0;
-        int cx = font_manager_get_string_width(graphics_get_current_ttf(), sub);
-        draw_rect(dlg_x + 15 + cx, dlg_y + 39, 2, 12, COLOR_WHITE);
-        
-        draw_rounded_rect_filled(dlg_x + 50, dlg_y + 65, 80, 25, 4, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 70, dlg_y + 72, btn_text, COLOR_WHITE);
-        
-        draw_rounded_rect_filled(dlg_x + 170, dlg_y + 65, 80, 25, 4, COLOR_DARK_BORDER);
-        draw_string(dlg_x + 185, dlg_y + 72, "Cancel", COLOR_WHITE);
+    // PASS 2: UI OVERLAY (Dock, start menu, menus etc)
+    completion_counter = (int)cpu_count;
+    for (uint32_t i = 0; i < cpu_count; i++) {
+        jobs[i].pass = 2;
+        if (i < cpu_count - 1) work_queue_submit(wm_strip_worker_job, &jobs[i]);
     }
-    
-    // Message Box (dark mode)
-    if (msg_box_visible) {
-        int mw = 320;
-        int mh = 100;
-        int mx = (sw - mw) / 2;
-        int my = (sh - mh) / 2;
-        
-        draw_rounded_rect_filled(mx, my, mw, mh, 8, COLOR_DARK_PANEL);
-        draw_string(mx + 15, my + 10, msg_box_title, COLOR_DARK_TEXT);
-        draw_string(mx + 10, my + 40, msg_box_text, COLOR_DARK_TEXT);
-        draw_rounded_rect_filled(mx + mw/2 - 30, my + 70, 60, 20, 4, COLOR_DARK_BORDER);
+    wm_paint_region(jobs[cpu_count-1].y_start, jobs[cpu_count-1].y_end, dirty, 2);
+    __atomic_sub_fetch(&completion_counter, 1, __ATOMIC_SEQ_CST);
+    while (completion_counter > 0) {
+        if (!work_queue_drain_one()) asm volatile("pause");
     }
-    
-    // Notification (dark mode)
-    if (notif_active) {
-        int nx = sw - 400 + notif_x_offset;
-        int ny = 40;
-        int nw = 380;
-        int nh = 50;
-        
-        draw_rounded_rect_filled(nx, ny, nw, nh, 8, COLOR_DARK_PANEL);
-        draw_string(nx + 15, ny + 10, "Screenshot", COLOR_DARK_TEXT);
-        draw_string(nx + 15, ny + 30, notif_text, COLOR_DKGRAY);
-    }
-    
-    // Custom Overlay (VM Graphics)
-    if (wm_custom_paint_hook) {
-        wm_custom_paint_hook();
-    }
-    
-    // Draw Dragged Icon
-    if (is_dragging_file) {
-        if (drag_icon_type == 1) draw_folder_icon(mx - 20, my - 20, "Moving...");
-        else if (drag_icon_type == 2) draw_icon(mx - 20, my - 20, "Moving...");
-        else draw_document_icon(mx - 20, my - 20, "Moving...");
-    }
-    
-    // 7. Mouse cursor (draw last so it's on top)
+
+    graphics_clear_clipping(); 
     draw_cursor(mx, my);
     last_cursor_x = mx;
     last_cursor_y = my;
-    
-    // Flip the buffer - display the rendered frame atomically
     graphics_flip_buffer();
     graphics_clear_dirty_no_lock();
-
-    // Restore IRQs
     wm_lock_release(rflags);
-}
-
-// --- Input Handling ---
-
-bool rect_contains(int x, int y, int w, int h, int px, int py) {
-    return px >= x && px < x + w && py >= y && py < y + h;
 }
 
 void wm_bring_to_front_locked(Window *win) {
@@ -1725,7 +1701,8 @@ void wm_handle_click(int x, int y) {
                         if (desktop_snap_to_grid) {
                             int col = (desktop_icons[new_idx].x - 20 + 40) / 80;
                             int row = (desktop_icons[new_idx].y - 20 + 40) / 80;
-                            if (col < 0) col = 0; if (row < 0) row = 0;
+                            if (col < 0) col = 0;
+                            if (row < 0) row = 0;
                             desktop_icons[new_idx].x = 20 + col * 80;
                             desktop_icons[new_idx].y = 20 + row * 80;
                         }
@@ -2414,7 +2391,8 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                                     if (desktop_snap_to_grid) {
                                         int col = (desktop_icons[i].x - 20 + 40) / 80;
                                         int row = (desktop_icons[i].y - 20 + 40) / 80;
-                                        if (col < 0) col = 0; if (row < 0) row = 0;
+                                        if (col < 0) col = 0;
+                            if (row < 0) row = 0;
                                         desktop_icons[i].x = 20 + col * 80;
                                         desktop_icons[i].y = 20 + row * 80;
                                     }

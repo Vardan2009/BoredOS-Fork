@@ -920,7 +920,7 @@ static void explorer_paint(Window *win) {
     DirtyRect dirty = graphics_get_dirty_rect();
     
 
-    graphics_set_clipping(offset_x, offset_y, win->w - 8, win->h - 28);
+    graphics_push_clipping(offset_x, offset_y, win->w - 8, win->h - 28);
     
     draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_DARK_BG);
     
@@ -984,7 +984,7 @@ static void explorer_paint(Window *win) {
     
     int content_start_y = offset_y + 30;
     
-    graphics_set_clipping(win->x + 4, content_start_y, win->w - 8, win->h - 54 - 4);
+    graphics_push_clipping(win->x + 4, content_start_y, win->w - 8, win->h - 54 - 4);
     
     for (int i = 0; i < state->item_count; i++) {
         int row = i / EXPLORER_COLS;
@@ -1010,11 +1010,8 @@ static void explorer_paint(Window *win) {
     }
     
 
-    if (dirty.active) {
-        graphics_set_clipping(dirty.x, dirty.y, dirty.w, dirty.h);
-    } else {
-        graphics_clear_clipping();
-    }
+    graphics_pop_clipping(); // Pop content clipping
+    graphics_pop_clipping(); // Pop main window clipping
     
     if (state->drive_menu_visible) {
         int menu_x = win->x + 4;
