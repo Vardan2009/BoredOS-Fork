@@ -11,6 +11,11 @@
 // =========
 // Constants
 // =========
+// Adjust the below configuration to your system specification and preferences.
+// --- User Configuration ---
+#define ROTATE 1  // Set to 0 to disable auto-rotation in 3D mode.
+#define GRID_3D 100 // Grid resolution. Adjust on how much you want your PC to die (lmao)
+// --------------------------
 #define TOOLBAR_H 30
 #define STATUSBAR_H 30
 #define GRAPH_Y TOOLBAR_H
@@ -37,7 +42,7 @@ static int fb_capacity = 0;
 
 #define MODE_2D 0
 #define MODE_3D 1
-#define GRID_3D 100 // adjust on how much you want your PC to die (lmao)
+
 
 static const double MY_PI = 3.14159265358979323846;
 
@@ -1317,7 +1322,7 @@ int main(void) {
             }
         }
         
-        if (graph_mode == MODE_3D) {
+        if (graph_mode == MODE_3D && ROTATE == 1) {
             rot_y += 0.01;
             needs_repaint = true;
         }
