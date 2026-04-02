@@ -627,10 +627,8 @@ static void autofit_2d_view(void) {
         if (y_min_data * y_max_data <= 0 || my_fabs(y_min_data) < (y_max_data - y_min_data) * 0.5) {
             double max_abs = my_fabs(y_min_data);
             if (my_fabs(y_max_data) > max_abs) max_abs = my_fabs(y_max_data);
-            
             double pad = max_abs * 0.15;
             if (pad < 0.5) pad = 0.5;
-            
             view_y_min = -(max_abs + pad);
             view_y_max = (max_abs + pad);
         } else {
@@ -640,29 +638,21 @@ static void autofit_2d_view(void) {
             view_y_max = y_max_data + pad;
         }
 
-        double cx = (view_x_min + view_x_max) / 2.0;
-        double cy = (view_y_min + view_y_max) / 2.0;
         double x_range = view_x_max - view_x_min;
-        double y_range = view_y_max - view_y_min;
+        double target_y_range = x_range * (double)graph_h / (double)graph_w;
+        double current_y_range = view_y_max - view_y_min;
 
-        if (x_range * graph_h < y_range * graph_w) {
-            double target_x_range = y_range * (double)graph_w / (double)graph_h;
-            if (my_fabs(cx) < x_range * 0.1) {
-                view_x_min = -target_x_range / 2.0;
-                view_x_max = target_x_range / 2.0;
-            } else {
-                view_x_min = cx - target_x_range / 2.0;
-                view_x_max = cx + target_x_range / 2.0;
-            }
+        if (current_y_range < target_y_range) {
+            double cy = (view_y_min + view_y_max) / 2.0;
+            if (my_fabs(cy) < current_y_range * 0.1) cy = 0;
+            view_y_min = cy - target_y_range / 2.0;
+            view_y_max = cy + target_y_range / 2.0;
         } else {
-            double target_y_range = x_range * (double)graph_h / (double)graph_w;
-            if (my_fabs(cy) < y_range * 0.1) {
-                view_y_min = -target_y_range / 2.0;
-                view_y_max = target_y_range / 2.0;
-            } else {
-                view_y_min = cy - target_y_range / 2.0;
-                view_y_max = cy + target_y_range / 2.0;
-            }
+            double target_x_range = current_y_range * (double)graph_w / (double)graph_h;
+            double cx = (view_x_min + view_x_max) / 2.0;
+            if (my_fabs(cx) < x_range * 0.1) cx = 0;
+            view_x_min = cx - target_x_range / 2.0;
+            view_x_max = cx + target_x_range / 2.0;
         }
     } else {
         apply_aspect_ratio();
