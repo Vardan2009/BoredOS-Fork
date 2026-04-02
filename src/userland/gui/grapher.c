@@ -576,21 +576,122 @@ static void parse_equation(void) {
 // =========
 // Rendering
 // =========
-static void render_2d_grid(void) {
-    // Grid lines
-    double x_step = (view_x_max - view_x_min) / 10;
-    double y_step = (view_y_max - view_y_min) / 10;
-
-    // Snap step to nice values
-    for (double wx = view_x_min; wx <= view_x_max; wx += x_step) {
-        int sx = screen_x_2d(wx);
-        if (sx >= 0 && sx < graph_w)
-            for (int y = 0; y < graph_h; y++) gfb_pixel(sx, y, COLOR_GRID);
+static double get_nice_step(double range, int target_divisions) {
+    if (range <= 0) return 1.0;
+    double approx = range / target_divisions;
+    
+    // Find magnitude (10^n)
+    double mag = 1.0;
+    if (approx >= 1.0) {
+        while (approx >= 10.0) { approx /= 10.0; mag *= 10.0; }
+    } else {
+        while (approx < 1.0) { approx *= 10.0; mag /= 10.0; }
     }
-    for (double wy = view_y_min; wy <= view_y_max; wy += y_step) {
+    
+    // Pick nice residual
+    double res;
+    if (approx < 1.5) res = 1.0;
+    else if (approx < 3.0) res = 2.0;
+    else if (approx < 7.0) res = 5.0;
+    else res = 10.0;
+    
+    return res * mag;
+}
+
+static void apply_aspect_ratio(void) {
+    if (graph_w <= 0 || graph_h <= 0) return;
+    double cy = (view_y_min + view_y_max) / 2.0;
+    double x_range = view_x_max - view_x_min;
+    double target_y_range = x_range * (double)graph_h / (double)graph_w;
+    view_y_min = cy - target_y_range / 2.0;
+    view_y_max = cy + target_y_range / 2.0;
+}
+
+static void autofit_2d_view(void) {
+    if (!is_explicit_2d) {
+        apply_aspect_ratio();
+        return;
+    }
+    double y_min_data = 1e30, y_max_data = -1e30;
+    bool found = false;
+    for (int px = 0; px < graph_w; px += 2) {
+        double wx = world_x_2d(px);
+        double wy = eval_rhs_only(wx, 0, 0);
+        if (wy == wy && my_fabs(wy) < 1e10) {
+            if (wy < y_min_data) y_min_data = wy;
+            if (wy > y_max_data) y_max_data = wy;
+            found = true;
+        }
+    }
+    if (found) {
+        if (y_min_data * y_max_data <= 0 || my_fabs(y_min_data) < (y_max_data - y_min_data) * 0.5) {
+            double max_abs = my_fabs(y_min_data);
+            if (my_fabs(y_max_data) > max_abs) max_abs = my_fabs(y_max_data);
+            
+            double pad = max_abs * 0.15;
+            if (pad < 0.5) pad = 0.5;
+            
+            view_y_min = -(max_abs + pad);
+            view_y_max = (max_abs + pad);
+        } else {
+            double pad = (y_max_data - y_min_data) * 0.15;
+            if (pad < 0.5) pad = 0.5;
+            view_y_min = y_min_data - pad;
+            view_y_max = y_max_data + pad;
+        }
+
+        double cx = (view_x_min + view_x_max) / 2.0;
+        double cy = (view_y_min + view_y_max) / 2.0;
+        double x_range = view_x_max - view_x_min;
+        double y_range = view_y_max - view_y_min;
+
+        if (x_range * graph_h < y_range * graph_w) {
+            double target_x_range = y_range * (double)graph_w / (double)graph_h;
+            if (my_fabs(cx) < x_range * 0.1) {
+                view_x_min = -target_x_range / 2.0;
+                view_x_max = target_x_range / 2.0;
+            } else {
+                view_x_min = cx - target_x_range / 2.0;
+                view_x_max = cx + target_x_range / 2.0;
+            }
+        } else {
+            double target_y_range = x_range * (double)graph_h / (double)graph_w;
+            if (my_fabs(cy) < y_range * 0.1) {
+                view_y_min = -target_y_range / 2.0;
+                view_y_max = target_y_range / 2.0;
+            } else {
+                view_y_min = cy - target_y_range / 2.0;
+                view_y_max = cy + target_y_range / 2.0;
+            }
+        }
+    } else {
+        apply_aspect_ratio();
+    }
+}
+
+static void render_2d_grid(void) {
+    // Grid intervals
+    double x_step = get_nice_step(view_x_max - view_x_min, 8);
+    double y_step = get_nice_step(view_y_max - view_y_min, 6);
+
+    // X grid lines
+    double x_start = (int)(view_x_min / x_step) * x_step;
+    int safety = 0;
+    for (double wx = x_start - x_step; wx <= view_x_max + x_step && safety < 200; wx += x_step, safety++) {
+        int sx = screen_x_2d(wx);
+        if (sx >= 0 && sx < graph_w) {
+            for (int y = 0; y < graph_h; y++) gfb_pixel(sx, y, COLOR_GRID);
+        }
+    }
+
+    // Y grid lines
+    double y_start = (int)(view_y_min / y_step) * y_step;
+    safety = 0;
+    for (double wy = y_start - y_step; wy <= view_y_max + y_step && safety < 200; wy += y_step, safety++) {
         int sy = screen_y_2d(wy);
-        if (sy >= 0 && sy < graph_h)
+        if (sy >= 0 && sy < graph_h) {
             for (int x = 0; x < graph_w; x++) gfb_pixel(x, sy, COLOR_GRID);
+        }
     }
 
     // Axes
@@ -602,47 +703,19 @@ static void render_2d_grid(void) {
 }
 
 static void render_2d_explicit(void) {
-    // First pass: evaluate all y values and auto-fit Y range
-    double *y_vals = malloc(graph_w * sizeof(double));
-    bool *y_valid = malloc(graph_w * sizeof(bool));
-    double y_min_data = 1e30, y_max_data = -1e30;
-
-    for (int px = 0; px < graph_w; px++) {
-        double wx = world_x_2d(px);
-        double wy = eval_rhs_only(wx, 0, 0);
-        if (wy != wy || my_fabs(wy) > 1e10) {
-            y_valid[px] = false;
-        } else {
-            y_vals[px] = wy;
-            y_valid[px] = true;
-            if (wy < y_min_data) y_min_data = wy;
-            if (wy > y_max_data) y_max_data = wy;
-        }
-    }
-
-    // Auto-fit Y range with 15% padding
-    if (y_max_data > y_min_data) {
-        double pad = (y_max_data - y_min_data) * 0.15;
-        if (pad < 0.5) pad = 0.5;
-        view_y_min = y_min_data - pad;
-        view_y_max = y_max_data + pad;
-    }
-
-    // Second pass: draw curve
     int prev_sx = -1, prev_sy = -1;
     bool prev_valid = false;
 
     for (int px = 0; px < graph_w; px++) {
-        if (!y_valid[px]) { prev_valid = false; continue; }
-        int sy = screen_y_2d(y_vals[px]);
+        double wx = world_x_2d(px);
+        double wy = eval_rhs_only(wx, 0, 0);
+        if (wy != wy || my_fabs(wy) > 1e10) { prev_valid = false; continue; }
+        int sy = screen_y_2d(wy);
         if (prev_valid && my_fabs((double)(sy - prev_sy)) < graph_h) {
             gfb_line(prev_sx, prev_sy, px, sy, COLOR_CURVE);
         }
         prev_sx = px; prev_sy = sy; prev_valid = true;
     }
-    
-    free(y_vals);
-    free(y_valid);
 }
 
 static void render_2d_implicit(void) {
@@ -707,7 +780,6 @@ static void render_3d_explicit(void) {
     double zmin = 1e30, zmax = -1e30;
 // why are you reading this lol
     if (surface_needs_eval) {
-        // Evaluate
         for (int j = 0; j < GRID_3D; j++) {
             for (int i = 0; i < GRID_3D; i++) {
                 double wx = -range_3d + i * step;
@@ -764,7 +836,7 @@ static void render_3d_explicit(void) {
 
 static void render_3d_implicit(void) {
     double step = range_3d * 2.0 / (GRID_3D - 1);
-    int z_steps = 100;  // High precision to avoid skipping near boundaries
+    int z_steps = 100; 
     double z_step = range_3d * 2.0 / z_steps;
     double zmin = 1e30, zmax = -1e30;
 
@@ -858,6 +930,40 @@ static void render_3d_implicit(void) {
     }
 }
 
+// ================================
+// Number to string for axis labels
+// ================================
+static void double_to_str(double val, char *buf) {
+    if (val != val) { strcpy(buf, "NaN"); return; }
+    if (val > 1e15) { strcpy(buf, "inf"); return; }
+    if (val < -1e15) { strcpy(buf, "-inf"); return; }
+    
+    // Safety check for ltoa/itoa limits (if this doesnt exist it will cause 0xE)
+    if (val > 2e9) {
+        strcpy(buf, ">2G");
+        return;
+    }
+    if (val < -2e9) {
+        strcpy(buf, "<-2G");
+        return;
+    }
+
+    if (val < 0) { *buf++ = '-'; val = -val; }
+    
+    int ipart = (int)val;
+    itoa(ipart, buf);
+    while (*buf) buf++;
+    double frac = val - (double)ipart;
+    if (frac > 0.005) {
+        *buf++ = '.';
+        int d1 = (int)(frac * 10) % 10;
+        int d2 = (int)(frac * 100) % 10;
+        *buf++ = '0' + d1;
+        if (d2) *buf++ = '0' + d2;
+    }
+    *buf = 0;
+}
+
 static void render_graph(void) {
     gfb_clear(COLOR_BG);
 
@@ -891,25 +997,50 @@ static void render_graph(void) {
     }
 
     ui_draw_image(win_graph, 0, GRAPH_Y, graph_w, graph_h, graph_fb);
-}
 
-// ================================
-// Number to string for axis labels
-// ================================
-static void double_to_str(double val, char *buf) {
-    if (val < 0) { *buf++ = '-'; val = -val; }
-    int ipart = (int)val;
-    itoa(ipart, buf);
-    while (*buf) buf++;
-    double frac = val - ipart;
-    if (frac > 0.005) {
-        *buf++ = '.';
-        int d1 = (int)(frac * 10) % 10;
-        int d2 = (int)(frac * 100) % 10;
-        *buf++ = '0' + d1;
-        if (d2) *buf++ = '0' + d2;
+    // Post-image overlay (labels)
+    if (graph_mode == MODE_2D) {
+        double x_step = get_nice_step(view_x_max - view_x_min, 8);
+        double y_step = get_nice_step(view_y_max - view_y_min, 6);
+
+        // Labels need coordinate mapping to the window
+        int axis_y = screen_y_2d(0);
+        if (axis_y < 10) axis_y = 10;
+        if (axis_y > graph_h - 20) axis_y = graph_h - 20;
+        axis_y += GRAPH_Y;
+
+        double x_start = (int)(view_x_min / x_step) * x_step;
+        int safety = 0;
+        for (double wx = x_start - x_step; wx <= view_x_max + x_step && safety < 100; wx += x_step, safety++) {
+            if (my_fabs(wx) < x_step * 0.1) continue; // Skip zero
+            int sx = screen_x_2d(wx);
+            if (sx > 20 && sx < graph_w - 40) {
+                char buf[32]; double_to_str(wx, buf);
+                ui_draw_string(win_graph, sx - 10, axis_y + 4, buf, COLOR_TEXT);
+            }
+        }
+
+        int axis_x = screen_x_2d(0);
+        if (axis_x < 5) axis_x = 5;
+        if (axis_x > graph_w - 40) axis_x = graph_w - 40;
+
+        double y_start = (int)(view_y_min / y_step) * y_step;
+        safety = 0;
+        for (double wy = y_start - y_step; wy <= view_y_max + y_step && safety < 100; wy += y_step, safety++) {
+            if (my_fabs(wy) < y_step * 0.1) continue; // Skip zero
+            int sy = screen_y_2d(wy);
+            if (sy > 20 && sy < graph_h - 20) {
+                char buf[32]; double_to_str(wy, buf);
+                ui_draw_string(win_graph, axis_x + 6, sy + GRAPH_Y - 5, buf, COLOR_TEXT);
+            }
+        }
+        
+        // Zero label
+        int zx = screen_x_2d(0), zy = screen_y_2d(0);
+        if (zx >= 0 && zx < graph_w - 10 && zy >= 0 && zy < graph_h - 10) {
+            ui_draw_string(win_graph, zx + 4, zy + GRAPH_Y + 4, "0", COLOR_TEXT);
+        }
     }
-    *buf = 0;
 }
 
 // =====
@@ -919,20 +1050,11 @@ static void paint_all(void) {
     rot_cx = my_cos(rot_x); rot_sx = my_sin(rot_x);
     rot_cy = my_cos(rot_y); rot_sy = my_sin(rot_y);
 
-    // Toolbar background
     ui_draw_rect(win_graph, 0, 0, win_w, TOOLBAR_H, COLOR_TOOLBAR_BG);
-
-    // Equation textbox
     widget_textbox_draw(&wctx, &tb_equation);
-
-    // Plot button
     widget_button_draw(&wctx, &btn_plot);
-
-    // Presets button (simple label)
     ui_draw_rounded_rect_filled(win_graph, win_w - 80, 4, 70, 22, 4, 0xFF3A3A5A);
     ui_draw_string(win_graph, win_w - 72, 8, "Presets", COLOR_DARK_TEXT);
-
-    // Graph
     render_graph();
 
     // Status bar
@@ -974,13 +1096,44 @@ static void paint_all(void) {
 // ====
 // Zoom
 // ====
+static void reset_view(void) {
+    if (graph_mode == MODE_2D) {
+        view_x_min = -10.0; view_x_max = 10.0;
+        // Centralize 0,0
+        view_y_min = -6.4; view_y_max = 6.4;
+        apply_aspect_ratio(); // This will ensure 0,0 is at the center correctly
+    } else {
+        zoom_3d = 1.0;
+        rot_x = -0.5;
+        rot_y = 0.5;
+        range_3d = 10.0;
+    }
+}
+
 static void zoom_2d(double factor) {
-    double cx = (view_x_min + view_x_max) / 2;
-    double cy = (view_y_min + view_y_max) / 2;
-    double hw = (view_x_max - view_x_min) / 2 * factor;
-    double hh = (view_y_max - view_y_min) / 2 * factor;
-    view_x_min = cx - hw; view_x_max = cx + hw;
-    view_y_min = cy - hh; view_y_max = cy + hh;
+    if (factor <= 0) return;
+    
+    double cx = (view_x_min + view_x_max) / 2.0;
+    double cy = (view_y_min + view_y_max) / 2.0;
+    
+    double half_x = (view_x_max - view_x_min) / 2.0;
+    double half_y = (view_y_max - view_y_min) / 2.0;
+    
+    half_x *= factor;
+    half_y *= factor;
+    
+    // Safety caps for zoom range
+    if (half_x < 1e-12) half_x = 1e-12;
+    if (half_x > 1e12) half_x = 1e12;
+    if (half_y < 1e-12) half_y = 1e-12;
+    if (half_y > 1e12) half_y = 1e12;
+
+    view_x_min = cx - half_x;
+    view_x_max = cx + half_x;
+    view_y_min = cy - half_y;
+    view_y_max = cy + half_y;
+    
+    apply_aspect_ratio();
 }
 
 static void handle_scroll(int dz) {
@@ -1046,12 +1199,17 @@ int main(void) {
                     if (c == '\n') {
                         eq_len = strlen(eq_buffer);
                         parse_equation();
+                        if (graph_mode == MODE_2D) autofit_2d_view();
                         needs_repaint = true;
                     } else {
                         widget_textbox_handle_key(&tb_equation, c, NULL);
                         eq_len = strlen(eq_buffer);
                         needs_repaint = true;
                     }
+                } else if ((c == 'r' || c == 'R') && ev.arg3 == 1) { // reset view with ctrl + R
+                    reset_view();
+                    surface_needs_eval = true;
+                    needs_repaint = true;
                 }
             } else if (ev.type == GUI_EVENT_RESIZE) {
                 win_w = ev.arg1;
@@ -1069,7 +1227,10 @@ int main(void) {
                 
                 update_widget_layout();
                 
-                if (graph_mode == MODE_2D) surface_needs_eval = true;
+                if (graph_mode == MODE_2D) {
+                    apply_aspect_ratio();
+                    surface_needs_eval = true;
+                }
                 needs_repaint = true;
             } else if (ev.type == GUI_EVENT_CLICK) {
                 int mx = ev.arg1, my = ev.arg2;
@@ -1083,6 +1244,7 @@ int main(void) {
                             eq_len = strlen(eq_buffer);
                             tb_equation.cursor_pos = eq_len;
                             parse_equation();
+                            if (graph_mode == MODE_2D) autofit_2d_view();
                         }
                     }
                     presets_open = false;
@@ -1098,6 +1260,7 @@ int main(void) {
 
                 if (widget_button_handle_mouse(&btn_plot, mx, my, false, true, NULL)) {
                     parse_equation();
+                    if (graph_mode == MODE_2D) autofit_2d_view();
                     needs_repaint = true;
                     continue;
                 }
