@@ -7,6 +7,7 @@
 #include "../../wm/libwidget.h"
 #include <stdbool.h>
 #include "stdlib.h"
+#include "math.h"
 
 // External syscalls from libc
 extern void sys_parallel_run(void (*fn)(void*), void **args, int count);
@@ -49,83 +50,7 @@ static int32_t *graph_zb = NULL; // Z-Buffer for 3D depth testing
 #define MODE_3D 1
 
 
-static const double MY_PI = 3.14159265358979323846;
-
-
-static double my_fabs(double x) { return x < 0 ? -x : x; }
-
-static double my_fmod(double x, double y) {
-    if (y == 0) return 0;
-    return x - (int)(x / y) * y;
-}
-
-static double my_sin(double x) {
-    x = my_fmod(x, 2 * MY_PI);
-    if (x > MY_PI) x -= 2 * MY_PI;
-    if (x < -MY_PI) x += 2 * MY_PI;
-    double x2 = x * x, term = x, sum = x;
-    for (int i = 1; i <= 8; i++) {
-        term *= -x2 / ((2*i) * (2*i + 1));
-        sum += term;
-    }
-    return sum;
-}
-
-static double my_cos(double x) { return my_sin(x + MY_PI / 2); }
-
-static double my_tan(double x) {
-    double c = my_cos(x);
-    if (my_fabs(c) < 1e-10) return 1e15;
-    return my_sin(x) / c;
-}
-
-static double my_sqrt(double x) {
-    if (x <= 0) return 0;
-    double g = x * 0.5;
-    for (int i = 0; i < 25; i++) g = (g + x / g) * 0.5;
-    return g;
-}
-
-static double my_ln(double x) {
-    if (x <= 0) return -1e30;
-    int e = 0;
-    while (x > 2) { x /= 2; e++; }
-    while (x < 0.5) { x *= 2; e--; }
-    double t = (x - 1) / (x + 1), t2 = t * t, sum = t, term = t;
-    for (int i = 1; i <= 20; i++) { term *= t2; sum += term / (2*i + 1); }
-    return 2 * sum + e * 0.693147180559945;
-}
-
-static double my_exp(double x) {
-    if (x > 700) return 1e300;
-    if (x < -700) return 0;
-    int k = (int)(x / 0.693147180559945);
-    if (x < 0 && k * 0.693147180559945 > x) k--;
-    double r = x - k * 0.693147180559945;
-    double sum = 1, term = 1;
-    for (int i = 1; i <= 20; i++) { term *= r / i; sum += term; }
-    double result = sum;
-    if (k >= 0) { for (int i = 0; i < k; i++) result *= 2; }
-    else { for (int i = 0; i < -k; i++) result /= 2; }
-    return result;
-}
-
-static double my_pow_int(double b, int e) {
-    if (e == 0) return 1;
-    if (e < 0) return 1.0 / my_pow_int(b, -e);
-    double r = 1;
-    while (e > 0) { if (e & 1) r *= b; b *= b; e >>= 1; }
-    return r;
-}
-
-static double my_pow(double b, double e) {
-    if (b == 0) return 0;
-    if (e == 0) return 1;
-    int ie = (int)e;
-    if ((double)ie == e) return my_pow_int(b, ie);
-    if (b < 0) return 0;
-    return my_exp(e * my_ln(b));
-}
+// Math functions provided by libc/math.h (sin, cos, tan, sqrt, log, exp, pow, fabs, fmod, M_PI)
 
 // =================
 // Expression Parser
@@ -210,7 +135,7 @@ static int tokenize(const char *input, Token *tokens) {
             else if (strcmp(buf, "abs") == 0) tokens[count].type = TOK_FN_ABS;
             else if (strcmp(buf, "log") == 0) tokens[count].type = TOK_FN_LOG;
             else if (strcmp(buf, "pi") == 0 || strcmp(buf, "PI") == 0) {
-                tokens[count].type = TOK_NUM; tokens[count].value = MY_PI;
+                tokens[count].type = TOK_NUM; tokens[count].value = M_PI;
             } else { tokens[count].type = TOK_NUM; tokens[count].value = 0; }
             count++;
         } else {
@@ -331,22 +256,22 @@ static double eval_ast(ASTNode *n, int idx, double x, double y, double z) {
         case NODE_MUL: return eval_ast(n, nd->left, x, y, z) * eval_ast(n, nd->right, x, y, z);
         case NODE_DIV: {
             double d = eval_ast(n, nd->right, x, y, z);
-            return my_fabs(d) < 1e-15 ? 1e15 : eval_ast(n, nd->left, x, y, z) / d;
+            return fabs(d) < 1e-15 ? 1e15 : eval_ast(n, nd->left, x, y, z) / d;
         }
         case NODE_POW: {
             double b = eval_ast(n, nd->left, x, y, z);
             double e = eval_ast(n, nd->right, x, y, z);
             if (e == 2.0) return b * b;
             if (e == 3.0) return b * b * b;
-            return my_pow(b, e);
+            return pow(b, e);
         }
         case NODE_NEG: return -eval_ast(n, nd->left, x, y, z);
-        case NODE_SIN: return my_sin(eval_ast(n, nd->left, x, y, z));
-        case NODE_COS: return my_cos(eval_ast(n, nd->left, x, y, z));
-        case NODE_TAN: return my_tan(eval_ast(n, nd->left, x, y, z));
-        case NODE_SQRT: return my_sqrt(eval_ast(n, nd->left, x, y, z));
-        case NODE_ABS: return my_fabs(eval_ast(n, nd->left, x, y, z));
-        case NODE_LOG: return my_ln(eval_ast(n, nd->left, x, y, z));
+        case NODE_SIN: return sin(eval_ast(n, nd->left, x, y, z));
+        case NODE_COS: return cos(eval_ast(n, nd->left, x, y, z));
+        case NODE_TAN: return tan(eval_ast(n, nd->left, x, y, z));
+        case NODE_SQRT: return sqrt(eval_ast(n, nd->left, x, y, z));
+        case NODE_ABS: return fabs(eval_ast(n, nd->left, x, y, z));
+        case NODE_LOG: return log(eval_ast(n, nd->left, x, y, z));
     }
     return 0;
 }
@@ -397,22 +322,22 @@ static double run_bc(Instruction *bc, int len, double x, double y, double z) {
             case OP_MUL: { double b = stack[--sp]; double a = stack[--sp]; stack[sp++] = a * b; break; }
             case OP_DIV: { 
                 double b = stack[--sp]; double a = stack[--sp]; 
-                stack[sp++] = (my_fabs(b) < 1e-15) ? 1e15 : a / b; break; 
+                stack[sp++] = (fabs(b) < 1e-15) ? 1e15 : a / b; break; 
             }
             case OP_POW: {
                 double b = stack[--sp]; double a = stack[--sp];
                 if (b == 2.0) stack[sp++] = a * a;
                 else if (b == 3.0) stack[sp++] = a * a * a;
-                else stack[sp++] = my_pow(a, b);
+                else stack[sp++] = pow(a, b);
                 break;
             }
             case OP_NEG: stack[sp-1] = -stack[sp-1]; break;
-            case OP_SIN: stack[sp-1] = my_sin(stack[sp-1]); break;
-            case OP_COS: stack[sp-1] = my_cos(stack[sp-1]); break;
-            case OP_TAN: stack[sp-1] = my_tan(stack[sp-1]); break;
-            case OP_SQRT: stack[sp-1] = my_sqrt(stack[sp-1]); break;
-            case OP_ABS:  stack[sp-1] = my_fabs(stack[sp-1]); break;
-            case OP_LOG:  stack[sp-1] = my_ln(stack[sp-1]); break;
+            case OP_SIN: stack[sp-1] = sin(stack[sp-1]); break;
+            case OP_COS: stack[sp-1] = cos(stack[sp-1]); break;
+            case OP_TAN: stack[sp-1] = tan(stack[sp-1]); break;
+            case OP_SQRT: stack[sp-1] = sqrt(stack[sp-1]); break;
+            case OP_ABS:  stack[sp-1] = fabs(stack[sp-1]); break;
+            case OP_LOG:  stack[sp-1] = log(stack[sp-1]); break;
         }
     }
     return sp > 0 ? stack[sp-1] : 0;
@@ -537,7 +462,7 @@ static void gfb_pixel_z(int x, int y, int z, uint32_t c) {
 
 
 static void gfb_line(int x0, int y0, int x1, int y1, uint32_t c) {
-    int dx = my_fabs((double)(x1 - x0)), dy = my_fabs((double)(y1 - y0));
+    int dx = fabs((double)(x1 - x0)), dy = fabs((double)(y1 - y0));
     int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
     int err = dx - dy;
     for (int i = 0; i < 2000; i++) {
@@ -550,7 +475,7 @@ static void gfb_line(int x0, int y0, int x1, int y1, uint32_t c) {
 }
 
 static void gfb_line_z(int x0, int y0, int z0, int x1, int y1, int z1, uint32_t c) {
-    int dx = my_fabs((double)(x1 - x0)), dy = my_fabs((double)(y1 - y0));
+    int dx = fabs((double)(x1 - x0)), dy = fabs((double)(y1 - y0));
     int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
     int err = dx - dy;
     int steps = (dx > dy ? dx : dy);
@@ -613,7 +538,7 @@ static uint32_t color_by_height(double z, double zmin, double zmax) {
 }
 
 static uint32_t apply_shading(uint32_t color, double nx, double ny, double nz) {
-    double len = my_sqrt(nx*nx + ny*ny + nz*nz);
+    double len = sqrt(nx*nx + ny*ny + nz*nz);
     if (len > 1e-9) { nx /= len; ny /= len; nz /= len; }
     else { nx = 0; ny = 1; nz = 0; }
 
@@ -811,16 +736,16 @@ static void autofit_2d_view(void) {
     for (int px = 0; px < graph_w; px += 2) {
         double wx = world_x_2d(px);
         double wy = eval_rhs_only(wx, 0, 0);
-        if (wy == wy && my_fabs(wy) < 1e10) {
+        if (wy == wy && fabs(wy) < 1e10) {
             if (wy < y_min_data) y_min_data = wy;
             if (wy > y_max_data) y_max_data = wy;
             found = true;
         }
     }
     if (found) {
-        if (y_min_data * y_max_data <= 0 || my_fabs(y_min_data) < (y_max_data - y_min_data) * 0.5) {
-            double max_abs = my_fabs(y_min_data);
-            if (my_fabs(y_max_data) > max_abs) max_abs = my_fabs(y_max_data);
+        if (y_min_data * y_max_data <= 0 || fabs(y_min_data) < (y_max_data - y_min_data) * 0.5) {
+            double max_abs = fabs(y_min_data);
+            if (fabs(y_max_data) > max_abs) max_abs = fabs(y_max_data);
             double pad = max_abs * 0.15;
             if (pad < 0.5) pad = 0.5;
             view_y_min = -(max_abs + pad);
@@ -838,13 +763,13 @@ static void autofit_2d_view(void) {
 
         if (current_y_range < target_y_range) {
             double cy = (view_y_min + view_y_max) / 2.0;
-            if (my_fabs(cy) < current_y_range * 0.1) cy = 0;
+            if (fabs(cy) < current_y_range * 0.1) cy = 0;
             view_y_min = cy - target_y_range / 2.0;
             view_y_max = cy + target_y_range / 2.0;
         } else {
             double target_x_range = current_y_range * (double)graph_w / (double)graph_h;
             double cx = (view_x_min + view_x_max) / 2.0;
-            if (my_fabs(cx) < x_range * 0.1) cx = 0;
+            if (fabs(cx) < x_range * 0.1) cx = 0;
             view_x_min = cx - target_x_range / 2.0;
             view_x_max = cx + target_x_range / 2.0;
         }
@@ -893,9 +818,9 @@ static void render_2d_explicit(void) {
     for (int px = 0; px < graph_w; px++) {
         double wx = world_x_2d(px);
         double wy = eval_rhs_only(wx, 0, 0);
-        if (wy != wy || my_fabs(wy) > 1e10) { prev_valid = false; continue; }
+        if (wy != wy || fabs(wy) > 1e10) { prev_valid = false; continue; }
         int sy = screen_y_2d(wy);
-        if (prev_valid && my_fabs((double)(sy - prev_sy)) < graph_h) {
+        if (prev_valid && fabs((double)(sy - prev_sy)) < graph_h) {
             gfb_line(prev_sx, prev_sy, px, sy, COLOR_CURVE);
         }
         prev_sx = px; prev_sy = sy; prev_valid = true;
@@ -980,7 +905,7 @@ static void eval_3d_explicit_job(void *arg) {
             surf_y_3d[j][i] = wy;
             surf[j][i].count = 0;
             
-            if (my_fabs(wz) > 1e10 || wz != wz) {
+            if (fabs(wz) > 1e10 || wz != wz) {
                 // Invalid value
                 return;
             }
@@ -997,7 +922,7 @@ static void eval_3d_explicit_job(void *arg) {
             double nx = -dfx;
             double ny = -dfy;
             double nz = 1.0;
-            double len = my_sqrt(nx*nx + ny*ny + nz*nz);
+            double len = sqrt(nx*nx + ny*ny + nz*nz);
             if (len > 1e-9) { nx /= len; ny /= len; nz /= len; }
             else { nx = 0; ny = 0; nz = 1; }
             
@@ -1031,7 +956,7 @@ static void eval_3d_implicit_job(void *arg) {
                 double cur_f = eval_implicit(wx, wy, zz);
                 
                 if ((prev_f > 0) != (cur_f > 0)) {
-                    if (my_fabs(prev_f) < 1e10 && my_fabs(cur_f) < 1e10) {
+                    if (fabs(prev_f) < 1e10 && fabs(cur_f) < 1e10) {
                         double za = zz - z_step, zb = zz;
                         double fa = prev_f, fb = cur_f;
                         
@@ -1070,7 +995,7 @@ static void eval_3d_implicit_job(void *arg) {
                 double nx = eval_implicit(wx+eps, wy, wz) - eval_implicit(wx-eps, wy, wz);
                 double ny = eval_implicit(wx, wy+eps, wz) - eval_implicit(wx, wy-eps, wz);
                 double nz = eval_implicit(wx, wy, wz+eps) - eval_implicit(wx, wy, wz-eps);
-                double d = my_sqrt(nx*nx + ny*ny + nz*nz);
+                double d = sqrt(nx*nx + ny*ny + nz*nz);
                 if (d > 1e-12) { nx /= d; ny /= d; nz /= d; }
                 else { nx = 0; ny = 1; nz = 0; } 
                 
@@ -1126,7 +1051,7 @@ static void render_3d_draw_job(void *arg) {
                         float avg_nz = surf[j][i].nz[s] + surf[j][i+1].nz[s] + surf[j+1][i].nz[s] + surf[j+1][i+1].nz[s];
                         avg_nx *= 0.25f; avg_ny *= 0.25f; avg_nz *= 0.25f;
                         
-                        float nlen = (float)my_sqrt(avg_nx*avg_nx + avg_ny*avg_ny + avg_nz*avg_nz);
+                        float nlen = (float)sqrt(avg_nx*avg_nx + avg_ny*avg_ny + avg_nz*avg_nz);
                         if (nlen > 1e-9) { avg_nx /= nlen; avg_ny /= nlen; avg_nz /= nlen; }
                         else { avg_nx = 0; avg_ny = 0; avg_nz = 1; }
                         
@@ -1166,7 +1091,7 @@ static void render_3d_draw_job(void *arg) {
                         double wx = surf_x[j][i], wy = surf_y_3d[j][i];
                         double gnx = eval_implicit(wx + eps, wy, mid_z) - eval_implicit(wx - eps, wy, mid_z);
                         double gny = eval_implicit(wx, wy + eps, mid_z) - eval_implicit(wx, wy - eps, mid_z);
-                        double dmag = my_sqrt(gnx*gnx + gny*gny);
+                        double dmag = sqrt(gnx*gnx + gny*gny);
                         if (dmag > 1e-12) { gnx /= dmag; gny /= dmag; }
                         else { gnx = 0; gny = 1; }
                         
@@ -1398,9 +1323,9 @@ static void render_graph(void) {
             for (int px = 0; px < graph_w; px++) {
                 double wx = world_x_2d(px);
                 double wy = eval_rhs_only(wx, 0, 0);
-                if (wy != wy || my_fabs(wy) > 1e10) { prev_valid = false; continue; }
+                if (wy != wy || fabs(wy) > 1e10) { prev_valid = false; continue; }
                 int sy = screen_y_2d(wy);
-                if (prev_valid && my_fabs((double)(sy - prev_sy)) < graph_h)
+                if (prev_valid && fabs((double)(sy - prev_sy)) < graph_h)
                     gfb_line(prev_sx, prev_sy, px, sy, COLOR_CURVE);
                 prev_sx = px; prev_sy = sy; prev_valid = true;
             }
@@ -1425,7 +1350,7 @@ static void render_graph(void) {
         double x_start = (int)(view_x_min / x_step) * x_step;
         int safety = 0;
         for (double wx = x_start - x_step; wx <= view_x_max + x_step && safety < 100; wx += x_step, safety++) {
-            if (my_fabs(wx) < x_step * 0.1) continue; // Skip zero
+            if (fabs(wx) < x_step * 0.1) continue; // Skip zero
             int sx = screen_x_2d(wx);
             if (sx > 20 && sx < graph_w - 40) {
                 char buf[32]; double_to_str(wx, buf);
@@ -1440,7 +1365,7 @@ static void render_graph(void) {
         double y_start = (int)(view_y_min / y_step) * y_step;
         safety = 0;
         for (double wy = y_start - y_step; wy <= view_y_max + y_step && safety < 100; wy += y_step, safety++) {
-            if (my_fabs(wy) < y_step * 0.1) continue; // Skip zero
+            if (fabs(wy) < y_step * 0.1) continue; // Skip zero
             int sy = screen_y_2d(wy);
             if (sy > 20 && sy < graph_h - 20) {
                 char buf[32]; double_to_str(wy, buf);
@@ -1460,8 +1385,8 @@ static void render_graph(void) {
 // Paint
 // =====
 static void paint_all(void) {
-    rot_cx = my_cos(rot_x); rot_sx = my_sin(rot_x);
-    rot_cy = my_cos(rot_y); rot_sy = my_sin(rot_y);
+    rot_cx = cos(rot_x); rot_sx = sin(rot_x);
+    rot_cy = cos(rot_y); rot_sy = sin(rot_y);
 
     ui_draw_rect(win_graph, 0, 0, win_w, TOOLBAR_H, COLOR_TOOLBAR_BG);
     widget_textbox_draw(&wctx, &tb_equation);
