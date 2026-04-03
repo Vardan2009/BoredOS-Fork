@@ -433,12 +433,14 @@ static void draw_dock_files(int x, int y);
 static void draw_dock_settings(int x, int y);
 static void draw_dock_notepad(int x, int y);
 static void draw_dock_calculator(int x, int y);
+static void draw_dock_grapher(int x, int y);
 static void draw_dock_terminal(int x, int y);
 static void draw_dock_minesweeper(int x, int y);
 static void draw_dock_paint(int x, int y);
 static void draw_dock_clock(int x, int y);
 static void draw_dock_taskman(int x, int y);
-static void draw_dock_editor(int x, int y);
+static void draw_dock_word(int x, int y);
+static void draw_dock_browser(int x, int y);
 static void draw_dock_editor(int x, int y);
 static void draw_filled_circle(int cx, int cy, int r, uint32_t color);
 
@@ -776,6 +778,11 @@ void draw_calculator_icon(int x, int y, const char *label) {
     draw_icon_label(x, y, label);
 }
 
+void draw_grapher_icon(int x, int y, const char *label) {
+    draw_scaled_icon(x, y, draw_dock_grapher);
+    draw_icon_label(x, y, label);
+}
+
 void draw_terminal_icon(int x, int y, const char *label) {
     draw_scaled_icon(x, y, draw_dock_terminal);
     draw_icon_label(x, y, label);
@@ -992,6 +999,42 @@ static void draw_dock_notepad(int x, int y) {
     draw_rect(x + 32, y + 11, 3, 13, 0xFFF5DEB3);
     draw_rect(x + 32, y + 9, 3, 4, 0xFFFF9800);
     draw_rect(x + 33, y + 24, 1, 2, 0xFF555555);
+}
+
+static void draw_dock_grapher(int x, int y) {
+    // Dark background with a panel look
+    draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF121212);
+    draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF1E1E1E);
+    draw_rounded_rect_filled(x + 1, y + 24, 46, 23, 9, 0xFF161616);
+    
+    // Subtle grid (matches Grapher's theme)
+    uint32_t grid_color = 0xFF2A2A2A;
+    for (int i = 8; i < 40; i += 8) {
+        draw_rect(x + i, y + 6, 1, 36, grid_color);
+        draw_rect(x + 6, y + i + 6, 36, 1, grid_color);
+    }
+    
+    // Axis line
+    draw_rect(x + 24, y + 10, 1, 28, 0xFF444444);
+    draw_rect(x + 10, y + 24, 28, 1, 0xFF444444);
+    
+    // Vibrant Sine Wave (Neon Cyan)
+    uint32_t curve_color = 0xFF00E5FF;
+    int curve_y[] = {24, 23, 21, 19, 17, 16, 15, 15, 16, 17, 19, 21, 23, 24, 26, 28, 30, 32, 33, 33, 32, 30, 28, 26, 24, 23, 21, 19, 17, 16, 15, 15, 16, 17, 19, 21};
+    for (int i = 0; i < 35; i++) {
+        int x1 = x + 6 + i;
+        int y1 = y + curve_y[i];
+        int y2 = y + curve_y[i+1];
+        
+        // Anti-aliased look with multi-point vertical connector
+        if (y1 < y2) for (int j = y1; j <= y2; j++) put_pixel(x1, j, curve_color);
+        else for (int j = y2; j <= y1; j++) put_pixel(x1, j, curve_color);
+    }
+    
+    // Add white indicator "nodes" at the peaks
+    draw_filled_circle(x + 6 + 7, y + 15, 2, 0xFFFFFFFF);
+    draw_filled_circle(x + 6 + 18, y + 33, 2, 0xFFFFFFFF);
+    draw_filled_circle(x + 6 + 30, y + 15, 2, 0xFFFFFFFF);
 }
 
 static void draw_dock_calculator(int x, int y) {
@@ -1309,6 +1352,7 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
                 else if (str_starts_with(icon->name, "Recycle Bin")) draw_recycle_bin_icon(icon->x, icon->y, label);
                 else if (str_starts_with(icon->name, "Files")) draw_folder_icon(icon->x, icon->y, label);
                 else if (str_starts_with(icon->name, "Paint")) draw_paint_icon(icon->x, icon->y, label);
+                else if (str_starts_with(icon->name, "Grapher")) draw_grapher_icon(icon->x, icon->y, label);
                 else draw_icon(icon->x, icon->y, label);
             } else {
                 if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
@@ -1347,7 +1391,7 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
         
         int dock_h = 60, dock_y = sh - dock_h - 6;   
         if (dock_y < cy + ch && dock_y + dock_h > cy) {
-            int d_item_sz = 48, d_space = 10, d_total_w = 11 * (d_item_sz + d_space);
+            int d_item_sz = 48, d_space = 10, d_total_w = 12 * (d_item_sz + d_space);
             int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
             draw_rounded_rect_blurred(d_bg_x, dock_y, d_bg_w, dock_h, 18, COLOR_DOCK_BG, 5, 140);
             int dx = (sw - d_total_w) / 2, dy = dock_y + 6;
@@ -1355,6 +1399,7 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
             draw_dock_settings(dx, dy); dx += d_item_sz+d_space;
             draw_dock_notepad(dx, dy); dx += d_item_sz+d_space;
             draw_dock_calculator(dx, dy); dx += d_item_sz+d_space;
+            draw_dock_grapher(dx, dy); dx += d_item_sz+d_space;
             draw_dock_terminal(dx, dy); dx += d_item_sz+d_space;
             draw_dock_minesweeper(dx, dy); dx += d_item_sz+d_space;
             draw_dock_paint(dx, dy); dx += d_item_sz+d_space;
@@ -1992,7 +2037,7 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
         int dock_y = sh - dock_h - 6;  
         int dock_item_size = 48;
         int dock_spacing = 10;
-        int total_dock_width = 11 * (dock_item_size + dock_spacing);
+        int total_dock_width = 12 * (dock_item_size + dock_spacing);
         int dock_bg_x = (sw - total_dock_width) / 2 - 12;
         int dock_bg_w = total_dock_width + 24;
         
@@ -2007,13 +2052,14 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                 else if (item == 1) start_menu_pending_app = "Settings";
                 else if (item == 2) start_menu_pending_app = "Notepad";
                 else if (item == 3) start_menu_pending_app = "Calculator";
-                else if (item == 4) start_menu_pending_app = "Terminal";
-                else if (item == 5) start_menu_pending_app = "Minesweeper";
-                else if (item == 6) start_menu_pending_app = "Paint";
-                else if (item == 7) start_menu_pending_app = "Browser";
-                else if (item == 8) start_menu_pending_app = "Task Manager";
-                else if (item == 9) start_menu_pending_app = "Clock";
-                else if (item == 10) start_menu_pending_app = "Word Processor";
+                else if (item == 4) start_menu_pending_app = "Grapher";
+                else if (item == 5) start_menu_pending_app = "Terminal";
+                else if (item == 6) start_menu_pending_app = "Minesweeper";
+                else if (item == 7) start_menu_pending_app = "Paint";
+                else if (item == 8) start_menu_pending_app = "Browser";
+                else if (item == 9) start_menu_pending_app = "Task Manager";
+                else if (item == 10) start_menu_pending_app = "Clock";
+                else if (item == 11) start_menu_pending_app = "Word Processor";
             }
         } else {
             wm_handle_click(mx, my);
@@ -2156,6 +2202,10 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                 else process_create_elf("/bin/boredword.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
                 cmd_reset(); wm_bring_to_front_locked(&win_cmd);
+            } else if (str_starts_with(start_menu_pending_app, "Grapher")) {
+                Window *existing = wm_find_window_by_title_locked("Grapher");
+                if (existing) wm_bring_to_front_locked(existing);
+                else process_create_elf("/bin/grapher.elf", NULL);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
                 Window *existing = wm_find_window_by_title_locked("Calculator");
                 if (existing) {
