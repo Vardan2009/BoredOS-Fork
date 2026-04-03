@@ -19,9 +19,9 @@ BoredOS is a x86_64 operating system featuring a custom Desktop Environment (DE)
 
 ---
 
-## 🚀 Features
+## Features
 
-### ⚙️ System Architecture
+### System Architecture
 * **64-bit Long Mode:** Fully utilizing the x86_64 architecture.
 * **Symmetric Multi-Processing (SMP):** Full support for multi-core CPUs via Limine SMP.
 * **LAPIC & IPI Scheduling:** Advanced interrupt handling and inter-processor communication for task distribution.
@@ -31,12 +31,12 @@ BoredOS is a x86_64 operating system featuring a custom Desktop Environment (DE)
 * **Filesystem:** Full **FAT32** support for persistent and in-memory storage.
 * **Networking:** Includes the lwIP networking stack.
 
-### 📺 Graphical User Interface
+### Graphical User Interface
 * **BoredWM:** A custom Window Manager with drag-and-drop, mouse-centered interaction.
 * **Customization:** Adjustable UI to suit your aesthetic.
 * **Media Support:** Built-in image decoding.
 
-### 🛠️ Included Applications
+### Included Applications
 * **Productivity:** GUI Text Editor calculator, Markdown Viewer, a simple browser and BoredWord.
 * **Creativity:** A Paint application.
 * **Utilities:** Terminal, Task Manager, File Explorer, Clock and a (limited) C Compiler.
@@ -55,7 +55,7 @@ Explore the internal workings of BoredOS via our comprehensive guides in the [`d
 
 ---
 
-## ☕ Support the Journey
+## Support the Journey
 
 If you find this project interesting or helpful, consider fueling the development with a coffee!
 
@@ -68,16 +68,16 @@ If you find this project interesting or helpful, consider fueling the developmen
 
 ## ⚠️ Project Disclaimer & Heritage
 
-**BoredOS** is the successor to **BrewKernel**, a text-only project initiated in 2023. 
+**BoredOS** is the successor to **BrewKernel**, a project initiated in 2023. 
 
-While BrewKernel served as the foundational learning ground for this OS, it has been officially **deprecated and archived**. It no longer receives updates, bug fixes, or pull request reviews. BoredOS represents a complete architectural reboot, applying years of lessons learned to create a cleaner, more modular, and more capable 64-bit system.
+While BrewKernel served as the foundational learning ground for this OS, it has been officially **deprecated and archived**. It no longer receives updates, bug fixes, or pull request reviews. BoredOS represents a complete architectural reboot, applying years of lessons learned to create a cleaner, more modular, and more capable system.
 
 > [!IMPORTANT]
 > Please ensure all issues, discussions, and contributions are directed to this repository. Legacy BrewKernel code is preserved for historical purposes only and is not compatible with BoredOS.
 
 ---
 
-## ⚖️ License
+## License
 
 **Copyright (C) 2024-2026 boreddevnl**
 
