@@ -17,7 +17,7 @@ extern void sys_parallel_run(void (*fn)(void*), void **args, int count);
 // Adjust the below variables to suit your system specification and preferences.
 // --- User Configuration ---
 #define ROTATE 1  // Set to 0 to disable auto-rotation in 3D mode.
-#define GRID_3D 100 // Grid resolution. Adjust on how much you want your PC to die (lmao)
+#define GRID_3D 256 // Grid resolution. Adjust on how much you want your PC to die (lmao)
 // --------------------------
 #define TOOLBAR_H 30
 #define STATUSBAR_H 30
