@@ -9,7 +9,7 @@ BoredOS is a 64-bit hobbyist operating system designed for the x86_64 architectu
 
 This document serves as an overview of the core architecture and the layout of the kernel source code.
 
-## 📂 Source Code Layout (`src/`)
+##  Source Code Layout (`src/`)
 
 The OS heavily relies on module separation. The `src/` directory is logically split into several domains:
 
@@ -23,7 +23,7 @@ The OS heavily relies on module separation. The `src/` directory is logically sp
 - **`wm/`**: The graphical subsystem. It handles drawing primitives, window structures, font rendering, and double-buffering.
 - **`userland/`**: Out-of-kernel components. This includes the custom SDK/compiler environment (`libc/`) and user applications (`cli/`, `gui/`, `games/`).
 
-## 🚀 Boot Process
+## Boot Process
 
 BoredOS uses **Limine** as its primary bootloader.
 
@@ -42,7 +42,7 @@ BoredOS utilizes Symmetric Multi-Processing (SMP) to distribute workloads across
 -   **Scheduler**: A round-robin scheduler runs on each core. Processes are pinned to specific CPUs (CPU Affinity) to maintain cache locality. The BSP timer interrupt (`60Hz`) broadcasts a scheduling IPI to all core to ensure balanced execution.
 -   **Spinlocks**: Since multiple cores can access kernel structures (VFS, Process List) simultaneously, the kernel uses **interrupt-safe spinlocks** to prevent race conditions.
 
-## 🛡️ Userland Transition
+## Userland Transition
 
 The OS supports privilege separation (Ring 0 vs. Ring 3). When an application is launched, the kernel:
 

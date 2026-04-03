@@ -7,9 +7,11 @@
 
 BoredOS provides a custom `libc` implementation necessary for writing userland applications (`.elf` binaries). By avoiding a full-blown standard library like `glibc`, the OS ensures a minimal executable footprint tailored strictly to the existing kernel features.
 
-All headers are located in `src/userland/libc/`.
+All headers are located in `src/userland/libc/` (standard functions) and `src/wm/` (UI and widgets).
+-   `libui.h`: Core window and drawing API.
+-   `libwidget.h`: High-level UI components.
 
-## 📚 Standard Library (`stdlib.h` & `string.h`)
+## Standard Library (`stdlib.h` & `string.h`)
 
 The standard library wrappers provide memory management, string manipulation, and basic IO formatting without needing direct syscalls.
 
@@ -45,7 +47,7 @@ The standard library wrappers provide memory management, string manipulation, an
 
 ---
 
-## ⚙️ System Calls (`syscall.h`)
+## System Calls (`syscall.h`)
 
 For advanced operations, `syscall.h` provides direct wrappers into the kernel.
 
@@ -108,7 +110,7 @@ BoredOS includes lwIP for hardware TCP/UDP networking.
 
 ---
 
-## 📑 Core Data Structures
+## Core Data Structures
 
 ### `os_info_t`
 Contains detailed build and version information about the OS.

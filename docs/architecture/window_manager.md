@@ -7,7 +7,7 @@
 
 BoredOS features a fully custom, graphical Window Manager built directly into the kernel, residing in the `src/wm/` directory. It is responsible for compositing the screen, handling window logic, rendering text, and dispatching UI events.
 
-## 🖼️ Framebuffer and Rendering
+## Framebuffer and Rendering
 
 1.  **Limine Framebuffer**: During boot, the Limine bootloader requests a graphical framebuffer from the hardware (e.g., GOP in UEFI environments) and passes a pointer to this linear memory buffer to the kernel.
 2.  **Double Buffering**: To prevent screen tearing, the WM does not draw directly to the screen. It allocates a "back buffer" in kernel memory equal to the size of the screen. All drawing operations (lines, rectangles, windows) happen on this back buffer.
@@ -24,7 +24,7 @@ The windowing system is built around a linked list of `Window` structures.
 -   **Window Structures**: Each window object tracks its dimensions (`x`, `y`, `width`, `height`), title, background color, and an internal buffer if it's acting as a canvas for userland apps.
 -   **Decorations**: The kernel handles drawing window borders, title bars, and close buttons automatically unless a borderless style is specified.
 
-## 🖱️ Input Handling and Events
+## Input Handling and Events
 
 The WM acts as the central hub for input routing.
 

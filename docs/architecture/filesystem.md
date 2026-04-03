@@ -7,7 +7,7 @@
 
 BoredOS implements a rudimentary but functional filesystem layer designed to support reading system assets and user applications during runtime.
 
-## 🗂️ Virtual File System (VFS)
+## Virtual File System (VFS)
 
 The Virtual File System acts as an abstraction layer across different underlying storage mechanisms (even if, currently, only one type is fully utilized). System calls targeting files (`SYS_FS`) route through the VFS rather than interacting with the disk directly.
 
@@ -17,11 +17,11 @@ Key VFS functionalities include:
 -   **Path Parsing**: Resolving absolute and relative paths.
 -   **SMP Safety**: All VFS and underlying FAT32 operations are protected by a global **Spinlock**. This ensures that multiple cores can safely read from the filesystem simultaneously without corrupting internal file seek pointers or directory cache states.
 
-## 💾 FAT32 Implementation
+## FAT32 Implementation
 
 The primary filesystem logic in `fat32.c` handles both in-memory RAM-based filesystem simulation and physical ATA block devices.
 
-### 💿 Storage Support
+### Storage Support
 
 BoredOS supports two main types of storage for its FAT32 implementation:
 
@@ -30,7 +30,7 @@ BoredOS supports two main types of storage for its FAT32 implementation:
     -   **GPT is NOT supported**: Currently, only **MBR (Master Boot Record)** partition tables or **raw (partitionless)** disks are supported.
     -   **Filesystem**: The partition must be formatted as **FAT32**.
 
-### 🔍 Auto-detection
+### Auto-detection
 The `Disk Manager` automatically probes primary and secondary IDE channels during initialization. If a valid FAT32 partition is found (either directly at sector 0 or via an MBR partition table), the disk is assigned a drive letter (starting from `B:`) and becomes accessible to the VFS.
 
 

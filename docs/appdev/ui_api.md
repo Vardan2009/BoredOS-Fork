@@ -7,7 +7,7 @@
 
 The UI library (`libui.h`) is the sole mechanism for Graphical Userland Applications to draw to the screen and receive input events in BoredOS. It wraps `SYS_GUI` kernel calls.
 
-## 🪟 Window Management
+## Window Management
 
 A "Window" is a reserved drawing canvas managed by the compositor.
 
@@ -21,7 +21,7 @@ A "Window" is a reserved drawing canvas managed by the compositor.
 *   `void ui_get_screen_size(uint64_t *out_w, uint64_t *out_h);`
     Query the global screen resolution of the display.
 
-## 🎨 Drawing Primitives
+## Drawing Primitives
 
 All drawing functions write to an off-screen buffer associated with the window. **You must call `ui_mark_dirty()` to instruct the compositor to push your changes to the physical screen.**
 
@@ -38,7 +38,7 @@ All drawing functions write to an off-screen buffer associated with the window. 
 > Colors are defined as 32-bit unsigned integers in **ARGB** format: `0xAARRGGBB`.
 > E.g., `0xFF000000` is opaque black, `0xFFFF0000` is opaque red.
 
-## 🔤 Text Rendering
+## Text Rendering
 
 BoredOS provides multiple text rendering methodologies, including a default system font and scaled/bitmap alternatives.
 
@@ -60,7 +60,7 @@ Used for calculating layout bounds before drawing:
 *   `uint32_t ui_get_string_width_scaled(const char *str, float scale);`
 *   `uint32_t ui_get_font_height_scaled(float scale);`
 
-## 🔄 Event Handling
+## Event Handling
 
 Applications must continuously poll for events inside an infinite `$while(1)` loop.
 
@@ -101,5 +101,11 @@ typedef struct {
 | `GUI_EVENT_RESIZE` | `11` | Window dimensions changed| New Width | New Height | - |
 
 *(Note: Coordinate arguments (`arg1`, `arg2`) for mouse events are typically relative to the top-left corner of the window's client area).*
+
+---
+
+> [!TIP]
+> **Looking for Buttons, TextBoxes, or Scrollbars?**
+> While `libui.h` provides the foundation for drawing, most applications should use the higher-level [**Widget API**](widget_api.md) (`libwidget.h`) for standard interactive components.
 
 ---

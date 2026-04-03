@@ -10,7 +10,7 @@ This guide explains how to write a new "Hello World" application locally, compil
 > [!TIP]
 > **Looking for working code?** Check out the [Examples Directory](examples/README.md) for full source code demonstrating basic CLI, Windows, Animations, and TCP Networking.
 
-## 📝 Step 1: Write the C Source
+## Step 1: Write the C Source
 
 Applications reside entirely in the `src/userland/` directory. Create a new file, for example, `src/userland/gui/hello.c`.
 
@@ -52,7 +52,7 @@ int main(void) {
 }
 ```
 
-## ⚙️ Step 2: Edit the Makefile
+## Step 2: Edit the Makefile
 
 Now you need to tell the build system to compile `hello.c`. Fortunately, the `src/userland/Makefile` is designed to detect new C files largely automatically!
 
@@ -64,7 +64,7 @@ Now you need to tell the build system to compile `hello.c`. Fortunately, the `sr
     Since you placed the file in `gui/hello.c`, the wildcard logic will pick it up automatically.
 3.  The Makefile will generate `bin/hello.elf` during the build phase.
 
-## 📦 Step 3: Bundle it into the OS
+## Step 3: Bundle it into the OS
 
 The main overarching `Makefile` (in the project root) takes binaries from `src/userland/bin/*.elf` and places them into the `iso_root/bin/` directory, while also adding them to `limine.conf` as loadable boot modules.
 
@@ -77,7 +77,7 @@ The main overarching `Makefile` (in the project root) takes binaries from `src/u
     make clean && make run
     ```
 
-## 🚀 Step 4: Run it inside BoredOS
+## Step 4: Run it inside BoredOS
 
 1.  When BoredOS boots, launch the **Terminal** application.
 2.  The OS automatically maps built applications to standard shell commands. Simply type your application's filename (without the `.elf` extension).
