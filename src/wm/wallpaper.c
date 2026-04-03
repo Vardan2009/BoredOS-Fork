@@ -151,8 +151,8 @@ int wallpaper_get_height(void) { return wp_height; }
 void wallpaper_init(void) {
     // We expect Limine modules to have been copied to /Library/images/Wallpapers/ by main.c
     // Set a default wallpaper if one exists
-    if (fat32_exists("/Library/images/Wallpapers/mountain.jpg")) {
-        wallpaper_request_set_from_file("/Library/images/Wallpapers/mountain.jpg");
+    if (fat32_exists("/Library/images/Wallpapers/bored.jpg")) {
+        wallpaper_request_set_from_file("/Library/images/Wallpapers/bored.jpg");
     } else if (fat32_exists("/Library/images/Wallpapers/moon.jpg")) {
         wallpaper_request_set_from_file("/Library/images/Wallpapers/moon.jpg");
     }
