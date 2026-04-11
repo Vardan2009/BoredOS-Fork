@@ -926,48 +926,11 @@ static void explorer_paint(Window *win) {
     
     draw_rect(offset_x, offset_y, win->w - 8, win->h - 28, COLOR_DARK_BG);
     
-    char drive_label[20];
-    char current_drv = 'A';
-    if (state->current_path[0] && state->current_path[1] == ':') {
-        current_drv = state->current_path[0];
-    } else if (state->current_path[0] && (state->current_path[0] >= 'A' && state->current_path[0] <= 'Z')) {
-        current_drv = state->current_path[0];
-    }
-    
-    const char *type_str = "RAM";
-    Disk *drv = disk_get_by_letter(current_drv);
-    if (drv) {
-        switch (drv->type) {
-            case DISK_TYPE_RAM:  type_str = "RAM";  break;
-            case DISK_TYPE_IDE:  type_str = "IDE";  break;
-            case DISK_TYPE_SATA: type_str = "SATA"; break;
-            case DISK_TYPE_USB:  type_str = "USB";  break;
-            default:             type_str = "???";  break;
-        }
-    }
-    
-    int di = 0;
-    drive_label[di++] = '[';
-    drive_label[di++] = ' ';
-    drive_label[di++] = current_drv;
-    drive_label[di++] = ':';
-    const char *ts = type_str;
-    while (*ts) drive_label[di++] = *ts++;
-    drive_label[di++] = ' ';
-    drive_label[di++] = ' ';
-    drive_label[di++] = ' ';
-    drive_label[di++] = ']';
-    drive_label[di] = 0;
-    
     ttf_font_t *ttf_ = graphics_get_current_ttf();
-    int drive_label_w = ttf_ ? font_manager_get_string_width(ttf_, drive_label) + 16 : 80;
-    if (drive_label_w < 60) drive_label_w = 60;
-    draw_rounded_rect_filled(win->x + 4, offset_y + 3, drive_label_w, 22, 5, COLOR_DARK_PANEL);
-    draw_string(win->x + 12, offset_y + 8, drive_label, COLOR_DARK_TEXT);
 
     int path_height = 22;
-    int path_x = offset_x + drive_label_w + 8;
-    int path_w = win->w - 16 - drive_label_w - 8;
+    int path_x = offset_x;
+    int path_w = win->w - 16 - 8;
     draw_rounded_rect_filled(path_x, offset_y + 3, path_w, path_height, 5, COLOR_DARK_PANEL);
     draw_string(path_x + 6, offset_y + 8, "Path:", COLOR_DARK_TEXT);
     int path_label_w = ttf_ ? font_manager_get_string_width(ttf_, "Path:") : 40;
@@ -1014,32 +977,6 @@ static void explorer_paint(Window *win) {
 
     graphics_pop_clipping(); // Pop content clipping
     graphics_pop_clipping(); // Pop main window clipping
-    
-    if (state->drive_menu_visible) {
-        int menu_x = win->x + 4;
-        int menu_y = offset_y + 26;
-        int menu_w = 80;
-        int count = disk_get_count();
-        int menu_h = count * 25;
-        
-        draw_rounded_rect_filled(menu_x, menu_y, menu_w, menu_h, 6, COLOR_DARK_PANEL);
-        
-        for (int i = 0; i < count; i++) {
-            Disk *d = disk_get_by_index(i);
-            if (d) {
-                char buf[32];
-                explorer_strcpy(buf, d->devname);
-                
-                // For now, simplify current check
-                if (explorer_strcmp(state->current_path, d->devname) == 0) {
-                    draw_rounded_rect_filled(menu_x + 2, menu_y + i*25 + 2, menu_w - 4, 21, 4, 0xFF4A90E2);
-                    draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_WHITE);
-                } else {
-                    draw_string(menu_x + 5, menu_y + i*25 + 6, buf, COLOR_DARK_TEXT);
-                }
-            }
-        }
-    }
     
     if (state->dropdown_menu_visible) {
         int menu_x = dropdown_btn_x;
@@ -1335,30 +1272,7 @@ static void explorer_handle_click(Window *win, int x, int y) {
         return; 
     }
     
-    if (state->drive_menu_visible) {
-        int menu_x = 4; 
-        int menu_y = 26; 
-        int menu_w = 80;
-        int count = disk_get_count();
-        int menu_h = count * 25;
-        
-        if (x >= menu_x && x < menu_x + menu_w && y >= menu_y && y < menu_y + menu_h) {
-            int idx = (y - menu_y) / 25;
-            Disk *d = disk_get_by_index(idx);
-            if (d) {
-                char path[64];
-                explorer_strcpy(path, "/dev/");
-                explorer_strcat(path, d->devname);
-                explorer_strcat(path, "/"); // Mount point is /dev/devname
-                explorer_load_directory(win, path);
-            }
-            state->drive_menu_visible = false;
-            return;
-        }
-        
-        state->drive_menu_visible = false;
-        return;
-    }
+
     
     if (state->dropdown_menu_visible) {
         int dropdown_btn_x = win->w - 90;  
@@ -1394,17 +1308,11 @@ static void explorer_handle_click(Window *win, int x, int y) {
     }
     
     
-    int button_y = 3;
-    if (x >= 4 && x < 64 && y >= button_y && y < button_y + 22) {
-        state->drive_menu_visible = !state->drive_menu_visible;
-        state->dropdown_menu_visible = false; 
-        return;
-    }
+
     
     if (WIDGET_CLICKED(&state->btn_dropdown, win->x + x, win->y + y + 20)) {
         state->btn_dropdown.pressed = false;
         dropdown_menu_toggle(win);
-        state->drive_menu_visible = false; 
         return;
     }
     
