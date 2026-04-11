@@ -9,7 +9,10 @@
 #include "ahci.h"
 #include "../fs/vfs.h"
 #include "../fs/fat32.h"
+#include "../sys/spinlock.h"
 #include <stddef.h>
+
+static spinlock_t ide_lock = SPINLOCK_INIT;
 
 static Disk *disks[MAX_DISKS];
 static int disk_count = 0;
@@ -75,12 +78,17 @@ typedef struct {
 
 // === ATA PIO Driver ===
 
-static void ata_wait_bsy(uint16_t port_base) {
-    while (inb(port_base + ATA_REG_STATUS) & ATA_SR_BSY);
+static int ata_wait_bsy(uint16_t port_base) {
+    int timeout = 10000000;
+    while ((inb(port_base + ATA_REG_STATUS) & ATA_SR_BSY) && --timeout > 0);
+    return timeout <= 0 ? -1 : 0;
 }
 
-static void ata_wait_drq(uint16_t port_base) {
-    while (!(inb(port_base + ATA_REG_STATUS) & ATA_SR_DRQ));
+static int ata_wait_drq(uint16_t port_base) {
+    int timeout = 10000000;
+    while (!(inb(port_base + ATA_REG_STATUS) & (ATA_SR_DRQ | ATA_SR_ERR)) && --timeout > 0);
+    if (timeout <= 0 || (inb(port_base + ATA_REG_STATUS) & ATA_SR_ERR)) return -1;
+    return 0;
 }
 
 static int ata_identify(uint16_t port_base, bool slave) {
@@ -104,7 +112,7 @@ static int ata_identify(uint16_t port_base, bool slave) {
 
     if (inb(port_base + ATA_REG_STATUS) & ATA_SR_ERR) return 0;
 
-    while (!(inb(port_base + ATA_REG_STATUS) & (ATA_SR_DRQ | ATA_SR_ERR)));
+    if (ata_wait_drq(port_base) != 0) return 0;
 
     if (inb(port_base + ATA_REG_STATUS) & ATA_SR_ERR) return 0;
 
@@ -132,7 +140,12 @@ static int ata_read_sector(Disk *disk, uint32_t lba, uint8_t *buffer) {
         slave = data->slave;
     }
 
-    ata_wait_bsy(port_base);
+    uint64_t flags = spinlock_acquire_irqsave(&ide_lock);
+
+    if (ata_wait_bsy(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
 
     outb(port_base + ATA_REG_HDDEVSEL, 0xE0 | (slave << 4) | ((lba >> 24) & 0x0F));
     outb(port_base + ATA_REG_FEATURES, 0x00);
@@ -142,14 +155,21 @@ static int ata_read_sector(Disk *disk, uint32_t lba, uint8_t *buffer) {
     outb(port_base + ATA_REG_LBA2, (uint8_t)(lba >> 16));
     outb(port_base + ATA_REG_COMMAND, ATA_CMD_READ_PIO);
 
-    ata_wait_bsy(port_base);
-    ata_wait_drq(port_base);
+    if (ata_wait_bsy(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
+    if (ata_wait_drq(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
 
     uint16_t *ptr = (uint16_t*)buffer;
     for (int i = 0; i < 256; i++) {
         ptr[i] = inw(port_base + ATA_REG_DATA);
     }
 
+    spinlock_release_irqrestore(&ide_lock, flags);
     return 0;
 }
 
@@ -166,7 +186,12 @@ static int ata_write_sector(Disk *disk, uint32_t lba, const uint8_t *buffer) {
         slave = data->slave;
     }
 
-    ata_wait_bsy(port_base);
+    uint64_t flags = spinlock_acquire_irqsave(&ide_lock);
+
+    if (ata_wait_bsy(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
 
     outb(port_base + ATA_REG_HDDEVSEL, 0xE0 | (slave << 4) | ((lba >> 24) & 0x0F));
     outb(port_base + ATA_REG_FEATURES, 0x00);
@@ -176,8 +201,14 @@ static int ata_write_sector(Disk *disk, uint32_t lba, const uint8_t *buffer) {
     outb(port_base + ATA_REG_LBA2, (uint8_t)(lba >> 16));
     outb(port_base + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
 
-    ata_wait_bsy(port_base);
-    ata_wait_drq(port_base);
+    if (ata_wait_bsy(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
+    if (ata_wait_drq(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
 
     const uint16_t *ptr = (const uint16_t*)buffer;
     for (int i = 0; i < 256; i++) {
@@ -185,8 +216,12 @@ static int ata_write_sector(Disk *disk, uint32_t lba, const uint8_t *buffer) {
     }
 
     outb(port_base + ATA_REG_COMMAND, 0xE7); // Cache Flush
-    ata_wait_bsy(port_base);
+    if (ata_wait_bsy(port_base) != 0) {
+        spinlock_release_irqrestore(&ide_lock, flags);
+        return -1;
+    }
 
+    spinlock_release_irqrestore(&ide_lock, flags);
     return 0;
 }
 

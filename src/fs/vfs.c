@@ -339,12 +339,14 @@ void vfs_close(vfs_file_t *file) {
 int vfs_read(vfs_file_t *file, void *buf, int size) {
     if (!file || !file->valid || !file->mount) return -1;
     if (!file->mount->ops->read) return -1;
+    
     return file->mount->ops->read(file->mount->fs_private, file->fs_handle, buf, size);
 }
 
 int vfs_write(vfs_file_t *file, const void *buf, int size) {
     if (!file || !file->valid || !file->mount) return -1;
     if (!file->mount->ops->write) return -1;
+
     return file->mount->ops->write(file->mount->fs_private, file->fs_handle, buf, size);
 }
 
@@ -372,6 +374,7 @@ uint32_t vfs_file_size(vfs_file_t *file) {
 
 int vfs_list_directory(const char *path, vfs_dirent_t *entries, int max) {
     if (!path || !entries) return -1;
+    
 
     char normalized[VFS_MAX_PATH];
     vfs_normalize_path(path, normalized);
@@ -483,10 +486,15 @@ bool vfs_mkdir(const char *path) {
 
     const char *rel_path = NULL;
     vfs_mount_t *mount = vfs_resolve_mount(normalized, &rel_path);
+
+    // If it's in /dev/, check if it's within a mounted volume deeper than the device node
+    if (vfs_starts_with(normalized, "/dev/")) {
+        if (!mount || !rel_path || rel_path[0] == '\0') {
+            return false; // Protect raw device nodes
+        }
+    }
+
     if (!mount || !mount->ops->mkdir) return false;
-
-    if (!rel_path || rel_path[0] == '\0') return false;
-
     return mount->ops->mkdir(mount->fs_private, rel_path);
 }
 
@@ -496,17 +504,21 @@ bool vfs_rmdir(const char *path) {
     char normalized[VFS_MAX_PATH];
     vfs_normalize_path(path, normalized);
 
-    // Protect root and virtual directories
+    // Protect root and virtual /dev directory itself
     if (normalized[0] == '/' && normalized[1] == '\0') return false;
     if (vfs_strcmp(normalized, "/dev") == 0) return false;
-    if (vfs_starts_with(normalized, "/dev/")) return false;
 
     const char *rel_path = NULL;
     vfs_mount_t *mount = vfs_resolve_mount(normalized, &rel_path);
+
+    // If it's in /dev/, allow only if it's inside a mount beyond the device node
+    if (vfs_starts_with(normalized, "/dev/")) {
+        if (!mount || !rel_path || rel_path[0] == '\0') {
+            return false; // Protect raw device nodes
+        }
+    }
+
     if (!mount || !mount->ops->rmdir) return false;
-
-    if (!rel_path || rel_path[0] == '\0') return false;
-
     return mount->ops->rmdir(mount->fs_private, rel_path);
 }
 
@@ -516,17 +528,21 @@ bool vfs_delete(const char *path) {
     char normalized[VFS_MAX_PATH];
     vfs_normalize_path(path, normalized);
 
-    // Protect root and virtual directories
+    // Protect root and virtual /dev directory itself
     if (normalized[0] == '/' && normalized[1] == '\0') return false;
     if (vfs_strcmp(normalized, "/dev") == 0) return false;
-    if (vfs_starts_with(normalized, "/dev/")) return false;
 
     const char *rel_path = NULL;
     vfs_mount_t *mount = vfs_resolve_mount(normalized, &rel_path);
+
+    // If it's in /dev/, allow only if it's inside a mount beyond the device node
+    if (vfs_starts_with(normalized, "/dev/")) {
+        if (!mount || !rel_path || rel_path[0] == '\0') {
+            return false; // Protect raw device nodes
+        }
+    }
+
     if (!mount || !mount->ops->unlink) return false;
-
-    if (!rel_path || rel_path[0] == '\0') return false;
-
     return mount->ops->unlink(mount->fs_private, rel_path);
 }
 

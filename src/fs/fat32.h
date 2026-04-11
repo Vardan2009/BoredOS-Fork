@@ -101,6 +101,8 @@ typedef struct {
     bool valid;                     // Is this handle valid?
     uint32_t dir_sector;            // Sector containing the directory entry
     uint32_t dir_offset;            // Offset within that sector
+    bool is_directory;              // Is this a directory?
+    uint8_t attributes;             // File attributes
     void *volume;                   // Pointer to owning FAT32_Volume (or NULL for ramfs)
 } FAT32_FileHandle;
 
