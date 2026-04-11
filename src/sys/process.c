@@ -634,11 +634,6 @@ uint64_t process_terminate_current(void) {
     
     paging_switch_directory(current_process[my_cpu]->pml4_phys);
 
-   
-        kfree(to_delete->user_stack_alloc);
-        to_delete->user_stack_alloc = NULL;
-    }
-
     free_kernel_stack_later[my_cpu] = to_delete->kernel_stack_alloc;
     to_delete->kernel_stack_alloc = NULL;
     free_pml4_later[my_cpu] = to_delete->pml4_phys;
