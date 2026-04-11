@@ -1561,15 +1561,11 @@ static int vfs_realfs_read(void *fs_private, void *file_handle, void *buf, int s
     uint8_t *cluster_buf = (uint8_t*)kmalloc(cluster_size);
     if (!cluster_buf) return -1;
 
-    extern void serial_write(const char*);
-    serial_write("[VFS] vfs_realfs_read enter\n");
-
     uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
     int ret = realfs_read_file(handle, buf, size, cluster_buf);
     spinlock_release_irqrestore(&vol->lock, rflags);
 
     kfree(cluster_buf);
-    serial_write("[VFS] vfs_realfs_read exit\n");
     return ret;
 }
 
@@ -1583,15 +1579,11 @@ static int vfs_realfs_write(void *fs_private, void *file_handle, const void *buf
     uint8_t *cluster_buf = (uint8_t*)kmalloc(cluster_size);
     if (!cluster_buf) return -1;
     
-    extern void serial_write(const char*);
-    serial_write("[VFS] vfs_realfs_write enter\n");
-
     uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
     int ret = realfs_write_file(handle, buf, size, cluster_buf);
     spinlock_release_irqrestore(&vol->lock, rflags);
 
     kfree(cluster_buf);
-    serial_write("[VFS] vfs_realfs_write exit\n");
     return ret;
 }
 

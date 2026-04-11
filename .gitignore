@@ -30,3 +30,4 @@ limine
 .DS_Store
 /build/
 *.o
+disk.img

@@ -710,20 +710,13 @@ static void explorer_load_directory(Window *win, const char *path) {
 
     int count = vfs_list_directory(path, entries, capacity);
     
-    // Trace string to see if we reached here
-    extern void serial_write(const char*); extern void serial_write_num(uint32_t);
-    serial_write("[EXPLORER] load_directory: "); serial_write(path); serial_write(" | loop start. count: "); serial_write_num(count); serial_write("\n");
-        
     while (count == capacity) {
-        serial_write("[EXPLORER] Doubling capacity to: "); serial_write_num(capacity * 2); serial_write("\n");
         capacity *= 2;
         vfs_dirent_t *new_entries = (vfs_dirent_t*)krealloc(entries, capacity * sizeof(vfs_dirent_t));
         if (!new_entries) { kfree(entries); return; }
         entries = new_entries;
         count = vfs_list_directory(path, entries, capacity);
     }
-    
-    serial_write("[EXPLORER] load_directory loop complete.\n");
     
     if (state->items_capacity < count) {
         int new_cap = count < EXPLORER_INITIAL_CAPACITY ? EXPLORER_INITIAL_CAPACITY : count;

@@ -8,29 +8,27 @@
 #include <stdbool.h>
 #include "spinlock.h"
 
-// Per-CPU state. Dynamically allocated at boot based on actual CPU count.
 typedef struct cpu_state {
-    uint32_t cpu_id;           // Logical CPU index (0 = BSP)
-    uint32_t lapic_id;         // Local APIC ID from Limine
-    uint64_t kernel_stack;     // Top of kernel stack for this CPU
-    void    *kernel_stack_alloc; // Base allocation for kfree
-    volatile bool online;      // True once AP is fully initialized
+    struct cpu_state *self;    
+    uint32_t cpu_id;           
+    uint32_t lapic_id;         
+    uint64_t kernel_stack;     
+    void    *kernel_stack_alloc; 
+    volatile bool online;      
+    uint64_t user_rsp_scratch;  
+    uint64_t kernel_syscall_stack; 
 } cpu_state_t;
+ 
+ void smp_init_bsp(void);
 
-// Initialize SMP — call after GDT/IDT/memory init but before wm_init.
-// Pass the Limine SMP response. APs will be started and will enter their
-// idle loops. Returns the number of CPUs brought online.
+
 struct limine_smp_response;
 uint32_t smp_init(struct limine_smp_response *smp_resp);
 
-// Get the current CPU index (0 = BSP). Uses CPUID to read LAPIC ID,
-// then looks up in the cpu table.
 uint32_t smp_this_cpu_id(void);
 
-// Total number of CPUs online.
 uint32_t smp_cpu_count(void);
 
-// Get per-CPU state by index.
 cpu_state_t *smp_get_cpu(uint32_t cpu_id);
 
 #endif

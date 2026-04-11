@@ -45,7 +45,11 @@ isr%2_wrapper:
     push r14
     push r15
     
-    ; Save SSE/FPU state (fxsave requires 16-byte alignment)
+    test qword [rsp + 144], 3
+    jz %%skip_swap
+    swapgs
+%%skip_swap:
+    
     sub rsp, 512
     fxsave [rsp]
 
@@ -76,6 +80,12 @@ isr%2_wrapper:
     pop rcx
     pop rbx
     pop rax
+
+    test qword [rsp + 24], 3
+    jz %%skip_swap_back
+    swapgs
+%%skip_swap_back:
+
     add rsp, 16 ; drop dummy vector and error code
     iretq
 %endmacro
@@ -163,8 +173,12 @@ exception_common:
     push r13
     push r14
     push r15
+
+    test qword [rsp + 144], 3
+    jz .skip_swap_exc
+    swapgs
+.skip_swap_exc:
     
-    ; Save SSE/FPU state (fxsave requires 16-byte alignment)
     sub rsp, 512
     fxsave [rsp]
 
@@ -196,6 +210,12 @@ exception_common:
     pop rcx
     pop rbx
     pop rax
+
+    test qword [rsp + 24], 3
+    jz .skip_swap_back_exc
+    swapgs
+.skip_swap_back_exc:
+
     add rsp, 16 ; drop vector and error code
     iretq
 

@@ -15,15 +15,14 @@ section .text
 ; R9  = arg5
 
 syscall_entry:
-    ; 1. Switch to Kernel Stack safely
-    ; Note: For true SMP safety, we need per-CPU storage (via swapgs).
-    ; For now, we use a global scratch which is only safe because we mask interrupts on entry.
-    mov [rel user_rsp_scratch], rsp
-    mov rsp, [rel kernel_syscall_stack]
+    swapgs 
+    
+    mov [gs:40], rsp
+    mov rsp, [gs:48]
 
-    ; 2. Build iretq frame (compatible with registers_t)
+    ; 2. Build iretq frame 
     push 0x1B           ; SS (User Data)
-    push qword [rel user_rsp_scratch] ; RSP
+    push qword [gs:40]  ; RSP
     push r11            ; RFLAGS (captured by syscall)
     push 0x23           ; CS (User Code)
     push rcx            ; RIP (return address from syscall)
@@ -81,14 +80,7 @@ syscall_entry:
     pop rax
     add rsp, 16 ; drop int_no/err_code
     
-    ; Debug: check RIP before iretq
-    ; We can't easily print from here without destroying registers, 
-    ; but we can at least check if it's canonical.
-    
+    swapgs 
     iretq
 
 section .bss
-global kernel_syscall_stack
-global user_rsp_scratch
-kernel_syscall_stack: resq 1
-user_rsp_scratch: resq 1

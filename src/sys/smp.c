@@ -18,6 +18,16 @@ extern void serial_write_hex(uint64_t n);
 static cpu_state_t *cpu_states = NULL;
 static uint32_t total_cpus = 0;
 static uint32_t bsp_lapic_id = 0;
+static cpu_state_t *bsp_cpu_state = NULL;
+
+#define MSR_GS_BASE         0xC0000101
+#define MSR_KERNEL_GS_BASE  0xC0000102
+
+static inline void wrmsr(uint32_t msr, uint64_t value) {
+    uint32_t low = (uint32_t)value;
+    uint32_t high = (uint32_t)(value >> 32);
+    asm volatile("wrmsr" : : "c"(msr), "a"(low), "d"(high));
+}
 
 static uint32_t read_lapic_id(void) {
     uint32_t eax, ebx, ecx, edx;
@@ -27,6 +37,12 @@ static uint32_t read_lapic_id(void) {
 
 uint32_t smp_this_cpu_id(void) {
     if (total_cpus <= 1) return 0;
+    
+    // Use GS-based self-pointer to get the structure first
+    cpu_state_t *state;
+    asm volatile("movq %%gs:0, %0" : "=r"(state) : : "memory");
+    if (state) return state->cpu_id;
+
     uint32_t lapic = read_lapic_id();
     for (uint32_t i = 0; i < total_cpus; i++) {
         if (cpu_states[i].lapic_id == lapic) return i;
@@ -68,13 +84,21 @@ static void ap_entry(struct limine_smp_info *info) {
     extern void idt_load(void);
     idt_load();
 
+    extern void syscall_init(void);
+    syscall_init();
+
     uint64_t kernel_cr3 = paging_get_pml4_phys();
     asm volatile("mov %0, %%cr3" : : "r"(kernel_cr3));
 
     extern void lapic_enable(void);
     lapic_enable();
 
+    cpu_states[my_id].self = &cpu_states[my_id];
     cpu_states[my_id].online = true;
+    cpu_states[my_id].kernel_syscall_stack = cpu_states[my_id].kernel_stack;
+
+    wrmsr(MSR_GS_BASE, (uint64_t)&cpu_states[my_id]);
+    wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)&cpu_states[my_id]);
 
     serial_write("[SMP] AP ");
     serial_write_num(my_id);
@@ -88,6 +112,19 @@ static void ap_entry(struct limine_smp_info *info) {
     asm volatile("sti");
 
     work_queue_drain_loop();
+}
+
+void smp_init_bsp(void) {
+    static cpu_state_t bsp_state_static = {0};
+    bsp_state_static.cpu_id = 0;
+    bsp_state_static.lapic_id = read_lapic_id();
+    bsp_state_static.self = &bsp_state_static;
+    bsp_state_static.online = true;
+    
+    wrmsr(MSR_GS_BASE, (uint64_t)&bsp_state_static);
+    wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)&bsp_state_static);
+    
+    bsp_cpu_state = &bsp_state_static;
 }
 
 // --- SMP Initialization ---
@@ -132,8 +169,15 @@ uint32_t smp_init(struct limine_smp_response *smp_resp) {
         cpu_states[i].lapic_id = cpu->lapic_id;
 
         if (cpu->lapic_id == bsp_lapic_id) {
-            cpu_states[i].online = true;
+            cpu_states[i] = *bsp_cpu_state; // Copy early BSP state
+            cpu_states[i].self = &cpu_states[i];
+            
+            cpu_states[i].kernel_stack = 0; // Limine stack for now
+            cpu_states[i].kernel_syscall_stack = 0; 
             bsp_index = i;
+            wrmsr(MSR_GS_BASE, (uint64_t)&cpu_states[i]);
+            wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)&cpu_states[i]);
+            
             serial_write("[SMP] BSP CPU ");
             serial_write_num(i);
             serial_write(" (LAPIC ");

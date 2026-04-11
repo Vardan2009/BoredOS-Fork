@@ -23,10 +23,10 @@ process_t processes[MAX_PROCESSES] __attribute__((aligned(16)));
 int process_count = 0;
 static process_t* current_process[MAX_CPUS_SCHED] = {0}; // Per-CPU
 static uint32_t next_pid = 0;
-static void *free_kernel_stack_later = NULL;
-static uint64_t free_pml4_later = 0;
+static void *free_kernel_stack_later[MAX_CPUS_SCHED] = {0};
+static uint64_t free_pml4_later[MAX_CPUS_SCHED] = {0};
 static spinlock_t runqueue_lock = SPINLOCK_INIT;
-static uint32_t next_cpu_assign = 1; // Round-robin CPU assignment (start from CPU 1)
+static uint32_t next_cpu_assign = 1; 
 
 void process_init(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
@@ -376,21 +376,35 @@ process_t* process_get_current(void) {
 }
 
 uint64_t process_schedule(uint64_t current_rsp) {
-    if (free_kernel_stack_later) {
-        kfree(free_kernel_stack_later);
-        free_kernel_stack_later = NULL;
+    uint32_t my_cpu = smp_this_cpu_id();
+    uint64_t rflags = spinlock_acquire_irqsave(&runqueue_lock);
+
+    void *cleanup_stack = NULL;
+    uint64_t cleanup_pml4 = 0;
+
+    if (free_kernel_stack_later[my_cpu]) {
+        cleanup_stack = free_kernel_stack_later[my_cpu];
+        free_kernel_stack_later[my_cpu] = NULL;
     }
-    if (free_pml4_later) {
-        extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
-        paging_destroy_user_pml4_phys(free_pml4_later);
-        free_pml4_later = 0;
+    if (free_pml4_later[my_cpu]) {
+        cleanup_pml4 = free_pml4_later[my_cpu];
+        free_pml4_later[my_cpu] = 0;
     }
 
-    uint32_t my_cpu = smp_this_cpu_id();
     process_t *cur = current_process[my_cpu];
     
-    if (!cur || !cur->next || cur == cur->next) 
+    if (!cur || !cur->next || cur == cur->next) {
+        spinlock_release_irqrestore(&runqueue_lock, rflags);
+
+        // Perform cleanup outside the lock
+        if (cleanup_stack) kfree(cleanup_stack);
+        if (cleanup_pml4) {
+            extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+            paging_destroy_user_pml4_phys(cleanup_pml4);
+        }
+
         return current_rsp;
+    }
         
     // Save context
     cur->rsp = current_rsp;
@@ -412,11 +426,8 @@ uint64_t process_schedule(uint64_t current_rsp) {
         next_proc = next_proc->next;
     }
     
-    // If we didn't find a ready process for our CPU, stay on current (unless we are terminated)
     if (next_proc->cpu_affinity != my_cpu || next_proc->pid == 0xFFFFFFFF) {
-        // Fallback to idle if current is terminated
         if (cur && cur->pid == 0xFFFFFFFF) {
-            // Find the idle process for this CPU
             for (int i = 0; i < MAX_PROCESSES; i++) {
                 if (processes[i].pid == 0 || (processes[i].cpu_affinity == my_cpu && processes[i].is_user == false)) {
                     next_proc = &processes[i];
@@ -424,18 +435,25 @@ uint64_t process_schedule(uint64_t current_rsp) {
                 }
             }
         } else {
+            spinlock_release_irqrestore(&runqueue_lock, rflags);
+
+            if (cleanup_stack) kfree(cleanup_stack);
+            if (cleanup_pml4) {
+                extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+                paging_destroy_user_pml4_phys(cleanup_pml4);
+            }
+
             return current_rsp;
         }
     }
     
     current_process[my_cpu] = next_proc;
     
-    // Update Kernel Stack for User Mode interrupts and System Calls
     if (current_process[my_cpu]->is_user && current_process[my_cpu]->kernel_stack) {
         tss_set_stack_cpu(my_cpu, current_process[my_cpu]->kernel_stack);
-        if (my_cpu == 0) {
-            extern uint64_t kernel_syscall_stack;
-            kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
+        cpu_state_t *cpu_state = smp_get_cpu(my_cpu);
+        if (cpu_state) {
+            cpu_state->kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
         }
     }
     
@@ -443,8 +461,16 @@ uint64_t process_schedule(uint64_t current_rsp) {
     paging_switch_directory(current_process[my_cpu]->pml4_phys);
     
     current_process[my_cpu]->ticks++;
+    uint64_t next_rsp = current_process[my_cpu]->rsp;
 
-    return current_process[my_cpu]->rsp;
+    spinlock_release_irqrestore(&runqueue_lock, rflags);
+    if (cleanup_stack) kfree(cleanup_stack);
+    if (cleanup_pml4) {
+        extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+        paging_destroy_user_pml4_phys(cleanup_pml4);
+    }
+
+    return next_rsp;
 }
 
 process_t* process_get_by_pid(uint32_t pid) {
@@ -600,25 +626,22 @@ uint64_t process_terminate_current(void) {
     // 4. Load context for the NEXT process
     if (current_process[my_cpu]->is_user && current_process[my_cpu]->kernel_stack) {
         tss_set_stack_cpu(my_cpu, current_process[my_cpu]->kernel_stack);
-        if (my_cpu == 0) {
-            extern uint64_t kernel_syscall_stack;
-            kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
+        cpu_state_t *cpu_state = smp_get_cpu(my_cpu);
+        if (cpu_state) {
+            cpu_state->kernel_syscall_stack = current_process[my_cpu]->kernel_stack;
         }
     }
     
     paging_switch_directory(current_process[my_cpu]->pml4_phys);
 
-    // 5. Free memory
-    if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
-    
-    extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
-    if (to_delete->pml4_phys && to_delete->is_user) {
-        paging_destroy_user_pml4_phys(to_delete->pml4_phys);
+   
+        kfree(to_delete->user_stack_alloc);
+        to_delete->user_stack_alloc = NULL;
     }
-    
-    to_delete->user_stack_alloc = NULL;
-    free_kernel_stack_later = to_delete->kernel_stack_alloc;
+
+    free_kernel_stack_later[my_cpu] = to_delete->kernel_stack_alloc;
     to_delete->kernel_stack_alloc = NULL;
+    free_pml4_later[my_cpu] = to_delete->pml4_phys;
     to_delete->pml4_phys = 0;
     
     uint64_t next_rsp = current_process[my_cpu]->rsp;
@@ -666,4 +689,3 @@ process_t* process_get_by_ui_window(void *win) {
     }
     return NULL;
 }
-

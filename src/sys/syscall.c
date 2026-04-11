@@ -77,6 +77,14 @@ static void smp_user_wrapper(void *arg) {
 }
 
 void syscall_init(void) {
+    uint64_t efer = rdmsr(MSR_EFER);
+    efer |= 1; 
+    wrmsr(MSR_EFER, efer);
+    uint64_t star = ((uint64_t)0x001B << 48) | ((uint64_t)0x0008 << 32);
+    wrmsr(MSR_STAR, star);
+    extern void syscall_entry(void);
+    wrmsr(MSR_LSTAR, (uint64_t)syscall_entry);
+    wrmsr(MSR_FMASK, 0x200); 
 }
 
 static void user_window_close(Window *win) {

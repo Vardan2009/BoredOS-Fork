@@ -158,6 +158,8 @@ void kmain(void) {
         // The memory manager will now scan the memory map and manage all usable regions.
         memory_manager_init_from_memmap(memmap_request.response);
         serial_write("[DEBUG] memory_manager_init OK\n");
+        smp_init_bsp();
+        serial_write("[DEBUG] smp_init_bsp OK\n");
     } else {
         serial_write("[DEBUG] ERROR: No usable memory for heap! Check Limine memmap.\n");
         hcf();
