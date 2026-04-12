@@ -16,7 +16,7 @@ void get_os_info(os_info_t *info) {
     const char *os_version = "26.4";
     const char *os_codename = "Geometry";
     const char *kernel_name = "Boredkernel";
-    const char *kernel_version = "3.2.3";
+    const char *kernel_version = "4.0.0";
     const char *build_date = __DATE__;
     const char *build_time = __TIME__;
     const char *build_arch = "x86_64";
