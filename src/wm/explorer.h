@@ -70,10 +70,10 @@ typedef struct {
 
 void explorer_init(void);
 void explorer_reset(void);
-void explorer_open_directory(const char *path); // Creates a NEW window
+void explorer_open_directory(const char *path);
+void explorer_open_target(const char *path); 
 
-// Drag and Drop support
-// This now needs to find WHICH explorer window is under the mouse
+
 bool explorer_get_file_at(int screen_x, int screen_y, char *out_path, bool *is_dir);
 void explorer_import_file(Window *win, const char *source_path); // To focused or default
 void explorer_import_file_to(Window *win, const char *source_path, const char *dest_dir);
@@ -81,18 +81,15 @@ void explorer_refresh(Window *win);
 void explorer_refresh_all(void);
 void explorer_clear_click_state(Window *win);
 
-// String Helpers
 size_t explorer_strlen(const char *str);
 void explorer_strcpy(char *dest, const char *src);
 void explorer_strcat(char *dest, const char *src);
 
-// Clipboard (System-wide)
 void explorer_clipboard_copy(const char *path);
 void explorer_clipboard_cut(const char *path);
 void explorer_clipboard_paste(Window *win, const char *dest_dir);
 bool explorer_clipboard_has_content(void);
 
-// File Operations
 bool explorer_delete_permanently(const char *path);
 bool explorer_delete_recursive(const char *path);
 void explorer_create_shortcut(Window *win, const char *target_path);

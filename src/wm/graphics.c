@@ -402,8 +402,11 @@ void draw_rounded_rect_blurred(int x, int y, int w, int h, int radius, uint32_t 
     
     for (int r = 0; r < h; r++) {
         int g_y = y + r;
+        if (g_y < 0 || g_y >= sh) continue;
+        
         for (int c = 0; c < w; c++) {
             int g_x = x + c;
+            if (g_x < 0 || g_x >= sw) continue;
             
             int r_sum = 0, g_sum = 0, b_sum = 0, count = 0;
             int start_kx = g_x - blur_radius;

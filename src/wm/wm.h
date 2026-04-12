@@ -68,6 +68,24 @@ struct Window {
     bool resizable;
 };
 
+#define SPOTLIGHT_MAX_RESULTS 6
+#define SPOTLIGHT_MODAL_WIDTH 520
+#define SPOTLIGHT_RESULT_HEIGHT 40
+#define SPOTLIGHT_SEARCH_HEIGHT 48
+
+#include "../sys/file_index.h"
+
+typedef struct {
+    bool visible;
+    char search_query[256];
+    int search_len;
+    int cursor_pos;
+    file_index_result_t results[SPOTLIGHT_MAX_RESULTS];
+    int result_count;
+    int selected_index;
+    int last_query_hash;
+} spotlight_state_t;
+
 void wm_init(void);
 void wm_handle_mouse(int dx, int dy, uint8_t buttons, int dz);
 void wm_handle_key(char c, bool pressed);

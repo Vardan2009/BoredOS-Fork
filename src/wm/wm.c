@@ -13,6 +13,8 @@
 #include <stddef.h>
 #include "wallpaper.h"
 #include "fat32.h"
+#include "file_index.h"
+#include "../dev/ps2.h"
 #define STBI_NO_STDIO
 #include "userland/stb_image.h"
 #include "memory_manager.h"
@@ -87,6 +89,125 @@ static int notif_x_offset = 420; // Starts offscreen
 static bool notif_active = false;
 extern bool ps2_ctrl_pressed;
 
+static spotlight_state_t spotlight_state = {0};
+static bool spotlight_index_built = false;  // Track if index has been built
+
+static bool force_redraw = true;
+
+static void spotlight_update_search(void) {
+    // Note: Index must already be loaded/built before searching
+    // Don't build here - this runs on every keystroke!
+    
+    int query_hash = 0;
+    for (int i = 0; spotlight_state.search_query[i] && i < 256; i++) {
+        query_hash = (query_hash * 31) + spotlight_state.search_query[i];
+    }
+    
+    if (query_hash == spotlight_state.last_query_hash) {
+        return; 
+    }
+    
+    spotlight_state.last_query_hash = query_hash;
+    spotlight_state.result_count = 0;
+    spotlight_state.selected_index = 0;
+    
+    if (spotlight_state.search_len == 0) {
+        return; 
+    }
+    
+    file_index_result_t results[SPOTLIGHT_MAX_RESULTS];
+    int count = file_index_find_fuzzy(spotlight_state.search_query, results, SPOTLIGHT_MAX_RESULTS);
+    
+    spotlight_state.result_count = count;
+    for (int i = 0; i < count && i < SPOTLIGHT_MAX_RESULTS; i++) {
+        spotlight_state.results[i] = results[i];
+    }
+    
+    int sw = get_screen_width();
+    int sh = get_screen_height();
+    int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+    int modal_y = (sh * 2 / 5) - (modal_height / 2);
+    
+    graphics_mark_dirty(0, 0, sw, sh);
+    force_redraw = true;
+}
+
+static void wm_spotlight_handle_key(char c) {
+    if (c == 27) {  
+        spotlight_state.visible = false;
+        force_redraw = true;
+        return;
+    }
+    
+    if (c == '\n') {  
+        if (spotlight_state.result_count > 0 && spotlight_state.selected_index < spotlight_state.result_count) {
+            const char *file_path = spotlight_state.results[spotlight_state.selected_index].entry.path;
+            explorer_open_target(file_path);
+            spotlight_state.visible = false;
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c == 17) {  
+        if (spotlight_state.selected_index > 0) {
+            spotlight_state.selected_index--;
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c == 18) { 
+        if (spotlight_state.selected_index < spotlight_state.result_count - 1) {
+            spotlight_state.selected_index++;
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c == '\b' || c == 127) {  
+        if (spotlight_state.cursor_pos > 0) {
+            for (int i = spotlight_state.cursor_pos - 1; i < spotlight_state.search_len; i++) {
+                spotlight_state.search_query[i] = spotlight_state.search_query[i + 1];
+            }
+            spotlight_state.search_len--;
+            spotlight_state.cursor_pos--;
+            spotlight_state.search_query[spotlight_state.search_len] = 0;
+            spotlight_update_search();
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c == 19) {  
+        if (spotlight_state.cursor_pos > 0) {
+            spotlight_state.cursor_pos--;
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c == 20) {  
+        if (spotlight_state.cursor_pos < spotlight_state.search_len) {
+            spotlight_state.cursor_pos++;
+            force_redraw = true;
+        }
+        return;
+    }
+    
+    if (c >= 32 && c <= 126 && spotlight_state.search_len < 255) {
+        for (int i = spotlight_state.search_len; i >= spotlight_state.cursor_pos; i--) {
+            spotlight_state.search_query[i + 1] = spotlight_state.search_query[i];
+        }
+        spotlight_state.search_query[spotlight_state.cursor_pos] = c;
+        spotlight_state.search_len++;
+        spotlight_state.cursor_pos++;
+        spotlight_state.search_query[spotlight_state.search_len] = 0;
+        spotlight_update_search();
+        force_redraw = true;
+    }
+}
+
 // Dragging State
 static bool is_dragging = false;
 static bool is_resizing = false;
@@ -118,8 +239,8 @@ static Window *drag_src_win = NULL;
 static Window *all_windows[32];
 static int window_count = 0;
 
-// Redraw system
-static bool force_redraw = true;  
+// Redraw system (moved to be with spotlight state)
+// static bool force_redraw = true;  (moved earlier)
 static uint32_t timer_ticks = 0;
 
 // Cursor state
@@ -1309,6 +1430,144 @@ bool rect_contains(int x, int y, int w, int h, int px, int py) {
     return px >= x && px < x + w && py >= y && py < y + h;
 }
 
+static void wm_render_spotlight(int y_start, int y_end, DirtyRect dirty) {
+    if (!spotlight_state.visible) {
+        return;
+    }
+    
+    int sw = get_screen_width();
+    int sh = get_screen_height();
+    
+    int modal_width = SPOTLIGHT_MODAL_WIDTH;
+    int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+    
+    if (spotlight_state.result_count == 0 && spotlight_state.search_len > 0) {
+        modal_height = SPOTLIGHT_SEARCH_HEIGHT + SPOTLIGHT_RESULT_HEIGHT + 20; 
+    }
+    
+    int modal_x = (sw - modal_width) / 2;
+    int modal_y = (sh * 2 / 5) - (modal_height / 2);
+    
+    if (modal_y + modal_height <= y_start || modal_y >= y_end) {
+        return;
+    }
+    
+    // Draw modal background - with subtle blur effect
+    draw_rounded_rect_blurred(modal_x, modal_y, modal_width, modal_height, 12, COLOR_DARK_PANEL, 1, 220);
+    
+    int search_x = modal_x + 8;
+    int search_y = modal_y + 8;
+    int search_width = modal_width - 16;
+    int search_height = 32;
+    
+    draw_rounded_rect_filled(search_x, search_y, search_width, search_height, 6, COLOR_DARK_BG);
+    
+    if (spotlight_state.search_len > 0) {
+        draw_string(search_x + 8, search_y + 8, spotlight_state.search_query, COLOR_DARK_TEXT);
+    } else {
+        draw_string(search_x + 8, search_y + 8, "Search files...", COLOR_DKGRAY);
+    }
+    
+    if (spotlight_state.cursor_pos <= spotlight_state.search_len && spotlight_state.search_len > 0) {
+        ttf_font_t *ttf = graphics_get_current_ttf();
+        char temp_query[256];
+        for (int i = 0; i < spotlight_state.cursor_pos && i < 255; i++) {
+            temp_query[i] = spotlight_state.search_query[i];
+        }
+        temp_query[spotlight_state.cursor_pos] = 0;
+        int cursor_x_offset = (ttf) ? font_manager_get_string_width(ttf, temp_query) : (spotlight_state.cursor_pos * 6);
+        draw_rect(search_x + 8 + cursor_x_offset, search_y + 8, 1, 16, COLOR_DARK_TEXT);
+    }
+    
+    for (int i = 0; i < spotlight_state.result_count && i < SPOTLIGHT_MAX_RESULTS; i++) {
+        if (i < 0 || i >= SPOTLIGHT_MAX_RESULTS) {
+            break;
+        }
+        
+        int result_x = modal_x + 4;
+        int result_y = modal_y + SPOTLIGHT_SEARCH_HEIGHT + 4 + (i * SPOTLIGHT_RESULT_HEIGHT);
+        int result_width = modal_width - 8;
+        
+        if (i == spotlight_state.selected_index) {
+            draw_rounded_rect_filled(result_x, result_y, result_width, SPOTLIGHT_RESULT_HEIGHT - 2, 6, COLOR_DARK_BORDER);
+        }
+        
+        const char *full_path = spotlight_state.results[i].entry.path;
+        if (!full_path || full_path[0] == 0) {
+            continue;  
+        }
+        
+        const char *filename = full_path;
+        
+        for (int j = 0; full_path[j]; j++) {
+            if (full_path[j] == '/') {
+                filename = &full_path[j + 1];
+            }
+        }
+        
+        if (!filename || filename[0] == 0) {
+            continue;
+        }
+        
+        draw_string(result_x + 8, result_y + 8, filename, COLOR_DARK_TEXT);
+        
+        if (!spotlight_state.results[i].entry.is_directory) {
+            char size_str[32];
+            uint32_t size = spotlight_state.results[i].entry.size;
+            
+            if (size < 1024) {
+                // Bytes
+                size_str[0] = '0' + ((size / 1) % 10);
+                size_str[1] = 'B';
+                size_str[2] = 0;
+            } else if (size < 1024 * 1024) {
+                // Kilobytes - properly format for values up to 1023 KB
+                int kb = size / 1024;
+                if (kb >= 100) {
+                    size_str[0] = '0' + (kb / 100);
+                    size_str[1] = '0' + ((kb / 10) % 10);
+                    size_str[2] = '0' + (kb % 10);
+                    size_str[3] = 'K';
+                    size_str[4] = 'B';
+                    size_str[5] = 0;
+                } else {
+                    size_str[0] = '0' + (kb / 10);
+                    size_str[1] = '0' + (kb % 10);
+                    size_str[2] = 'K';
+                    size_str[3] = 'B';
+                    size_str[4] = 0;
+                }
+            } else {
+                // Megabytes - properly format for any MB value
+                int mb = size / (1024 * 1024);
+                if (mb >= 100) {
+                    size_str[0] = '0' + (mb / 100);
+                    size_str[1] = '0' + ((mb / 10) % 10);
+                    size_str[2] = '0' + (mb % 10);
+                    size_str[3] = 'M';
+                    size_str[4] = 'B';
+                    size_str[5] = 0;
+                } else {
+                    size_str[0] = '0' + (mb / 10);
+                    size_str[1] = '0' + (mb % 10);
+                    size_str[2] = 'M';
+                    size_str[3] = 'B';
+                    size_str[4] = 0;
+                }
+            }
+            
+            int size_x = result_x + result_width - 8 - 32;  // Account for wider size strings
+            draw_string(size_x, result_y + 8, size_str, COLOR_DKGRAY);
+        }
+    }
+    
+    // Draw "No results" message if needed
+    if (spotlight_state.search_len > 0 && spotlight_state.result_count == 0) {
+        int msg_y = modal_y + SPOTLIGHT_SEARCH_HEIGHT + 10;
+        draw_string(modal_x + 20, msg_y, "No results found", COLOR_DKGRAY);
+    }
+}
+
 static Window *sorted_windows_cache[32];
 static int sorted_window_count_cache = 0;
 
@@ -1393,7 +1652,7 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
         if (dock_y < cy + ch && dock_y + dock_h > cy) {
             int d_item_sz = 48, d_space = 10, d_total_w = 12 * (d_item_sz + d_space);
             int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
-            draw_rounded_rect_blurred(d_bg_x, dock_y, d_bg_w, dock_h, 18, COLOR_DOCK_BG, 5, 140);
+            draw_rounded_rect_blurred(d_bg_x, dock_y, d_bg_w, dock_h, 18, COLOR_DOCK_BG, 1, 180);
             int dx = (sw - d_total_w) / 2, dy = dock_y + 6;
             draw_dock_files(dx, dy); dx += d_item_sz+d_space;
             draw_dock_settings(dx, dy); dx += d_item_sz+d_space;
@@ -1465,6 +1724,9 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
                 draw_string(nx + 15, ny + 30, notif_text, COLOR_DKGRAY);
             }
         }
+        
+        // Render spotlight modal
+        wm_render_spotlight(cy, cy + ch, dirty);
         
         if (wm_custom_paint_hook) wm_custom_paint_hook();
         
@@ -1678,6 +1940,29 @@ void wm_remove_window(Window *win) {
 void wm_handle_click(int x, int y) {
     int sh = get_screen_height();
     int sw = get_screen_width();
+    
+    if (spotlight_state.visible) {
+        int modal_width = SPOTLIGHT_MODAL_WIDTH;
+        int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+        int modal_x = (sw - modal_width) / 2;
+        int modal_y = (sh * 2 / 5) - (modal_height / 2);
+        
+        if (rect_contains(modal_x, modal_y, modal_width, modal_height, x, y)) {
+            int result_click_y = y - (modal_y + SPOTLIGHT_SEARCH_HEIGHT + 4);
+            if (result_click_y >= 0 && result_click_y < spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) {
+                int result_idx = result_click_y / SPOTLIGHT_RESULT_HEIGHT;
+                if (result_idx >= 0 && result_idx < spotlight_state.result_count) {
+                    spotlight_state.selected_index = result_idx;
+                    const char *file_path = spotlight_state.results[result_idx].entry.path;
+                    spotlight_state.visible = false;
+                }
+            }
+        } else {
+            spotlight_state.visible = false;
+        }
+        force_redraw = true;
+        return;
+    }
     
     if (msg_box_visible) {
         int mw = 320;
@@ -2712,9 +2997,39 @@ void wm_show_notification(const char *msg) {
     force_redraw = true;
 }
 
+// Wrapper for work queue - builds file index asynchronously
+static void build_file_index_async(void *arg) {
+    (void)arg;  // Unused
+    file_index_build();
+}
+
 void wm_handle_key(char c, bool pressed) {
     if (pressed && c == 'p' && ps2_ctrl_pressed) {
         process_create_elf("/bin/screenshot.elf", NULL);
+        return;
+    }
+    
+    if (pressed && c == ' ' && ps2_ctrl_pressed && ps2_shift_pressed()) {
+        spotlight_state.visible = !spotlight_state.visible;
+        if (spotlight_state.visible) {
+            // Check current index status - it may still be building in background
+            spotlight_index_built = file_index_is_valid();
+            // Clear search state when opening
+            spotlight_state.search_len = 0;
+            spotlight_state.search_query[0] = 0;
+            spotlight_state.cursor_pos = 0;
+            spotlight_state.result_count = 0;
+            spotlight_state.selected_index = 0;
+        }
+        int sw = get_screen_width();
+        int sh = get_screen_height();
+        graphics_mark_dirty(0, 0, sw, sh);
+        force_redraw = true;
+        return;
+    }
+    
+    if (spotlight_state.visible && pressed) {
+        wm_spotlight_handle_key(c);
         return;
     }
     
@@ -2786,11 +3101,22 @@ void wm_process_deferred_thumbs(void) {
 void wm_init(void) {
     disk_manager_init();
     disk_manager_scan();
-    // Drives are now dynamically managed - only real drives are registered
 
     cmd_init();
     explorer_init();
     wallpaper_init();
+    
+    file_index_init();
+    
+    // Try to load the file index from persistent cache
+    // If it doesn't exist, queue an async build
+    if (!file_index_load()) {
+        // No cache exists - queue async build to background
+        work_queue_submit(build_file_index_async, NULL);
+    } else {
+        // Cache loaded - mark as ready
+        spotlight_index_built = true;
+    }
     
     refresh_desktop_icons();
     
@@ -2857,4 +3183,7 @@ void wm_timer_tick(void) {
 
 void wm_notify_fs_change(void) {
     periodic_refresh_pending = true;
+    
+    file_index_invalidate_cache();
+    spotlight_index_built = false;  
 }

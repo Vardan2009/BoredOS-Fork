@@ -805,7 +805,7 @@ void explorer_open_directory(const char *path) {
     explorer_create_window(path);
 }
 
-static void explorer_open_target(const char *path) {
+void explorer_open_target(const char *path) {
     if (vfs_is_directory(path)) {
         explorer_open_directory(path);
     } else {

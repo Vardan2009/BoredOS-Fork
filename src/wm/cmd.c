@@ -2273,17 +2273,6 @@ static void create_ramfs_files(void) {
         }
         fat32_close(fh);
     }
-
-    fh = fat32_open("root/Apps/DOOM.c", "w");
-    if (fh) {
-        const char *content = 
-            "int main(){\n"
-            "      puts(\"To DOOM, or not to DOOM.\\n\");\n"
-            "      puts(\"-Me\\n\");\n"
-            "}\n";
-        fat32_write(fh, (void *)content, cmd_strlen(content));
-        fat32_close(fh);
-    }
 }
 
 

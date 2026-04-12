@@ -269,3 +269,7 @@ uint64_t mouse_handler(registers_t *regs) {
 void ps2_init(void) {
     mouse_init();
 }
+
+bool ps2_shift_pressed(void) {
+    return shift_pressed;
+}

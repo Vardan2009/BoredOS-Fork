@@ -13,4 +13,6 @@ uint64_t timer_handler(registers_t *regs);
 uint64_t keyboard_handler(registers_t *regs);
 uint64_t mouse_handler(registers_t *regs);
 
+bool ps2_shift_pressed(void);
+
 #endif
