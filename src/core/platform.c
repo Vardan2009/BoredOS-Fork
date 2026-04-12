@@ -5,6 +5,7 @@
 #include "limine.h"
 #include <stddef.h>
 #include "platform.h"
+#include "kutils.h"
 static volatile struct limine_hhdm_request hhdm_request __attribute__((used, section(".requests"))) = {
     .id = LIMINE_HHDM_REQUEST,
     .revision = 0,
@@ -79,4 +80,74 @@ void platform_get_cpu_vendor(char *vendor) {
     *((uint32_t *)&p[4]) = edx;
     *((uint32_t *)&p[8]) = ecx;
     p[12] = '\0';
+}
+
+void platform_get_cpu_info(cpu_info_t *info) {
+    uint32_t eax, ebx, ecx, edx;
+    
+    // CPUID leaf 1: basic feature information
+    asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
+    
+    info->stepping = eax & 0xF;
+    info->model = (eax >> 4) & 0xF;
+    info->family = (eax >> 8) & 0xF;
+    info->microcode = (ebx >> 8) & 0xFF;
+    info->flags = ((uint64_t)ecx << 32) | edx;  // ECX and EDX contain feature flags
+    info->cache_size = (ebx >> 16) & 0xFF;      // Cache line size in bytes
+}
+
+void platform_get_cpu_flags(char *flags_str) {
+    uint32_t eax, ebx, ecx, edx;
+    
+    flags_str[0] = '\0';
+    
+    // CPUID leaf 1
+    asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
+    
+    // ECX flags
+    if (ecx & (1 << 0)) k_strcpy(flags_str + k_strlen(flags_str), "sse3 ");
+    if (ecx & (1 << 1)) k_strcpy(flags_str + k_strlen(flags_str), "pclmulqdq ");
+    if (ecx & (1 << 3)) k_strcpy(flags_str + k_strlen(flags_str), "monitor ");
+    if (ecx & (1 << 6)) k_strcpy(flags_str + k_strlen(flags_str), "ssse3 ");
+    if (ecx & (1 << 9)) k_strcpy(flags_str + k_strlen(flags_str), "sdbg ");
+    if (ecx & (1 << 12)) k_strcpy(flags_str + k_strlen(flags_str), "fma ");
+    if (ecx & (1 << 13)) k_strcpy(flags_str + k_strlen(flags_str), "cx16 ");
+    if (ecx & (1 << 19)) k_strcpy(flags_str + k_strlen(flags_str), "sse4_1 ");
+    if (ecx & (1 << 20)) k_strcpy(flags_str + k_strlen(flags_str), "sse4_2 ");
+    if (ecx & (1 << 23)) k_strcpy(flags_str + k_strlen(flags_str), "popcnt ");
+    if (ecx & (1 << 25)) k_strcpy(flags_str + k_strlen(flags_str), "aes ");
+    if (ecx & (1 << 26)) k_strcpy(flags_str + k_strlen(flags_str), "xsave ");
+    if (ecx & (1 << 28)) k_strcpy(flags_str + k_strlen(flags_str), "avx ");
+    
+    // EDX flags
+    if (edx & (1 << 0)) k_strcpy(flags_str + k_strlen(flags_str), "fpu ");
+    if (edx & (1 << 3)) k_strcpy(flags_str + k_strlen(flags_str), "pse ");
+    if (edx & (1 << 4)) k_strcpy(flags_str + k_strlen(flags_str), "tsc ");
+    if (edx & (1 << 6)) k_strcpy(flags_str + k_strlen(flags_str), "pae ");
+    if (edx & (1 << 8)) k_strcpy(flags_str + k_strlen(flags_str), "cx8 ");
+    if (edx & (1 << 9)) k_strcpy(flags_str + k_strlen(flags_str), "apic ");
+    if (edx & (1 << 11)) k_strcpy(flags_str + k_strlen(flags_str), "sep ");
+    if (edx & (1 << 15)) k_strcpy(flags_str + k_strlen(flags_str), "cmov ");
+    if (edx & (1 << 23)) k_strcpy(flags_str + k_strlen(flags_str), "mmx ");
+    if (edx & (1 << 24)) k_strcpy(flags_str + k_strlen(flags_str), "fxsr ");
+    if (edx & (1 << 25)) k_strcpy(flags_str + k_strlen(flags_str), "sse ");
+    if (edx & (1 << 26)) k_strcpy(flags_str + k_strlen(flags_str), "sse2 ");
+    
+    // Extended leaf 0x80000001 for advanced flags
+    asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(0x80000001));
+    
+    if (edx & (1 << 11)) k_strcpy(flags_str + k_strlen(flags_str), "syscall ");
+    if (edx & (1 << 20)) k_strcpy(flags_str + k_strlen(flags_str), "nx ");
+    if (edx & (1 << 26)) k_strcpy(flags_str + k_strlen(flags_str), "pdpe1gb ");
+    if (edx & (1 << 27)) k_strcpy(flags_str + k_strlen(flags_str), "rdtscp ");
+    if (edx & (1 << 29)) k_strcpy(flags_str + k_strlen(flags_str), "lm ");
+    
+    if (ecx & (1 << 0)) k_strcpy(flags_str + k_strlen(flags_str), "lahf_lm ");
+    if (ecx & (1 << 5)) k_strcpy(flags_str + k_strlen(flags_str), "abm ");
+    
+    // Remove trailing space
+    int len = k_strlen(flags_str);
+    if (len > 0 && flags_str[len-1] == ' ') {
+        flags_str[len-1] = '\0';
+    }
 }

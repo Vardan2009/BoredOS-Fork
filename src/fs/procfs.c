@@ -4,6 +4,7 @@
 #include "../dev/disk.h"
 #include "memory_manager.h"
 #include "core/kutils.h"
+#include "core/platform.h"
 
 typedef struct {
     uint32_t pid;
@@ -88,34 +89,173 @@ int procfs_read(void *fs_private, void *handle, void *buf, int size) {
         } else if (k_strcmp(h->type, "cpuinfo") == 0) {
             extern uint32_t smp_cpu_count(void);
             extern void platform_get_cpu_model(char *model);
+            extern void platform_get_cpu_vendor(char *vendor);
+            extern void platform_get_cpu_info(cpu_info_t *info);
+            extern void platform_get_cpu_flags(char *flags_str);
+            
             char model[64];
+            char vendor[16];
+            char flags[1024];
+            cpu_info_t info;
+            
             platform_get_cpu_model(model);
-
-            k_strcpy(out, "Processor: ");
-            k_strcpy(out + k_strlen(out), model);
-            k_strcpy(out + k_strlen(out), "\nCores: ");
-            char c_s[16]; k_itoa(smp_cpu_count(), c_s);
-            k_strcpy(out + k_strlen(out), c_s);
-            k_strcpy(out + k_strlen(out), "\nArchitecture: x86_64\n");
+            platform_get_cpu_vendor(vendor);
+            platform_get_cpu_info(&info);
+            platform_get_cpu_flags(flags);
+            
+            uint32_t cpu_count = smp_cpu_count();
+            out[0] = '\0';
+            
+            // Output info for each processor
+            for (uint32_t i = 0; i < cpu_count; i++) {
+                char buf[32];
+                
+                k_strcpy(out + k_strlen(out), "processor\t: ");
+                k_itoa(i, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "vendor_id\t: ");
+                k_strcpy(out + k_strlen(out), vendor);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "cpu family\t: ");
+                k_itoa(info.family, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "model\t\t: ");
+                k_itoa(info.model, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "model name\t: ");
+                k_strcpy(out + k_strlen(out), model);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "stepping\t: ");
+                k_itoa(info.stepping, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "microcode\t: 0x");
+                char hex[16];
+                int temp = info.microcode;
+                int hex_pos = 0;
+                for (int j = 7; j >= 0; j--) {
+                    int digit = (temp >> (j * 4)) & 0xF;
+                    hex[hex_pos++] = digit < 10 ? '0' + digit : 'a' + (digit - 10);
+                }
+                hex[hex_pos] = '\0';
+                k_strcpy(out + k_strlen(out), hex);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "cache size\t: ");
+                k_itoa(info.cache_size, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), " KB\n");
+                
+                k_strcpy(out + k_strlen(out), "physical id\t: 0\n");
+                k_strcpy(out + k_strlen(out), "siblings\t: ");
+                k_itoa(cpu_count, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "core id\t\t: ");
+                k_itoa(i, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "cpu cores\t: ");
+                k_itoa(cpu_count, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "apicid\t\t: ");
+                k_itoa(i, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "initial apicid\t: ");
+                k_itoa(i, buf);
+                k_strcpy(out + k_strlen(out), buf);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "fpu\t\t: yes\n");
+                k_strcpy(out + k_strlen(out), "fpu_exception\t: yes\n");
+                
+                k_strcpy(out + k_strlen(out), "cpuid level\t: 13\n");
+                
+                k_strcpy(out + k_strlen(out), "wp\t\t: yes\n");
+                
+                k_strcpy(out + k_strlen(out), "flags\t\t: ");
+                k_strcpy(out + k_strlen(out), flags);
+                k_strcpy(out + k_strlen(out), "\n");
+                
+                k_strcpy(out + k_strlen(out), "bugs\t\t: \n");
+                k_strcpy(out + k_strlen(out), "bogomips\t: 4800.00\n");
+                
+                if (i < cpu_count - 1) {
+                    k_strcpy(out + k_strlen(out), "\n");
+                }
+            }
         } else if (k_strcmp(h->type, "meminfo") == 0) {
             extern MemStats memory_get_stats(void);
             MemStats stats = memory_get_stats();
-            k_strcpy(out, "MemTotal: ");
-            char m_s[32]; k_itoa(stats.total_memory / 1024, m_s);
+            char m_s[32];
+            
+            k_strcpy(out, "MemTotal:\t");
+            k_itoa(stats.total_memory / 1024, m_s);
             k_strcpy(out + k_strlen(out), m_s);
-            k_strcpy(out + k_strlen(out), " kB\nMemFree: ");
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "MemFree:\t");
             k_itoa(stats.available_memory / 1024, m_s);
             k_strcpy(out + k_strlen(out), m_s);
-            k_strcpy(out + k_strlen(out), " kB\nMemUsed: ");
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "MemAvailable:\t");
+            k_itoa(stats.available_memory / 1024, m_s);
+            k_strcpy(out + k_strlen(out), m_s);
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "Buffers:\t0 kB\n");
+            k_strcpy(out + k_strlen(out), "Cached:\t\t0 kB\n");
+            
+            k_strcpy(out + k_strlen(out), "MemUsed:\t");
             k_itoa(stats.used_memory / 1024, m_s);
             k_strcpy(out + k_strlen(out), m_s);
-            k_strcpy(out + k_strlen(out), " kB\nPeak: ");
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "MemPeak:\t");
             k_itoa(stats.peak_memory_used / 1024, m_s);
             k_strcpy(out + k_strlen(out), m_s);
-            k_strcpy(out + k_strlen(out), " kB\nBlocks: ");
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "SwapTotal:\t0 kB\n");
+            k_strcpy(out + k_strlen(out), "SwapFree:\t0 kB\n");
+            
+            k_strcpy(out + k_strlen(out), "Dirty:\t\t0 kB\n");
+            k_strcpy(out + k_strlen(out), "Writeback:\t0 kB\n");
+            k_strcpy(out + k_strlen(out), "AnonPages:\t");
+            k_itoa(stats.used_memory / 1024, m_s);
+            k_strcpy(out + k_strlen(out), m_s);
+            k_strcpy(out + k_strlen(out), " kB\n");
+            
+            k_strcpy(out + k_strlen(out), "Mapped:\t\t0 kB\n");
+            k_strcpy(out + k_strlen(out), "Shmem:\t\t0 kB\n");
+            
+            k_strcpy(out + k_strlen(out), "Blocks:\t\t");
             k_itoa(stats.allocated_blocks, m_s);
             k_strcpy(out + k_strlen(out), m_s);
-            k_strcpy(out + k_strlen(out), "\nFragmentation: ");
+            k_strcpy(out + k_strlen(out), "\n");
+            
+            k_strcpy(out + k_strlen(out), "FreeBlocks:\t");
+            k_itoa(stats.free_blocks, m_s);
+            k_strcpy(out + k_strlen(out), m_s);
+            k_strcpy(out + k_strlen(out), "\n");
+            
+            k_strcpy(out + k_strlen(out), "Fragmentation:\t");
             k_itoa(stats.fragmentation_percent, m_s);
             k_strcpy(out + k_strlen(out), m_s);
             k_strcpy(out + k_strlen(out), "%\n");
@@ -123,15 +263,30 @@ int procfs_read(void *fs_private, void *handle, void *buf, int size) {
             extern int disk_get_count(void);
             extern Disk* disk_get_by_index(int index);
             int dcount = disk_get_count();
-            k_strcpy(out, "Block Devices:\n");
+            out[0] = '\0';
+            
+            k_strcpy(out, "Character devices:\n");
+            k_strcpy(out + k_strlen(out), "  1 mem\n");
+            k_strcpy(out + k_strlen(out), "  4 tty\n");
+            k_strcpy(out + k_strlen(out), "  5 cua\n");
+            k_strcpy(out + k_strlen(out), "  7 vcs\n");
+            k_strcpy(out + k_strlen(out), "  8 stdin\n");
+            k_strcpy(out + k_strlen(out), " 13 input\n");
+            k_strcpy(out + k_strlen(out), " 14 sound\n");
+            k_strcpy(out + k_strlen(out), " 29 fb\n");
+            k_strcpy(out + k_strlen(out), "189 usb\n\n");
+            
+            k_strcpy(out + k_strlen(out), "Block devices:\n");
             for (int i = 0; i < dcount; i++) {
                 Disk *d = disk_get_by_index(i);
-                if (d) {
-                    k_strcpy(out + k_strlen(out), "  - ");
+                if (d && !d->is_partition) {
+                    k_strcpy(out + k_strlen(out), "  8 ");
                     k_strcpy(out + k_strlen(out), d->devname);
                     k_strcpy(out + k_strlen(out), "\n");
                 }
             }
+            k_strcpy(out + k_strlen(out), " 11 sr\n");
+            k_strcpy(out + k_strlen(out), "253 virtblk\n");
         }
     }
  else {

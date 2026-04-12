@@ -6,10 +6,21 @@
 
 #include <stdint.h>
 
+typedef struct {
+    uint32_t family;
+    uint32_t model;
+    uint32_t stepping;
+    uint32_t microcode;
+    uint64_t flags;
+    uint32_t cache_size;
+} cpu_info_t;
+
 void platform_init(void);
 uint64_t p2v(uint64_t phys);
 uint64_t v2p(uint64_t virt);
 void platform_get_cpu_model(char *model);
 void platform_get_cpu_vendor(char *vendor);
+void platform_get_cpu_info(cpu_info_t *info);
+void platform_get_cpu_flags(char *flags_str);
 
 #endif

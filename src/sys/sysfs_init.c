@@ -7,6 +7,7 @@
 #include "core/kutils.h"
 #include "wm/graphics.h"
 #include "core/platform.h"
+#include "dev/disk.h"
 
 // --- Helper: itoa ---
 static void sys_itoa(int n, char *s) {
@@ -131,15 +132,100 @@ static int read_pci_bus(char *buf, int size, int offset) {
 
 // --- CPU System Implementation ---
 static int read_cpu_info(char *buf, int size, int offset) {
+    char out[2048];
+    k_memset(out, 0, 2048);
+    
+    char vendor[16];
+    char model[64];
+    char flags[1024];
+    cpu_info_t info;
+    
+    platform_get_cpu_vendor(vendor);
+    platform_get_cpu_model(model);
+    platform_get_cpu_info(&info);
+    platform_get_cpu_flags(flags);
+    
+    uint32_t cpu_count = smp_cpu_count();
+    
+    k_strcpy(out, "Vendor: ");
+    k_strcpy(out + k_strlen(out), vendor);
+    k_strcpy(out + k_strlen(out), "\nModel: ");
+    k_strcpy(out + k_strlen(out), model);
+    k_strcpy(out + k_strlen(out), "\nCores: ");
+    char c_s[16]; k_itoa(cpu_count, c_s);
+    k_strcpy(out + k_strlen(out), c_s);
+    k_strcpy(out + k_strlen(out), "\nCPU Family: ");
+    k_itoa(info.family, c_s);
+    k_strcpy(out + k_strlen(out), c_s);
+    k_strcpy(out + k_strlen(out), "\nModel Number: ");
+    k_itoa(info.model, c_s);
+    k_strcpy(out + k_strlen(out), c_s);
+    k_strcpy(out + k_strlen(out), "\nStepping: ");
+    k_itoa(info.stepping, c_s);
+    k_strcpy(out + k_strlen(out), c_s);
+    k_strcpy(out + k_strlen(out), "\nCache Size: ");
+    k_itoa(info.cache_size, c_s);
+    k_strcpy(out + k_strlen(out), c_s);
+    k_strcpy(out + k_strlen(out), " KB\nSpeed: ~3.00 GHz\nFlags: ");
+    k_strcpy(out + k_strlen(out), flags);
+    k_strcpy(out + k_strlen(out), "\n");
+    
+    int len = (int)k_strlen(out);
+    if (offset >= len) return 0;
+    int to_copy = len - offset;
+    if (to_copy > size) to_copy = size;
+    k_memcpy(buf, out + offset, to_copy);
+    return to_copy;
+}
+
+// --- Devices Implementation ---
+static int read_sys_devices(char *buf, int size, int offset) {
+    char out[2048];
+    k_memset(out, 0, 2048);
+    
+    extern int disk_get_count(void);
+    extern Disk* disk_get_by_index(int index);
+    
+    int dcount = disk_get_count();
+    k_strcpy(out, "Block Devices:\n");
+    for (int i = 0; i < dcount; i++) {
+        Disk *d = disk_get_by_index(i);
+        if (d && !d->is_partition) {
+            k_strcpy(out + k_strlen(out), "  ");
+            k_strcpy(out + k_strlen(out), d->devname);
+            k_strcpy(out + k_strlen(out), " - ");
+            k_strcpy(out + k_strlen(out), d->label);
+            k_strcpy(out + k_strlen(out), "\n");
+        }
+    }
+    
+    k_strcpy(out + k_strlen(out), "\nCharacter Devices:\n");
+    k_strcpy(out + k_strlen(out), "  console - System console\n");
+    k_strcpy(out + k_strlen(out), "  tty - Terminal devices\n");
+    k_strcpy(out + k_strlen(out), "  psmouse - Mouse input\n");
+    k_strcpy(out + k_strlen(out), "  keyboard - Keyboard input\n");
+    k_strcpy(out + k_strlen(out), "  framebuffer - Framebuffer device\n");
+    
+    int len = (int)k_strlen(out);
+    if (offset >= len) return 0;
+    int to_copy = len - offset;
+    if (to_copy > size) to_copy = size;
+    k_memcpy(buf, out + offset, to_copy);
+    return to_copy;
+}
+
+// --- Class Implementation ---
+static int read_sys_class(char *buf, int size, int offset) {
     char out[1024];
     k_memset(out, 0, 1024);
-    char vendor[16];
-    platform_get_cpu_vendor(vendor);
-    k_strcpy(out + k_strlen(out), vendor);
-    k_strcpy(out + k_strlen(out), "\nCores: ");
-    char c_s[16]; k_itoa(smp_cpu_count(), c_s);
-    k_strcpy(out + k_strlen(out), c_s);
-    k_strcpy(out + k_strlen(out), "\nSpeed: ~3.00 GHz\nFeatures: sse sse2 sse3 apic smp\n");
+    
+    k_strcpy(out, "Classes:\n");
+    k_strcpy(out + k_strlen(out), "  block - Block device class\n");
+    k_strcpy(out + k_strlen(out), "  input - Input device class\n");
+    k_strcpy(out + k_strlen(out), "  tty - TTY device class\n");
+    k_strcpy(out + k_strlen(out), "  sound - Sound device class\n");
+    k_strcpy(out + k_strlen(out), "  video - Video device class\n");
+    k_strcpy(out + k_strlen(out), "  net - Network device class\n");
     
     int len = (int)k_strlen(out);
     if (offset >= len) return 0;
@@ -172,7 +258,13 @@ void sysfs_init_subsystems(void) {
     subsystem_register("devices", &devices);
     subsystem_register("bus", &bus);
     subsystem_register("class", &class);
-    subsystem_register("kernel/debug", &debug); 
+    subsystem_register("kernel/debug", &debug);
+    
+    // Devices info
+    subsystem_add_file(devices, "list", read_sys_devices, NULL);
+    
+    // Class info
+    subsystem_add_file(class, "list", read_sys_class, NULL);
     
     // CPU info
     subsystem_add_file(kernel, "cpuinfo", read_cpu_info, NULL);
