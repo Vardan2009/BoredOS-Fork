@@ -89,121 +89,120 @@ static int notif_x_offset = 420; // Starts offscreen
 static bool notif_active = false;
 extern bool ps2_ctrl_pressed;
 
-static spotlight_state_t spotlight_state = {0};
-static bool spotlight_index_built = false;  // Track if index has been built
+static lumos_state_t lumos_state = {0};
+static bool lumos_index_built = false;  
 
 static bool force_redraw = true;
 
-static void spotlight_update_search(void) {
-    // Note: Index must already be loaded/built before searching
-    // Don't build here - this runs on every keystroke!
+static void lumos_update_search(void) {
+
     
     int query_hash = 0;
-    for (int i = 0; spotlight_state.search_query[i] && i < 256; i++) {
-        query_hash = (query_hash * 31) + spotlight_state.search_query[i];
+    for (int i = 0; lumos_state.search_query[i] && i < 256; i++) {
+        query_hash = (query_hash * 31) + lumos_state.search_query[i];
     }
     
-    if (query_hash == spotlight_state.last_query_hash) {
+    if (query_hash == lumos_state.last_query_hash) {
         return; 
     }
     
-    spotlight_state.last_query_hash = query_hash;
-    spotlight_state.result_count = 0;
-    spotlight_state.selected_index = 0;
+    lumos_state.last_query_hash = query_hash;
+    lumos_state.result_count = 0;
+    lumos_state.selected_index = 0;
     
-    if (spotlight_state.search_len == 0) {
+    if (lumos_state.search_len == 0) {
         return; 
     }
     
-    file_index_result_t results[SPOTLIGHT_MAX_RESULTS];
-    int count = file_index_find_fuzzy(spotlight_state.search_query, results, SPOTLIGHT_MAX_RESULTS);
+    file_index_result_t results[LUMOS_MAX_RESULTS];
+    int count = file_index_find_fuzzy(lumos_state.search_query, results, LUMOS_MAX_RESULTS);
     
-    spotlight_state.result_count = count;
-    for (int i = 0; i < count && i < SPOTLIGHT_MAX_RESULTS; i++) {
-        spotlight_state.results[i] = results[i];
+    lumos_state.result_count = count;
+    for (int i = 0; i < count && i < LUMOS_MAX_RESULTS; i++) {
+        lumos_state.results[i] = results[i];
     }
     
     int sw = get_screen_width();
     int sh = get_screen_height();
-    int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+    int modal_height = LUMOS_SEARCH_HEIGHT + (lumos_state.result_count * LUMOS_RESULT_HEIGHT) + 10;
     int modal_y = (sh * 2 / 5) - (modal_height / 2);
     
     graphics_mark_dirty(0, 0, sw, sh);
     force_redraw = true;
 }
 
-static void wm_spotlight_handle_key(char c) {
+static void wm_lumos_handle_key(char c) {
     if (c == 27) {  
-        spotlight_state.visible = false;
+        lumos_state.visible = false;
         force_redraw = true;
         return;
     }
     
     if (c == '\n') {  
-        if (spotlight_state.result_count > 0 && spotlight_state.selected_index < spotlight_state.result_count) {
-            const char *file_path = spotlight_state.results[spotlight_state.selected_index].entry.path;
+        if (lumos_state.result_count > 0 && lumos_state.selected_index < lumos_state.result_count) {
+            const char *file_path = lumos_state.results[lumos_state.selected_index].entry.path;
             explorer_open_target(file_path);
-            spotlight_state.visible = false;
+            lumos_state.visible = false;
             force_redraw = true;
         }
         return;
     }
     
     if (c == 17) {  
-        if (spotlight_state.selected_index > 0) {
-            spotlight_state.selected_index--;
+        if (lumos_state.selected_index > 0) {
+            lumos_state.selected_index--;
             force_redraw = true;
         }
         return;
     }
     
     if (c == 18) { 
-        if (spotlight_state.selected_index < spotlight_state.result_count - 1) {
-            spotlight_state.selected_index++;
+        if (lumos_state.selected_index < lumos_state.result_count - 1) {
+            lumos_state.selected_index++;
             force_redraw = true;
         }
         return;
     }
     
     if (c == '\b' || c == 127) {  
-        if (spotlight_state.cursor_pos > 0) {
-            for (int i = spotlight_state.cursor_pos - 1; i < spotlight_state.search_len; i++) {
-                spotlight_state.search_query[i] = spotlight_state.search_query[i + 1];
+        if (lumos_state.cursor_pos > 0) {
+            for (int i = lumos_state.cursor_pos - 1; i < lumos_state.search_len; i++) {
+                lumos_state.search_query[i] = lumos_state.search_query[i + 1];
             }
-            spotlight_state.search_len--;
-            spotlight_state.cursor_pos--;
-            spotlight_state.search_query[spotlight_state.search_len] = 0;
-            spotlight_update_search();
+            lumos_state.search_len--;
+            lumos_state.cursor_pos--;
+            lumos_state.search_query[lumos_state.search_len] = 0;
+            lumos_update_search();
             force_redraw = true;
         }
         return;
     }
     
     if (c == 19) {  
-        if (spotlight_state.cursor_pos > 0) {
-            spotlight_state.cursor_pos--;
+        if (lumos_state.cursor_pos > 0) {
+            lumos_state.cursor_pos--;
             force_redraw = true;
         }
         return;
     }
     
     if (c == 20) {  
-        if (spotlight_state.cursor_pos < spotlight_state.search_len) {
-            spotlight_state.cursor_pos++;
+        if (lumos_state.cursor_pos < lumos_state.search_len) {
+            lumos_state.cursor_pos++;
             force_redraw = true;
         }
         return;
     }
     
-    if (c >= 32 && c <= 126 && spotlight_state.search_len < 255) {
-        for (int i = spotlight_state.search_len; i >= spotlight_state.cursor_pos; i--) {
-            spotlight_state.search_query[i + 1] = spotlight_state.search_query[i];
+    if (c >= 32 && c <= 126 && lumos_state.search_len < 255) {
+        for (int i = lumos_state.search_len; i >= lumos_state.cursor_pos; i--) {
+            lumos_state.search_query[i + 1] = lumos_state.search_query[i];
         }
-        spotlight_state.search_query[spotlight_state.cursor_pos] = c;
-        spotlight_state.search_len++;
-        spotlight_state.cursor_pos++;
-        spotlight_state.search_query[spotlight_state.search_len] = 0;
-        spotlight_update_search();
+        lumos_state.search_query[lumos_state.cursor_pos] = c;
+        lumos_state.search_len++;
+        lumos_state.cursor_pos++;
+        lumos_state.search_query[lumos_state.search_len] = 0;
+        lumos_update_search();
         force_redraw = true;
     }
 }
@@ -235,15 +234,12 @@ static int drag_icon_orig_x = 0;
 static int drag_icon_orig_y = 0;
 static Window *drag_src_win = NULL;
 
-// Windows array for z-order management
 static Window *all_windows[32];
 static int window_count = 0;
 
-// Redraw system (moved to be with spotlight state)
-// static bool force_redraw = true;  (moved earlier)
+
 static uint32_t timer_ticks = 0;
 
-// Cursor state
 static int last_cursor_x = 400;
 static int last_cursor_y = 300;
 
@@ -1430,19 +1426,19 @@ bool rect_contains(int x, int y, int w, int h, int px, int py) {
     return px >= x && px < x + w && py >= y && py < y + h;
 }
 
-static void wm_render_spotlight(int y_start, int y_end, DirtyRect dirty) {
-    if (!spotlight_state.visible) {
+static void wm_render_lumos(int y_start, int y_end, DirtyRect dirty) {
+    if (!lumos_state.visible) {
         return;
     }
     
     int sw = get_screen_width();
     int sh = get_screen_height();
     
-    int modal_width = SPOTLIGHT_MODAL_WIDTH;
-    int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+    int modal_width = LUMOS_MODAL_WIDTH;
+    int modal_height = LUMOS_SEARCH_HEIGHT + (lumos_state.result_count * LUMOS_RESULT_HEIGHT) + 10;
     
-    if (spotlight_state.result_count == 0 && spotlight_state.search_len > 0) {
-        modal_height = SPOTLIGHT_SEARCH_HEIGHT + SPOTLIGHT_RESULT_HEIGHT + 20; 
+    if (lumos_state.result_count == 0 && lumos_state.search_len > 0) {
+        modal_height = LUMOS_SEARCH_HEIGHT + LUMOS_RESULT_HEIGHT + 20; 
     }
     
     int modal_x = (sw - modal_width) / 2;
@@ -1462,37 +1458,37 @@ static void wm_render_spotlight(int y_start, int y_end, DirtyRect dirty) {
     
     draw_rounded_rect_filled(search_x, search_y, search_width, search_height, 6, COLOR_DARK_BG);
     
-    if (spotlight_state.search_len > 0) {
-        draw_string(search_x + 8, search_y + 8, spotlight_state.search_query, COLOR_DARK_TEXT);
+    if (lumos_state.search_len > 0) {
+        draw_string(search_x + 8, search_y + 8, lumos_state.search_query, COLOR_DARK_TEXT);
     } else {
         draw_string(search_x + 8, search_y + 8, "Search files...", COLOR_DKGRAY);
     }
     
-    if (spotlight_state.cursor_pos <= spotlight_state.search_len && spotlight_state.search_len > 0) {
+    if (lumos_state.cursor_pos <= lumos_state.search_len && lumos_state.search_len > 0) {
         ttf_font_t *ttf = graphics_get_current_ttf();
         char temp_query[256];
-        for (int i = 0; i < spotlight_state.cursor_pos && i < 255; i++) {
-            temp_query[i] = spotlight_state.search_query[i];
+        for (int i = 0; i < lumos_state.cursor_pos && i < 255; i++) {
+            temp_query[i] = lumos_state.search_query[i];
         }
-        temp_query[spotlight_state.cursor_pos] = 0;
-        int cursor_x_offset = (ttf) ? font_manager_get_string_width(ttf, temp_query) : (spotlight_state.cursor_pos * 6);
+        temp_query[lumos_state.cursor_pos] = 0;
+        int cursor_x_offset = (ttf) ? font_manager_get_string_width(ttf, temp_query) : (lumos_state.cursor_pos * 6);
         draw_rect(search_x + 8 + cursor_x_offset, search_y + 8, 1, 16, COLOR_DARK_TEXT);
     }
     
-    for (int i = 0; i < spotlight_state.result_count && i < SPOTLIGHT_MAX_RESULTS; i++) {
-        if (i < 0 || i >= SPOTLIGHT_MAX_RESULTS) {
+    for (int i = 0; i < lumos_state.result_count && i < LUMOS_MAX_RESULTS; i++) {
+        if (i < 0 || i >= LUMOS_MAX_RESULTS) {
             break;
         }
         
         int result_x = modal_x + 4;
-        int result_y = modal_y + SPOTLIGHT_SEARCH_HEIGHT + 4 + (i * SPOTLIGHT_RESULT_HEIGHT);
+        int result_y = modal_y + LUMOS_SEARCH_HEIGHT + 4 + (i * LUMOS_RESULT_HEIGHT);
         int result_width = modal_width - 8;
         
-        if (i == spotlight_state.selected_index) {
-            draw_rounded_rect_filled(result_x, result_y, result_width, SPOTLIGHT_RESULT_HEIGHT - 2, 6, COLOR_DARK_BORDER);
+        if (i == lumos_state.selected_index) {
+            draw_rounded_rect_filled(result_x, result_y, result_width, LUMOS_RESULT_HEIGHT - 2, 6, COLOR_DARK_BORDER);
         }
         
-        const char *full_path = spotlight_state.results[i].entry.path;
+        const char *full_path = lumos_state.results[i].entry.path;
         if (!full_path || full_path[0] == 0) {
             continue;  
         }
@@ -1511,9 +1507,9 @@ static void wm_render_spotlight(int y_start, int y_end, DirtyRect dirty) {
         
         draw_string(result_x + 8, result_y + 8, filename, COLOR_DARK_TEXT);
         
-        if (!spotlight_state.results[i].entry.is_directory) {
+        if (!lumos_state.results[i].entry.is_directory) {
             char size_str[32];
-            uint32_t size = spotlight_state.results[i].entry.size;
+            uint32_t size = lumos_state.results[i].entry.size;
             
             if (size < 1024) {
                 // Bytes
@@ -1562,8 +1558,8 @@ static void wm_render_spotlight(int y_start, int y_end, DirtyRect dirty) {
     }
     
     // Draw "No results" message if needed
-    if (spotlight_state.search_len > 0 && spotlight_state.result_count == 0) {
-        int msg_y = modal_y + SPOTLIGHT_SEARCH_HEIGHT + 10;
+    if (lumos_state.search_len > 0 && lumos_state.result_count == 0) {
+        int msg_y = modal_y + LUMOS_SEARCH_HEIGHT + 10;
         draw_string(modal_x + 20, msg_y, "No results found", COLOR_DKGRAY);
     }
 }
@@ -1725,8 +1721,8 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
             }
         }
         
-        // Render spotlight modal
-        wm_render_spotlight(cy, cy + ch, dirty);
+        // Render lumos modal
+        wm_render_lumos(cy, cy + ch, dirty);
         
         if (wm_custom_paint_hook) wm_custom_paint_hook();
         
@@ -1941,24 +1937,24 @@ void wm_handle_click(int x, int y) {
     int sh = get_screen_height();
     int sw = get_screen_width();
     
-    if (spotlight_state.visible) {
-        int modal_width = SPOTLIGHT_MODAL_WIDTH;
-        int modal_height = SPOTLIGHT_SEARCH_HEIGHT + (spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) + 10;
+    if (lumos_state.visible) {
+        int modal_width = LUMOS_MODAL_WIDTH;
+        int modal_height = LUMOS_SEARCH_HEIGHT + (lumos_state.result_count * LUMOS_RESULT_HEIGHT) + 10;
         int modal_x = (sw - modal_width) / 2;
         int modal_y = (sh * 2 / 5) - (modal_height / 2);
         
         if (rect_contains(modal_x, modal_y, modal_width, modal_height, x, y)) {
-            int result_click_y = y - (modal_y + SPOTLIGHT_SEARCH_HEIGHT + 4);
-            if (result_click_y >= 0 && result_click_y < spotlight_state.result_count * SPOTLIGHT_RESULT_HEIGHT) {
-                int result_idx = result_click_y / SPOTLIGHT_RESULT_HEIGHT;
-                if (result_idx >= 0 && result_idx < spotlight_state.result_count) {
-                    spotlight_state.selected_index = result_idx;
-                    const char *file_path = spotlight_state.results[result_idx].entry.path;
-                    spotlight_state.visible = false;
+            int result_click_y = y - (modal_y + LUMOS_SEARCH_HEIGHT + 4);
+            if (result_click_y >= 0 && result_click_y < lumos_state.result_count * LUMOS_RESULT_HEIGHT) {
+                int result_idx = result_click_y / LUMOS_RESULT_HEIGHT;
+                if (result_idx >= 0 && result_idx < lumos_state.result_count) {
+                    lumos_state.selected_index = result_idx;
+                    const char *file_path = lumos_state.results[result_idx].entry.path;
+                    lumos_state.visible = false;
                 }
             }
         } else {
-            spotlight_state.visible = false;
+            lumos_state.visible = false;
         }
         force_redraw = true;
         return;
@@ -3010,16 +3006,16 @@ void wm_handle_key(char c, bool pressed) {
     }
     
     if (pressed && c == ' ' && ps2_ctrl_pressed && ps2_shift_pressed()) {
-        spotlight_state.visible = !spotlight_state.visible;
-        if (spotlight_state.visible) {
+        lumos_state.visible = !lumos_state.visible;
+        if (lumos_state.visible) {
             // Check current index status - it may still be building in background
-            spotlight_index_built = file_index_is_valid();
+            lumos_index_built = file_index_is_valid();
             // Clear search state when opening
-            spotlight_state.search_len = 0;
-            spotlight_state.search_query[0] = 0;
-            spotlight_state.cursor_pos = 0;
-            spotlight_state.result_count = 0;
-            spotlight_state.selected_index = 0;
+            lumos_state.search_len = 0;
+            lumos_state.search_query[0] = 0;
+            lumos_state.cursor_pos = 0;
+            lumos_state.result_count = 0;
+            lumos_state.selected_index = 0;
         }
         int sw = get_screen_width();
         int sh = get_screen_height();
@@ -3028,8 +3024,8 @@ void wm_handle_key(char c, bool pressed) {
         return;
     }
     
-    if (spotlight_state.visible && pressed) {
-        wm_spotlight_handle_key(c);
+    if (lumos_state.visible && pressed) {
+        wm_lumos_handle_key(c);
         return;
     }
     
@@ -3115,7 +3111,7 @@ void wm_init(void) {
         work_queue_submit(build_file_index_async, NULL);
     } else {
         // Cache loaded - mark as ready
-        spotlight_index_built = true;
+        lumos_index_built = true;
     }
     
     refresh_desktop_icons();
@@ -3185,5 +3181,5 @@ void wm_notify_fs_change(void) {
     periodic_refresh_pending = true;
     
     file_index_invalidate_cache();
-    spotlight_index_built = false;  
+    lumos_index_built = false;  
 }
