@@ -19,6 +19,7 @@
 #include "tar.h"
 #include "vfs.h"
 #include "core/kconsole.h"
+#include "core/kutils.h"
 #include "memory_manager.h"
 #include "platform.h"
 #include "wallpaper.h"
@@ -27,8 +28,10 @@
 #include "lapic.h"
 #include "fs/sysfs.h"
 #include "fs/procfs.h"
+#include "fs/bootfs.h"
 #include "sys/kernel_subsystem.h"
 #include "sys/module_manager.h"
+#include "sys/bootfs_state.h"
 
 extern void sysfs_init_subsystems(void);
 
@@ -61,12 +64,25 @@ static volatile struct limine_smp_request smp_request = {
     .flags = 0
 };
 
+__attribute__((used, section(".requests")))
+static volatile struct limine_bootloader_info_request bootloader_info_request = {
+    .id = LIMINE_BOOTLOADER_INFO_REQUEST,
+    .revision = 0
+};
+
+static volatile struct limine_kernel_file_request kernel_file_request = {
+    .id = LIMINE_KERNEL_FILE_REQUEST,
+    .revision = 0
+};
+
 __attribute__((used, section(".requests_start")))
 static volatile struct limine_request *const requests_start_marker[] = {
     (struct limine_request *)&framebuffer_request,
     (struct limine_request *)&memmap_request,
     (struct limine_request *)&module_request,
     (struct limine_request *)&smp_request,
+    (struct limine_request *)&bootloader_info_request,
+    (struct limine_request *)&kernel_file_request,
     NULL
 };
 
@@ -258,6 +274,63 @@ void kmain(void) {
     sysfs_init_subsystems();
     vfs_mount("/sys", "sysfs", "sysfs", sysfs_get_ops(), NULL);
     vfs_mount("/proc", "procfs", "procfs", procfs_get_ops(), NULL);
+    
+    // Initialize bootfs with default values
+    bootfs_init();
+    
+    // Populate bootfs with real Limine bootloader information BEFORE mounting
+    if (bootloader_info_request.response != NULL) {
+        if (bootloader_info_request.response->name) {
+            k_strcpy(g_bootfs_state.bootloader_name, bootloader_info_request.response->name);
+        }
+        if (bootloader_info_request.response->version) {
+            k_strcpy(g_bootfs_state.bootloader_version, bootloader_info_request.response->version);
+        }
+    }
+    
+    // Get kernel size from kernel file request
+    if (kernel_file_request.response != NULL && kernel_file_request.response->kernel_file != NULL) {
+        g_bootfs_state.kernel_size = kernel_file_request.response->kernel_file->size;
+        serial_write("[INIT] Kernel size from bootloader: ");
+        serial_write_hex(g_bootfs_state.kernel_size);
+        serial_write(" bytes\n");
+    }
+    
+    // Set boot time to current ticks
+    extern uint32_t wm_get_ticks(void);
+    g_bootfs_state.boot_time_ms = wm_get_ticks();
+
+    // BEFORE mounting bootfs, capture initrd from Limine modules
+    if (module_request.response != NULL) {
+        g_bootfs_state.num_modules = module_request.response->module_count;
+        
+        serial_write("[INIT] Scanning modules for bootfs state...\n");
+        // Scan modules to find initrd
+        for (uint64_t i = 0; i < module_request.response->module_count; i++) {
+            struct limine_file *mod = module_request.response->modules[i];
+            const char *path = mod->path;
+            
+            if (fs_starts_with(path, "boot():")) path += 7;
+            else if (fs_starts_with(path, "boot:///")) path += 8;
+            
+            int path_len = 0;
+            while (path[path_len]) path_len++;
+            
+            serial_write("[INIT] Module: ");
+            serial_write(path);
+            serial_write(" (");
+            serial_write_hex(mod->size);
+            serial_write(" bytes)\n");
+            
+            if (path_len >= 5 && path[path_len-4] == '.' && path[path_len-3] == 't' && 
+                path[path_len-2] == 'a' && path[path_len-1] == 'r') {
+                g_bootfs_state.initrd_size = mod->size;
+                serial_write("[INIT] -> Initrd detected\n");
+            }
+        }
+    }
+    
+    vfs_mount("/boot", "bootfs", "bootfs", bootfs_get_ops(), NULL);
 
     if (module_request.response == NULL) {
         log_fail("Limine module response NULL");
@@ -329,6 +402,9 @@ void kmain(void) {
     wm_init();
 
     asm volatile("sti");
+    
+    extern void bootfs_refresh_from_disk(void);
+    bootfs_refresh_from_disk();
 
     while (1) {
         wm_process_input();

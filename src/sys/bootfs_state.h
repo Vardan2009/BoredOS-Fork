@@ -1,0 +1,24 @@
+// Copyright (c) 2023-2026 Chris (boreddevnl)
+// This software is released under the GNU General Public License v3.0. See LICENSE file for details.
+#ifndef BOOTFS_STATE_H
+#define BOOTFS_STATE_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct {
+    char bootloader_name[64];
+    char bootloader_version[64];
+    uint64_t boot_time_ms;
+    uint8_t boot_flags;
+    char limine_conf[2048];
+    int limine_conf_len;
+    uint32_t num_modules;
+    uint32_t kernel_size;
+    uint32_t initrd_size;
+    
+} bootfs_state_t;
+extern bootfs_state_t g_bootfs_state;
+void bootfs_state_init(void);
+
+#endif

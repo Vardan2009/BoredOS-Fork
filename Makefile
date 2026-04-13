@@ -166,6 +166,7 @@ $(BUILD_DIR)/initrd.tar: $(KERNEL_ELF)
 	done
 	@if [ -f README.md ]; then cp README.md $(BUILD_DIR)/initrd/; fi
 	@if [ -f LICENSE ]; then cp LICENSE $(BUILD_DIR)/initrd/; fi
+	@if [ -f limine.conf ]; then cp limine.conf $(BUILD_DIR)/initrd/; fi
 	
 	cd $(BUILD_DIR)/initrd && COPYFILE_DISABLE=1 tar --exclude="._*" -cf ../initrd.tar *
 
