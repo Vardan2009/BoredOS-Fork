@@ -15,7 +15,7 @@ static size_t man_strlen(const char *str) {
 
 static void write_man_file(const char *name, const char *content) {
     char path[128] = "/Library/man/";
-    int i = 15;
+    int i = 13;
     while (*name) path[i++] = *name++;
     path[i++] = '.';
     path[i++] = 't';

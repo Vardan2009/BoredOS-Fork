@@ -431,7 +431,7 @@ void wm_refresh_desktop(void) {
 
 static void create_desktop_shortcut(const char *app_name) {
     char path[128] = "/root/Desktop/";
-    int p = 9;
+    int p = 14;
     int n = 0; while(app_name[n]) path[p++] = app_name[n++];
     const char *ext = ".shortcut";
     int e = 0; while(ext[e]) path[p++] = ext[e++];
@@ -3155,10 +3155,6 @@ uint32_t wm_get_ticks(void) {
 // Called by timer interrupt ~60Hz
 void wm_timer_tick(void) {
     timer_ticks++;
-    
-    if (!is_dragging && !is_dragging_file) {
-        // Periodic refresh removed - now triggered by FS events
-    }
     
     static uint8_t last_second = 0xFF;
     
