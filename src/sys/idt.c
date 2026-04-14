@@ -140,12 +140,12 @@ static void pic_remap(void) {
 static void pit_setup(void) {
     uint16_t divisor = 1193182 / 60;  // ~60Hz
     
-    // Send command byte
-    outb(0x43, 0x36); // Channel 0, lobyte/hibyte, mode 3 (square wave), binary
+    // Mode 2: Rate Generator (more appropriate for periodic interrupts)
+    outb(0x43, 0x34); io_wait(); // Channel 0, lobyte/hibyte, mode 2, binary
     
     // Send divisor
-    outb(0x40, divisor & 0xFF);
-    outb(0x40, (divisor >> 8) & 0xFF);
+    outb(0x40, divisor & 0xFF); io_wait();
+    outb(0x40, (divisor >> 8) & 0xFF); io_wait();
 }
 
 void idt_init(void) {

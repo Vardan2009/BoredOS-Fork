@@ -26,5 +26,6 @@ void k_reboot(void);
 void k_shutdown(void);
 void k_beep(int freq, int ms);
 void k_beep_process(void);
+char *k_strstr(const char *haystack, const char *needle);
 
 #endif

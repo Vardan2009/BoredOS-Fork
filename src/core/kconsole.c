@@ -15,7 +15,7 @@ static uint32_t text_color = 0xFFFFFFFF; // White
 void kconsole_init(void) {
     cursor_x = 10;
     cursor_y = 10;
-    kconsole_active = true;
+    kconsole_active = false;
     
     // Initial clear screen during boot
     graphics_clear_back_buffer(0x00000000);

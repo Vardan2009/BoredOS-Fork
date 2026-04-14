@@ -70,6 +70,7 @@ static volatile struct limine_bootloader_info_request bootloader_info_request = 
     .revision = 0
 };
 
+__attribute__((used, section(".requests")))
 static volatile struct limine_kernel_file_request kernel_file_request = {
     .id = LIMINE_KERNEL_FILE_REQUEST,
     .revision = 0
@@ -229,6 +230,15 @@ void kmain(void) {
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     graphics_init(fb);
     kconsole_init();
+
+    // Check for verbose boot flag
+    if (kernel_file_request.response != NULL && kernel_file_request.response->kernel_file != NULL) {
+        const char *cmdline = kernel_file_request.response->kernel_file->cmdline;
+        if (cmdline != NULL && k_strstr(cmdline, "-v") != NULL) {
+            kconsole_set_active(true);
+        }
+    }
+
     log_ok("Graphics and Console ready");
 
     if (memmap_request.response != NULL) {

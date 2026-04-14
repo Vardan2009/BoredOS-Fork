@@ -31,27 +31,24 @@ static inline void wrmsr(uint32_t msr, uint64_t value) {
 }
 
 static uint32_t read_lapic_id(void) {
-    uint32_t eax, ebx, ecx, edx;
-    asm volatile("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx) : "a"(1));
-    return (ebx >> 24) & 0xFF;
+    extern uint64_t hhdm_offset;
+    volatile uint32_t *lapic = (volatile uint32_t *)(hhdm_offset + 0xFEE00000ULL);
+    return (lapic[0x020 / 4] >> 24) & 0xFF;
 }
 
 uint32_t smp_this_cpu_id(void) {
-    if (total_cpus <= 1 || !cpu_states) return 0;
-    
-    // Use GS-based self-pointer to get the structure first
-    cpu_state_t *state = NULL;
-    // Safely check GS:0. If GS is not set or base is 0, this should be handled carefully.
-    // In BoredOS, if GS is not set, this might still fault depending on address space.
-    // However, the cpu_states check above covers the most likely early-boot failure.
-    asm volatile("movq %%gs:0, %0" : "=r"(state) : : "memory");
-    if (state) return state->cpu_id;
+    if (!cpu_states || total_cpus == 0) return 0;
 
     uint32_t lapic = read_lapic_id();
+    if (lapic == bsp_lapic_id) return 0;
+    cpu_state_t *state = NULL;
+    asm volatile("movq %%gs:0, %0" : "=r"(state) : : "memory");
+    if (state && state->lapic_id == lapic) return state->cpu_id;
     for (uint32_t i = 0; i < total_cpus; i++) {
-        if (cpu_states[i].lapic_id == lapic) return i;
+        if (cpu_states[i].online && cpu_states[i].lapic_id == lapic) return i;
     }
-    return 0; // Fallback to BSP
+    
+    return 0; 
 }
 
 uint32_t smp_cpu_count(void) {
@@ -126,7 +123,8 @@ static void ap_entry(struct limine_smp_info *info) {
 void smp_init_bsp(void) {
     static cpu_state_t bsp_state_static = {0};
     bsp_state_static.cpu_id = 0;
-    bsp_state_static.lapic_id = read_lapic_id();
+    bsp_lapic_id = read_lapic_id();
+    bsp_state_static.lapic_id = bsp_lapic_id;
     bsp_state_static.self = &bsp_state_static;
     bsp_state_static.online = true;
     

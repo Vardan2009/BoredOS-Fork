@@ -5,7 +5,7 @@
 
 ---
 
-Welcome to the internal documentation for BoredOS! This directory contains detailed guides on how the OS functions, how to build it, and how to develop applications for it.
+Welcome to the documentation for BoredOS! This directory contains detailed guides on how the OS functions, how to build it, and how to develop applications for it.
 
 ## 📚 Table of Contents
 
@@ -31,5 +31,13 @@ The SDK and toolchain guides for creating your own `.elf` userland binaries.
 -   [`Custom Apps`](appdev/custom_apps.md): A step-by-step tutorial on writing a new graphical C application, editing the Makefile, and bundling it into the ISO.
 -   [`Example Apps`](appdev/examples/README.md): A collection of sample C applications ranging from basic terminal output to advanced TCP networking.
 -   [`Grapher`](appdev/grapher.md): Full reference for the built-in mathematical graphing application — equation syntax, keyboard controls, architecture, and configuration.
+
+### 4. [Usage](usage/)
+General guides on how to interact with the OS.
+-   [`Booting`](usage/booting.md): How to use the Limine bootloader and toggle kernel boot flags like `-v`.
+-   [`Desktop`](usage/desktop.md): Window management, shortcuts, and desktop interaction.
+-   [`Lumos`](usage/lumos.md): Using the system-wide search (`Shift + Ctrl + Space`).
+-   [`Terminal`](usage/terminal.md): Command line interface, redirection, and common commands.
+-   [`Launching Apps`](usage/launching_apps.md): Ways to launch files and applications, plus a software overview.
 
 ---
