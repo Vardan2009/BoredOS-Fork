@@ -8,6 +8,7 @@
 #include "paging.h"
 #include "io.h"
 #include <stddef.h>
+#include "../sys/spinlock.h"
 
 extern void serial_write(const char *str);
 extern void serial_write_num(uint64_t num);
@@ -30,6 +31,7 @@ typedef struct {
     HBA_CMD_HEADER *cmd_list;   // 1KB, 1KB aligned
     void *fis_base;             // 256B, 256B aligned
     HBA_CMD_TBL *cmd_tbl;      // Command table for slot 0
+    spinlock_t lock;           // Port-level lock for thread-safety
 } ahci_port_state_t;
 
 static ahci_port_state_t ports[MAX_AHCI_PORTS];
@@ -150,6 +152,7 @@ int ahci_read_sectors(int port_num, uint64_t lba, uint32_t count, uint8_t *buffe
     ahci_port_state_t *ps = &ports[port_num];
     if (!ps->active) return -1;
 
+    uint64_t rflags = spinlock_acquire_irqsave(&ps->lock);
     HBA_PORT *port = ps->port;
 
     // Clear any pending interrupts/errors
@@ -198,9 +201,8 @@ int ahci_read_sectors(int port_num, uint64_t lba, uint32_t count, uint8_t *buffe
     while (timeout-- > 0) {
         if (!(port->ci & (1 << slot))) break;
         if (port->is & (1 << 30)) {  // Task File Error
-            serial_write("[AHCI] Read error on port ");
-            serial_write_num(port_num);
             serial_write("\n");
+            spinlock_release_irqrestore(&ps->lock, rflags);
             return -1;
         }
     }
@@ -209,9 +211,11 @@ int ahci_read_sectors(int port_num, uint64_t lba, uint32_t count, uint8_t *buffe
         serial_write("[AHCI] Read timeout on port ");
         serial_write_num(port_num);
         serial_write("\n");
+        spinlock_release_irqrestore(&ps->lock, rflags);
         return -1;
     }
 
+    spinlock_release_irqrestore(&ps->lock, rflags);
     return 0;
 }
 
@@ -220,6 +224,7 @@ int ahci_write_sectors(int port_num, uint64_t lba, uint32_t count, const uint8_t
     ahci_port_state_t *ps = &ports[port_num];
     if (!ps->active) return -1;
 
+    uint64_t rflags = spinlock_acquire_irqsave(&ps->lock);
     HBA_PORT *port = ps->port;
 
     port->is = 0xFFFFFFFF;
@@ -266,6 +271,7 @@ int ahci_write_sectors(int port_num, uint64_t lba, uint32_t count, const uint8_t
             serial_write("[AHCI] Write error on port ");
             serial_write_num(port_num);
             serial_write("\n");
+            spinlock_release_irqrestore(&ps->lock, rflags);
             return -1;
         }
     }
@@ -274,9 +280,11 @@ int ahci_write_sectors(int port_num, uint64_t lba, uint32_t count, const uint8_t
         serial_write("[AHCI] Write timeout on port ");
         serial_write_num(port_num);
         serial_write("\n");
+        spinlock_release_irqrestore(&ps->lock, rflags);
         return -1;
     }
 
+    spinlock_release_irqrestore(&ps->lock, rflags);
     return 0;
 }
 
@@ -387,9 +395,8 @@ void ahci_init(void) {
     for (int i = 0; i < 32; i++) {
         ports[i].active = false;
 
-        if (!(pi & (1 << i))) continue;
-
         HBA_PORT *port = &abar->ports[i];
+        ports[i].lock = SPINLOCK_INIT;
         int type = ahci_check_port_type(port);
 
         if (type == 0) { // SATA drive

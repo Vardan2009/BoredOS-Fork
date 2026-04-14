@@ -55,6 +55,7 @@ typedef struct {
     bool mounted;
     uint32_t cached_fat_sector;
     uint8_t cached_fat_buf[512];
+    uint32_t last_allocated_cluster; // Hint for faster allocation
     spinlock_t lock; // Per-volume lock for physical disk operations
 } FAT32_Volume;
 
@@ -455,6 +456,7 @@ static bool realfs_mount_volume(FAT32_Volume *vol, Disk *disk) {
     vol->total_sectors = bpb->total_sectors_32;
     vol->mounted = true;
     vol->cached_fat_sector = 0xFFFFFFFF;
+    vol->last_allocated_cluster = 2;
     
     fs_serial_str("[FAT32] Mounted volume: /dev/");
     fs_serial_str(disk->devname);
@@ -971,8 +973,10 @@ static bool realfs_find_contiguous_free(FAT32_Volume *vol, uint32_t dir_start_cl
 }
 
 static uint32_t realfs_allocate_cluster(FAT32_Volume *vol) {
-    uint32_t current = 2;
+    uint32_t current = vol->last_allocated_cluster;
+    if (current < 2) current = 2;
     uint32_t fat_entries = (vol->fat_size * 512) / 4;
+    uint32_t first_search = current;
     
     // Skip cluster 2 as it's reserved for the root directory in FAT32
     if (current == vol->root_cluster) current++;
@@ -998,10 +1002,13 @@ static uint32_t realfs_allocate_cluster(FAT32_Volume *vol) {
             if (vol->cached_fat_sector == sector) {
                 vol->cached_fat_sector = 0xFFFFFFFF;
             }
+            vol->last_allocated_cluster = current;
             kfree(fat_buf);
             return current;
         }
         current++;
+        if (current >= fat_entries) current = 2;
+        if (current == first_search) break; 
     }
     kfree(fat_buf);
     return 0; // Full
@@ -1042,12 +1049,32 @@ static int realfs_write_file(FAT32_FileHandle *handle, const void *buffer, int s
     
     while (bytes_written < size) {
         uint32_t offset = handle->position % cluster_size;
-        
+
+        if (offset == 0 && handle->position > 0) {
+            uint32_t next = realfs_next_cluster(vol, handle->cluster);
+            if (next >= 0x0FFFFFF8) {
+                uint32_t new_cluster = realfs_allocate_cluster(vol);
+                if (new_cluster == 0) break;
+
+                uint32_t fs = vol->fat_begin_lba + (handle->cluster * 4) / 512;
+                uint32_t fo = (handle->cluster * 4) % 512;
+                uint8_t fbuf[512];
+                if (vol->disk->read_sector(vol->disk, fs, fbuf) == 0) {
+                    uint32_t old = *(uint32_t*)&fbuf[fo];
+                    *(uint32_t*)&fbuf[fo] = (old & 0xF0000000) | (new_cluster & 0x0FFFFFFF);
+                    vol->disk->write_sector(vol->disk, fs, fbuf);
+                    if (vol->cached_fat_sector == fs) vol->cached_fat_sector = 0xFFFFFFFF;
+                }
+                next = new_cluster;
+            }
+            handle->cluster = next;
+        }
+
         // Always zero the buffer first to ensure clean state
         for (int i = 0; i < (int)cluster_size; i++) cluster_buf[i] = 0;
         
         // If we're in the middle of a cluster, read the existing data first
-        if (offset > 0) {
+        if (offset > 0 || (handle->position < handle->size)) {
             if (realfs_read_cluster(vol, handle->cluster, cluster_buf) != 0) break;
         }
         
@@ -1065,27 +1092,6 @@ static int realfs_write_file(FAT32_FileHandle *handle, const void *buffer, int s
         bytes_written += to_copy;
         handle->position += to_copy;
         if (handle->position > handle->size) handle->size = handle->position;
-        
-        if (handle->position % cluster_size == 0 && bytes_written < size) {
-            uint32_t next = realfs_next_cluster(vol, handle->cluster);
-            if (next >= 0x0FFFFFF8) {
-                uint32_t new_cluster = realfs_allocate_cluster(vol);
-                if (new_cluster == 0) break;
-                
-                // Link current to new
-                uint32_t fs = vol->fat_begin_lba + (handle->cluster * 4) / 512;
-                uint32_t fo = (handle->cluster * 4) % 512;
-                uint8_t fbuf[512];
-                if (vol->disk->read_sector(vol->disk, fs, fbuf) == 0) {
-                    uint32_t old = *(uint32_t*)&fbuf[fo];
-                    *(uint32_t*)&fbuf[fo] = (old & 0xF0000000) | (new_cluster & 0x0FFFFFFF);
-                    vol->disk->write_sector(vol->disk, fs, fbuf);
-                    if (vol->cached_fat_sector == fs) vol->cached_fat_sector = 0xFFFFFFFF;
-                }
-                next = new_cluster;
-            }
-            handle->cluster = next;
-        }
     }
     
     if (bytes_written > 0) realfs_update_dir_entry_size(vol, handle);
@@ -1646,12 +1652,22 @@ static int vfs_realfs_read(void *fs_private, void *file_handle, void *buf, int s
     uint8_t *cluster_buf = (uint8_t*)kmalloc(cluster_size);
     if (!cluster_buf) return -1;
 
-    uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
-    int ret = realfs_read_file(handle, buf, size, cluster_buf);
-    spinlock_release_irqrestore(&vol->lock, rflags);
+    int total_read = 0;
+    while (total_read < size) {
+        int to_read = size - total_read;
+        if (to_read > (int)cluster_size) to_read = (int)cluster_size;
+
+        uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
+        int ret = realfs_read_file(handle, (uint8_t*)buf + total_read, to_read, cluster_buf);
+        spinlock_release_irqrestore(&vol->lock, rflags);
+
+        if (ret <= 0) break;
+        total_read += ret;
+        if (ret < to_read) break; 
+    }
 
     kfree(cluster_buf);
-    return ret;
+    return total_read;
 }
 
 static int vfs_realfs_write(void *fs_private, void *file_handle, const void *buf, int size) {
@@ -1664,12 +1680,22 @@ static int vfs_realfs_write(void *fs_private, void *file_handle, const void *buf
     uint8_t *cluster_buf = (uint8_t*)kmalloc(cluster_size);
     if (!cluster_buf) return -1;
     
-    uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
-    int ret = realfs_write_file(handle, buf, size, cluster_buf);
-    spinlock_release_irqrestore(&vol->lock, rflags);
+    int total_written = 0;
+    while (total_written < size) {
+        int to_write = size - total_written;
+        if (to_write > (int)cluster_size) to_write = (int)cluster_size;
+
+        uint64_t rflags = spinlock_acquire_irqsave(&vol->lock);
+        int ret = realfs_write_file(handle, (const uint8_t*)buf + total_written, to_write, cluster_buf);
+        spinlock_release_irqrestore(&vol->lock, rflags);
+
+        if (ret <= 0) break;
+        total_written += ret;
+        if (ret < to_write) break; 
+    }
 
     kfree(cluster_buf);
-    return ret;
+    return total_written;
 }
 
 static int vfs_realfs_seek(void *fs_private, void *file_handle, int offset, int whence) {
