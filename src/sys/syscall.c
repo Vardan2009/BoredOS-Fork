@@ -196,7 +196,10 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
     
     if (syscall_num == 1) { // SYS_WRITE
         extern void cmd_write_len(const char *str, size_t len);
-        cmd_write_len((const char*)arg2, (size_t)arg3);
+        process_t *proc = process_get_current();
+        if (!proc || !proc->is_user || proc->is_terminal_proc) {
+            cmd_write_len((const char*)arg2, (size_t)arg3);
+        }
     } else if (syscall_num == 3) { // SYS_GUI
         int cmd = (int)arg1;
         process_t *proc = process_get_current();
