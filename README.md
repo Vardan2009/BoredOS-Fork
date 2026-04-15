@@ -29,7 +29,7 @@ BoredOS is a x86_64 operating system featuring a custom Desktop Environment (DE)
 * **Multiboot2 Compliant:** Bootable on real hardware and modern emulators.
 * **Kernel Core:** Interrupt Descriptor Table (IDT) management and a robust syscall interface.
 * **Filesystem:** Full **FAT32** support for persistent and in-memory storage.
-* **Networking:** Includes the lwIP networking stack.
+* **Networking:** Includes the lwIP networking stack and a basic web browser.
 
 ### Graphical User Interface
 * **BoredWM:** A custom Window Manager with drag-and-drop, mouse-centered interaction.
