@@ -56,6 +56,7 @@ void create_man_entries(void) {
     write_man_file("cc", "CC - C Compiler\n\nUsage: cc <file.c>\n\nThe BoredOS C Compiler. Compiles C source files into executables. (execute these with ./>file<)");
     write_man_file("crash", "CRASH - Trigger kernel exception\n\nUsage: crash\n\nIntentionally triggers a null pointer dereference to test handlers.");
     write_man_file("sysfetch", "SYSFETCH - Show OS information\n\nUsage: sysfetch\n\nDisplays system information in a neofetch-like layout. Configurable via /Library/conf/sysfetch.cfg.");
+    write_man_file("uname", "UNAME - Print system information\n\nUsage: uname [-amnoprsv]\n\nOptions:\n  -a  Print all information\n  -s  Kernel name\n  -n  Node name\n  -r  Kernel release\n  -v  Kernel build date and time\n  -m  Machine hardware name\n  -p  Processor type\n  -o  Operating system name");
     write_man_file("meminfo", "MEMINFO - Memory usage stats\n\nUsage: meminfo\n\nDisplays current physical and virtual memory allocation statistics.");
     write_man_file("pci_list", "PCI_LIST - Scan PCI bus\n\nUsage: pci_list\n\nScans the PCI bus and lists all detected hardware devices.");
     write_man_file("reboot", "REBOOT - Restart system\n\nUsage: reboot\n\nRestarts the computer immediately.");
