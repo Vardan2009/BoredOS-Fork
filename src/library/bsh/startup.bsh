@@ -2,3 +2,4 @@
 # Runs for interactive shells.
 # Example:
 # echo "Welcome to BoredShell"
+sysfetch
