@@ -95,6 +95,7 @@ static lumos_state_t lumos_state = {0};
 static bool lumos_index_built = false;  
 
 static bool force_redraw = true;
+static bool topbar_dirty_pending = false;
 
 static void lumos_update_search(void) {
 
@@ -1753,6 +1754,11 @@ void wm_paint(void) {
     wm_mark_dirty(mx, my, 12, 12);
 
     DirtyRect dirty = graphics_get_dirty_rect();
+    if (topbar_dirty_pending) {
+        graphics_mark_dirty(0, 0, sw, 30);
+        dirty = graphics_get_dirty_rect();
+        topbar_dirty_pending = false;
+    }
     if (dirty.active) {
         int d_h = 60, d_y = sh - d_h - 6, d_total_w = 11 * (48 + 10);
         int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
@@ -1851,6 +1857,8 @@ void wm_add_window_locked(Window *win) {
     if (window_count < 32) {
         all_windows[window_count++] = win;
         wm_bring_to_front_locked(win); // Ensure newly added windows are on top
+        wm_mark_dirty(0, 0, get_screen_width(), 30);
+        topbar_dirty_pending = true;
     }
 }
 
@@ -2122,11 +2130,11 @@ void wm_handle_click(int x, int y) {
         int item = rel_y / 20;
         
         if (item == 0) {  // About
-            process_create_elf("/bin/about.elf", NULL);
+            process_create_elf("/bin/about.elf", NULL, false, -1);
         } else if (item == 1) {  // Settings
             Window *existing = wm_find_window_by_title_locked("Settings");
             if (existing) wm_bring_to_front_locked(existing);
-            else process_create_elf("/bin/settings.elf", NULL);
+            else process_create_elf("/bin/settings.elf", NULL, false, -1);
         } else if (item == 2) {  // Shutdown
             k_shutdown();
         } else if (item == 3) {  // Restart
@@ -2473,55 +2481,55 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                 if (existing) {
                     wm_bring_to_front_locked(existing);
                 } else {
-                    process_create_elf("/bin/notepad.elf", NULL);
+                    process_create_elf("/bin/notepad.elf", NULL, false, -1);
                 }
             } else if (str_starts_with(start_menu_pending_app, "Editor")) {
                 Window *existing = wm_find_window_by_title_locked("Txtedit");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/txtedit.elf", NULL);
+                else process_create_elf("/bin/txtedit.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Word Processor")) {
                 Window *existing = wm_find_window_by_title_locked("Word Processor");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/boredword.elf", NULL);
+                else process_create_elf("/bin/boredword.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Terminal")) {
-                process_create_elf("/bin/terminal.elf", NULL);
+                process_create_elf("/bin/terminal.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Grapher")) {
                 Window *existing = wm_find_window_by_title_locked("Grapher");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/grapher.elf", NULL);
+                else process_create_elf("/bin/grapher.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Calculator")) {
                 Window *existing = wm_find_window_by_title_locked("Calculator");
                 if (existing) {
                     wm_bring_to_front_locked(existing);
                 } else {
-                    process_create_elf("/bin/calculator.elf", NULL);
+                    process_create_elf("/bin/calculator.elf", NULL, false, -1);
                 }
             } else if (str_starts_with(start_menu_pending_app, "Minesweeper")) {
                 Window *existing = wm_find_window_by_title_locked("Minesweeper");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/minesweeper.elf", NULL);
+                else process_create_elf("/bin/minesweeper.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Settings")) {
                 Window *existing = wm_find_window_by_title_locked("Settings");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/settings.elf", NULL);
+                else process_create_elf("/bin/settings.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Paint")) {
                 Window *existing = wm_find_window_by_title_locked("Paint");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/paint.elf", NULL);
+                else process_create_elf("/bin/paint.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Clock")) {
                 Window *existing = wm_find_window_by_title_locked("Clock");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/clock.elf", NULL);
+                else process_create_elf("/bin/clock.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Browser")) {
                 Window *existing = wm_find_window_by_title_locked("Web Browser");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/browser.elf", NULL);
+                else process_create_elf("/bin/browser.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "About")) {
-                process_create_elf("/bin/about.elf", NULL);
+                process_create_elf("/bin/about.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Task Manager")) {
                 Window *existing = wm_find_window_by_title_locked("Task Manager");
                 if (existing) wm_bring_to_front_locked(existing);
-                else process_create_elf("/bin/taskman.elf", NULL);
+                else process_create_elf("/bin/taskman.elf", NULL, false, -1);
             } else if (str_starts_with(start_menu_pending_app, "Shutdown")) {
                 k_shutdown();
             } else if (str_starts_with(start_menu_pending_app, "Restart")) {
@@ -2541,23 +2549,23 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                 if (icon->type == 2) { // App Shortcut
                     // Check name to launch app
                     if (str_ends_with(icon->name, "Notepad.shortcut")) {
-                        process_create_elf("/bin/notepad.elf", NULL); handled = true;
+                        process_create_elf("/bin/notepad.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "Calculator.shortcut")) {
-                        process_create_elf("/bin/calculator.elf", NULL); handled = true;
+                        process_create_elf("/bin/calculator.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "Minesweeper.shortcut")) {
-                        process_create_elf("/bin/minesweeper.elf", NULL); handled = true;
+                        process_create_elf("/bin/minesweeper.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "Settings.shortcut")) {
-                        process_create_elf("/bin/settings.elf", NULL); handled = true;
+                        process_create_elf("/bin/settings.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "Terminal.shortcut")) {
-                        process_create_elf("/bin/terminal.elf", NULL); handled = true;
+                        process_create_elf("/bin/terminal.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "About.shortcut")) {
-                        process_create_elf("/bin/about.elf", NULL); handled = true;
+                        process_create_elf("/bin/about.elf", NULL, false, -1); handled = true;
                     } else if (str_ends_with(icon->name, "Files.shortcut")) {
                         explorer_open_directory("/"); handled = true;
                     } else if (str_ends_with(icon->name, "Recycle Bin.shortcut")) {
                         explorer_open_directory("/RecycleBin"); handled = true;
                     } else if (str_ends_with(icon->name, "Paint.shortcut")) {
-                        process_create_elf("/bin/paint.elf", NULL); handled = true;
+                        process_create_elf("/bin/paint.elf", NULL, false, -1); handled = true;
                     }
                     
                     if (!handled) {
@@ -2576,7 +2584,7 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                                     if (fat32_is_directory(buf)) {
                                         explorer_open_directory(buf);
                                     } else {
-                                        process_create_elf("/bin/txtedit.elf", buf);
+                                        process_create_elf("/bin/txtedit.elf", buf, false, -1);
                                     }
                                     pending_desktop_icon_click = -1;
                                     force_redraw = true;
@@ -2594,17 +2602,17 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
                     int p=14; int n=0; while(icon->name[n]) path[p++] = icon->name[n++]; path[p]=0;
                     
                     if (str_ends_with(icon->name, ".elf")) {
-                        process_create_elf(path, NULL);
+                        process_create_elf(path, NULL, false, -1);
                     } else if (str_ends_with(icon->name, ".pnt")) {
-                        process_create_elf("/bin/paint.elf", path);
+                        process_create_elf("/bin/paint.elf", path, false, -1);
                     } else if (str_ends_with(icon->name, ".md")) {
-                        process_create_elf("/bin/markdown.elf", path);
+                        process_create_elf("/bin/markdown.elf", path, false, -1);
                     } else if (str_ends_with(icon->name, ".pdf")) {
-                        process_create_elf("/bin/boredword.elf", path);
+                        process_create_elf("/bin/boredword.elf", path, false, -1);
                     } else if (is_image_file(icon->name)) {
-                        process_create_elf("/bin/viewer.elf", path);
+                        process_create_elf("/bin/viewer.elf", path, false, -1);
                     } else {
-                        process_create_elf("/bin/txtedit.elf", path);
+                        process_create_elf("/bin/txtedit.elf", path, false, -1);
                     }
                 }
             }
@@ -3003,7 +3011,7 @@ static void build_file_index_async(void *arg) {
 
 void wm_handle_key(char c, bool pressed) {
     if (pressed && c == 'p' && ps2_ctrl_pressed) {
-        process_create_elf("/bin/screenshot.elf", NULL);
+        process_create_elf("/bin/screenshot.elf", NULL, false, -1);
         return;
     }
     
@@ -3156,7 +3164,7 @@ void wm_timer_tick(void) {
     if (current_sec != last_second) {
         last_second = current_sec;
         int sw = get_screen_width();
-        wm_mark_dirty(sw - 110, 6, 110, 24);
+        wm_mark_dirty(sw - 110, 0, 110, 30);
     }
     
     if (notif_active) {
