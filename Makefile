@@ -206,12 +206,26 @@ clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_IMAGE)
 	$(MAKE) -C $(SRC_DIR)/userland clean
 
-run: $(ISO_IMAGE)
+run-windows: $(ISO_IMAGE)
 	qemu-system-x86_64 -m 4G -serial stdio -cdrom $< -boot d \
 	    -smp 4 \
 		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
-		-netdev user,id=net0,hostfwd=udp::12346-:12345 -device virtio-net-pci,netdev=net0 \
+		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
+		-drive file=disk.img,format=raw,file.locking=off 
+run-mac: $(ISO_IMAGE)
+	qemu-system-x86_64 -m 4G -serial stdio -cdrom $< -boot d \
+	    -smp 4 \
+		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
 		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
 		-display cocoa,show-cursor=off \
 		-drive file=disk.img,format=raw,file.locking=off \
 		-cpu max
+run-linux: $(ISO_IMAGE)
+	qemu-system-x86_64 -m 4G -serial stdio -cdrom $< -boot d \
+	    -smp 4 \
+		-audiodev pa,id=audio0 -machine pcspk-audiodev=audio0 \
+		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
+		-display gtk,show-cursor=off \
+		-drive file=disk.img,format=raw,file.locking=off \
+		-cpu max
+
