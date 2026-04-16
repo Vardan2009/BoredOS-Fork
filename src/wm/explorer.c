@@ -809,17 +809,17 @@ void explorer_open_target(const char *path) {
         explorer_open_directory(path);
     } else {
         if (explorer_str_ends_with(path, ".elf")) {
-            process_create_elf(path, NULL);
+            process_create_elf(path, NULL, false, -1);
         } else if (explorer_str_ends_with(path, ".pdf")) {
-            process_create_elf("/bin/boredword.elf", path);
+            process_create_elf("/bin/boredword.elf", path, false, -1);
         } else if (explorer_is_markdown_file(path)) {
-            process_create_elf("/bin/markdown.elf", path);
+            process_create_elf("/bin/markdown.elf", path, false, -1);
         } else if (explorer_str_ends_with(path, ".pnt")) {
-            process_create_elf("/bin/paint.elf", path);
+            process_create_elf("/bin/paint.elf", path, false, -1);
         } else if (explorer_is_image_file(path)) {
-            process_create_elf("/bin/viewer.elf", path);
+            process_create_elf("/bin/viewer.elf", path, false, -1);
         } else {
-            process_create_elf("/bin/txtedit.elf", path);
+            process_create_elf("/bin/txtedit.elf", path, false, -1);
         }
     }
 }
@@ -843,17 +843,17 @@ static void explorer_open_item(Window *win, int index) {
     if (explorer_str_ends_with(state->items[index].name, ".shortcut")) {
         Window *target = NULL;
         if (explorer_strcmp(state->items[index].name, "Notepad.shortcut") == 0) {
-            process_create_elf("/bin/notepad.elf", NULL); return;
+            process_create_elf("/bin/notepad.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "Calculator.shortcut") == 0) {
-            process_create_elf("/bin/calculator.elf", NULL); return;
+            process_create_elf("/bin/calculator.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "Terminal.shortcut") == 0) {
-            process_create_elf("/bin/terminal.elf", NULL); return;
+            process_create_elf("/bin/terminal.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "Minesweeper.shortcut") == 0) {
-            process_create_elf("/bin/minesweeper.elf", NULL); return;
+            process_create_elf("/bin/minesweeper.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "Control Panel.shortcut") == 0 || explorer_strcmp(state->items[index].name, "Settings.shortcut") == 0) {
-            process_create_elf("/bin/settings.elf", NULL); return;
+            process_create_elf("/bin/settings.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "About.shortcut") == 0) {
-            process_create_elf("/bin/about.elf", NULL); return;
+            process_create_elf("/bin/about.elf", NULL, false, -1); return;
         } else if (explorer_strcmp(state->items[index].name, "Explorer.shortcut") == 0) {
             explorer_open_directory("/"); return;
         } else if (explorer_strcmp(state->items[index].name, "Recycle Bin.shortcut") == 0) {
@@ -1604,7 +1604,7 @@ static void explorer_handle_file_context_menu_click(Window *win, int x, int y) {
         state->dialog_input_cursor = explorer_strlen(state->dialog_input);
         explorer_strcpy(state->dialog_target_path, full_path);
     } else if (clicked_action == 110) { // Open with Text Editor
-        process_create_elf("/bin/txtedit.elf", full_path);
+        process_create_elf("/bin/txtedit.elf", full_path, false, -1);
     } else if (clicked_action == ACTION_RESTORE) {
         explorer_restore_file(win, state->file_context_menu_item);
     } else if (clicked_action == ACTION_CREATE_SHORTCUT) {
