@@ -179,7 +179,7 @@ process_t* process_create(void (*entry_point)(void), bool is_user) {
     return new_proc;
 }
 
-process_t* process_create_elf(const char* filepath, const char* args_str) {
+process_t* process_create_elf(const char* filepath, const char* args_str, bool terminal_proc, int tty_id) {
     uint64_t rflags = spinlock_acquire_irqsave(&runqueue_lock);
     process_t *new_proc = NULL;
     
@@ -210,8 +210,8 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
     new_proc->ui_window = NULL;
     new_proc->heap_start = 0x20000000; // 512MB mark
     new_proc->heap_end = 0x20000000;
-    new_proc->is_terminal_proc = false;
-    new_proc->tty_id = -1;
+    new_proc->is_terminal_proc = terminal_proc;
+    new_proc->tty_id = tty_id;
     new_proc->kill_pending = false;
 
     process_t *parent = process_get_current();
@@ -231,7 +231,6 @@ process_t* process_create_elf(const char* filepath, const char* args_str) {
         serial_write("[PROC] Failed to load ELF: ");
         serial_write(filepath);
         serial_write("\n");
-        // We technically leak the page table here, but let's ignore cleanup for now
         return NULL;
     }
 

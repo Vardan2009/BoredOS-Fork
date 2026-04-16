@@ -69,7 +69,7 @@ typedef struct {
 
 void process_init(void);
 process_t* process_create(void (*entry_point)(void), bool is_user);
-process_t* process_create_elf(const char* filepath, const char* args_str);
+process_t* process_create_elf(const char* filepath, const char* args_str, bool terminal_proc, int tty_id);
 process_t* process_get_current(void);
 void process_set_current_for_cpu(uint32_t cpu_id, process_t* p);
 process_t* process_get_current_for_cpu(uint32_t cpu_id);
