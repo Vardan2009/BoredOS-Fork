@@ -1180,7 +1180,12 @@ static int execute_line_inner(const char *line, int depth) {
     char args_buf[256];
     build_args_string(argc, argv, 1, args_buf, sizeof(args_buf));
 
-    int pid = sys_spawn(full_path, args_buf[0] ? args_buf : NULL, SPAWN_FLAG_TERMINAL | SPAWN_FLAG_INHERIT_TTY, 0);
+    int pid = -1;
+    for (int attempt = 0; attempt < 5; attempt++) {
+        pid = sys_spawn(full_path, args_buf[0] ? args_buf : NULL, SPAWN_FLAG_TERMINAL | SPAWN_FLAG_INHERIT_TTY, 0);
+        if (pid >= 0) break;
+        sleep(10);
+    }
     if (pid < 0) {
         set_color(g_color_error);
         printf("bsh: failed to launch: %s\n", full_path);
