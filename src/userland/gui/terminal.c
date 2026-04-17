@@ -885,7 +885,8 @@ int main(void) {
             draw_tabs();
             draw_session(&g_tabs[g_active_tab]);
         } else {
-            sys_yield();
+            // Avoid a tight poll loop when idle; sleep yields to the scheduler.
+            sleep(1);
         }
     }
 

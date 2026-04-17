@@ -1248,7 +1248,8 @@ static int read_line(char *out, int max_len, const char *prompt) {
         char ch = 0;
         int got = sys_tty_read_in(&ch, 1);
         if (got <= 0) {
-            sys_yield();
+            // Throttle idle input polling to avoid pegging the CPU at 100%
+            sleep(1);
             continue;
         }
 
