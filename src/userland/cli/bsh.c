@@ -49,6 +49,7 @@ static alias_t g_aliases[MAX_ALIASES];
 static int g_alias_count = 0;
 
 static int g_tty_id = -1;
+static bool g_need_prompt_newline = false;
 static uint32_t g_color_dir = 0;
 static uint32_t g_color_file = 0;
 static uint32_t g_color_size = 0;
@@ -181,6 +182,42 @@ static void trim(char *s) {
         s[out++] = s[i];
     }
     s[out] = 0;
+}
+
+static void strip_quotes(char *s) {
+    if (!s) return;
+    int len = (int)strlen(s);
+    if (len >= 2 && ((s[0] == '"' && s[len - 1] == '"') || (s[0] == '\'' && s[len - 1] == '\''))) {
+        for (int i = 1; i < len - 1; i++) {
+            s[i - 1] = s[i];
+        }
+        s[len - 2] = 0;
+    }
+}
+
+static void expand_path_value(const char *val, char *out, int max_len) {
+    if (!out || max_len <= 0) return;
+    out[0] = 0;
+    if (!val) return;
+
+    const char *needle1 = "$PATH";
+    const char *needle2 = "${PATH}";
+    int i = 0;
+    while (val[i] && (int)strlen(out) < max_len - 1) {
+        if (starts_with(&val[i], needle1)) {
+            str_append(out, g_cfg.path, max_len);
+            i += (int)strlen(needle1);
+            continue;
+        }
+        if (starts_with(&val[i], needle2)) {
+            str_append(out, g_cfg.path, max_len);
+            i += (int)strlen(needle2);
+            continue;
+        }
+        char ch[2] = { val[i], 0 };
+        str_append(out, ch, max_len);
+        i++;
+    }
 }
 
 static void alias_add(const char *name, const char *value) {
@@ -419,16 +456,27 @@ static void config_load(void) {
             continue;
         }
 
-        char *sep = line;
+        char *assign = line;
+        if (starts_with(assign, "export ") || starts_with(assign, "export\t")) {
+            assign += 6;
+            while (*assign == ' ' || *assign == '\t') assign++;
+        }
+
+        char *sep = assign;
         while (*sep && *sep != '=') sep++;
         if (*sep == '=') {
             *sep = 0;
-            char *key = line;
+            char *key = assign;
             char *val = sep + 1;
             trim(key);
             trim(val);
+            strip_quotes(val);
 
-            if (str_eq(key, "PATH")) str_copy(g_cfg.path, val, sizeof(g_cfg.path));
+            if (str_eq(key, "PATH")) {
+                char expanded[256];
+                expand_path_value(val, expanded, sizeof(expanded));
+                str_copy(g_cfg.path, expanded[0] ? expanded : val, sizeof(g_cfg.path));
+            }
             else if (str_eq(key, "STARTUP")) str_copy(g_cfg.startup, val, sizeof(g_cfg.startup));
             else if (str_eq(key, "BOOT_SCRIPT")) str_copy(g_cfg.boot_script, val, sizeof(g_cfg.boot_script));
             else if (str_eq(key, "PROMPT_LEFT")) str_copy(g_cfg.prompt_left, val, sizeof(g_cfg.prompt_left));
@@ -785,6 +833,10 @@ static void prompt_write(const char *tmpl) {
 }
 
 static void prompt_write_with_right(const char *left_tmpl, const char *right_tmpl) {
+    char left_buf[128];
+    render_prompt(left_tmpl, left_buf, sizeof(left_buf), false);
+    int left_len = (int)strlen(left_buf);
+
     prompt_write(left_tmpl);
     if (!right_tmpl || !right_tmpl[0]) return;
 
@@ -793,19 +845,28 @@ static void prompt_write_with_right(const char *left_tmpl, const char *right_tmp
     int right_len = (int)strlen(right_buf);
     if (right_len <= 0) return;
 
-    sys_write(1, "\x1b[s", 3);
+    sys_write(1, "\r", 1);
     sys_write(1, "\x1b[999C", 6);
-    if (right_len > 1) {
+    if (right_len > 0) {
         char num[8];
         char seq[16];
-        itoa(right_len - 1, num);
+        itoa(right_len, num);
         str_copy(seq, "\x1b[", sizeof(seq));
         str_append(seq, num, sizeof(seq));
         str_append(seq, "D", sizeof(seq));
         sys_write(1, seq, (int)strlen(seq));
     }
     prompt_write(right_tmpl);
-    sys_write(1, "\x1b[u", 3);
+    sys_write(1, "\r", 1);
+    if (left_len > 0) {
+        char num[8];
+        char seq[16];
+        itoa(left_len, num);
+        str_copy(seq, "\x1b[", sizeof(seq));
+        str_append(seq, num, sizeof(seq));
+        str_append(seq, "C", sizeof(seq));
+        sys_write(1, seq, (int)strlen(seq));
+    }
 }
 
 static void redraw_input(const char *prompt_tmpl, const char *line, int len) {
@@ -1327,6 +1388,7 @@ static int execute_line_inner(const char *line, int depth) {
     if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, pid);
     wait_for_pid(pid);
     if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, 0);
+    g_need_prompt_newline = true;
 
     return 0;
 }
@@ -1579,6 +1641,12 @@ int main(int argc, char **argv) {
         if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, 0);
 
         const char *prompt_tmpl = g_cfg.prompt_left[0] ? g_cfg.prompt_left : DEFAULT_PROMPT;
+        if (g_need_prompt_newline) {
+            sys_write(1, "\n", 1);
+            g_need_prompt_newline = false;
+        }
+        sys_write(1, "\r", 1);
+        sys_write(1, "\x1b[K", 3);
         prompt_write_with_right(prompt_tmpl, g_cfg.prompt_right);
 
         char line[MAX_LINE];
@@ -1587,6 +1655,7 @@ int main(int argc, char **argv) {
 
         history_add(line);
         int res = execute_line(line);
+        if (g_cfg.prompt_minimal_history) g_need_prompt_newline = true;
         if (res == 2) break;
     }
 
