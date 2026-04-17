@@ -2,6 +2,7 @@
 #include "libc/libui.h"
 #include "libc/stdlib.h"
 #include "libc/input.h"
+#include "libc/string.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -71,6 +72,7 @@ static int best_score = 0;
 
 /* poor-man timer */
 static uint32_t tick_counter = 0;
+static int game_speed_ms = 80; // default (milliseconds per move)
 
 static uint32_t random_seed = 0x1234ABCDu;
 
@@ -331,8 +333,21 @@ static void handle_key(int key) {
 }
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+    int game_speed_ms = 80;
+
+    // Parse arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-speed") == 0 && i + 1 < argc) {
+            int val = atoi(argv[i + 1]);
+
+            // Clamp to safe range
+            if (val < 20) val = 20;
+            if (val > 500) val = 500;
+
+            game_speed_ms = val;
+            i++;
+        }
+    }
 
     ui_window_t win = ui_window_create("Snake", 220, 120, WINDOW_W, WINDOW_H);
     if (!win) return 1;
@@ -345,43 +360,30 @@ int main(int argc, char **argv) {
     ui_mark_dirty(win, 0, 0, WINDOW_W, WINDOW_H);
 
     gui_event_t ev;
-    
-    while (1) {
-        bool needs_redraw = false;
 
+    while (1) {
         while (ui_get_event(win, &ev)) {
             if (ev.type == GUI_EVENT_PAINT) {
-                needs_redraw = true;
+                snake_paint(win);
+                ui_mark_dirty(win, 0, 0, WINDOW_W, WINDOW_H);
 
             } else if (ev.type == GUI_EVENT_CLICK) {
                 handle_click(ev.arg1, ev.arg2);
-                needs_redraw = true;
 
             } else if (ev.type == GUI_EVENT_KEY) {
                 handle_key(ev.arg1);
-                needs_redraw = true;
 
             } else if (ev.type == GUI_EVENT_CLOSE) {
                 sys_exit(0);
-
-            } else if (ev.type == GUI_EVENT_RESIZE) {
-                needs_redraw = true;
             }
         }
 
-        tick_counter++;
-        if (tick_counter >= GAME_TICK_DELAY) {
-            tick_counter = 0;
-            move_snake_step();
-            needs_redraw = true;
-        }
+        move_snake_step();
 
-        if (needs_redraw) {
-            snake_paint(win);
-            ui_mark_dirty(win, 0, 0, WINDOW_W, WINDOW_H);
-        }
+        snake_paint(win);
+        ui_mark_dirty(win, 0, 0, WINDOW_W, WINDOW_H);
 
-        sleep(10);
+        sleep(game_speed_ms);
     }
 
     return 0;
