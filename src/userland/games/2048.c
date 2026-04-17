@@ -1,6 +1,7 @@
 #include "libc/syscall.h"
 #include "libc/libui.h"
 #include "libc/stdlib.h"
+#include "libc/input.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -412,31 +413,20 @@ static bool point_in_rect(int px, int py, int x, int y, int w, int h) {
     return px >= x && px < x + w && py >= y && py < y + h;
 }
 
-/*  
-37 = left arrow
-38 = up arrow
-39 = right arrow
-40 = down arrow
-72 = numpad 8
-75 = numpad 4
-77 = numpad 6
-80 = numpad 2
-key = letter
-*/
 static bool is_left_key(int key) {
-    return key == 'a' || key == 'A' || key == 37 || key == 75;
+    return key == 'a' || key == 'A' || key == KEY_LEFT;
 }
 
 static bool is_right_key(int key) {
-    return key == 'd' || key == 'D' || key == 39 || key == 77;
+    return key == 'd' || key == 'D' || key == KEY_RIGHT;
 }
 
 static bool is_up_key(int key) {
-    return key == 'w' || key == 'W' || key == 38 || key == 72;
+    return key == 'w' || key == 'W' || key == KEY_UP;
 }
 
 static bool is_down_key(int key) {
-    return key == 's' || key == 'S' || key == 40 || key == 80;
+    return key == 's' || key == 'S' || key == KEY_DOWN;
 }
 
 static void handle_click(int x, int y) {
