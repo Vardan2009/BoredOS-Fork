@@ -67,9 +67,9 @@ If you find this project interesting or helpful, consider fueling the developmen
 
 ---
 
-## ⚠️ Project Disclaimer & Heritage
+## Project Disclaimer & Heritage
 
-**BoredOS** is the successor to **BrewKernel**, a project initiated in 2023. 
+**BoredOS** is the successor to **[BrewKernel](https://github.com/boreddevnl/brewkernel)**, a project initiated in 2023. 
 
 While BrewKernel served as the foundational learning ground for this OS, it has been officially **deprecated and archived**. It no longer receives updates, bug fixes, or pull request reviews. BoredOS represents a complete architectural reboot, applying years of lessons learned to create a cleaner, more modular, and more capable system.
 
