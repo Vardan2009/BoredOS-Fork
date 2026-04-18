@@ -19,7 +19,7 @@
 #define TAB_CLOSE_W 12
 #define TAB_CLOSE_PAD 6
 #define MAX_TABS 4
-#define TTY_READ_CHUNK 512T
+#define TTY_READ_CHUNK 512
 #define LINE_MAX 256
 
 typedef struct {
@@ -47,6 +47,8 @@ typedef struct {
     int ansi_param_count;
     int saved_row;
     int saved_col;
+
+    bool colors_enabled;
 
     // for color
     char current_input[LINE_MAX];
@@ -726,6 +728,19 @@ static void tab_init(TerminalSession *s, int tty_id, int bsh_pid) {
     s->current_input[0] = 0;
     session_reset_colors(s);
     scrollback_init(s);
+    
+    char value[64];
+
+    if (read_config_value("TERMINAL_COLOR", value, sizeof(value)) == 0) {
+        if (strcmp(value, "1") == 0 || strcmp(value, "true") == 0) {
+            s->colors_enabled = true;
+        } else {
+            s->colors_enabled = false;
+        }
+    } else {
+        s->colors_enabled = false;
+    }
+        
     session_clear(s);
 }
 
@@ -867,6 +882,10 @@ static bool command_starts_with(const char *prefix) {
 }
 
 static void update_input_color(TerminalSession *s) {
+    if (!s->colors_enabled) {
+        return;
+    }
+    
     if (s->input_len == 0) {
         s->input_color = 0xFFFFFFFF;
         return;
@@ -876,12 +895,12 @@ static void update_input_color(TerminalSession *s) {
     int i = 0;
 
     while (i < s->input_len &&
-           s->current_input[i] != ' ' &&
-           i < 63) {
+        s->current_input[i] != ' ' &&
+        s->current_input[i] != '\t' &&
+        i < 63) {
         cmd[i] = s->current_input[i];
         i++;
     }
-    cmd[i] = 0;
 
     if (command_exists(cmd)) {
         s->input_color = 0xFF55FF55; // green
@@ -927,6 +946,22 @@ static void handle_key(gui_event_t *ev) {
         char ch = 3;
         sys_tty_write_in(s->tty_id, &ch, 1);
         return;
+    }
+
+    if (!ctrl) {
+        if (c == KEY_BACKSPACE) {
+            if (s->input_len > 0) {
+                s->input_len--;
+                s->current_input[s->input_len] = 0;
+            }
+        } else if (c >= 32 && c < 127) {
+            if (s->input_len < LINE_MAX - 1) {
+                s->current_input[s->input_len++] = c;
+                s->current_input[s->input_len] = 0;
+            }
+        }
+
+        update_input_color(s);
     }
 
     if (c == KEY_ENTER) {
