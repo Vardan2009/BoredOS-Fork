@@ -47,16 +47,6 @@ void* krealloc(void *ptr, size_t new_size);
 
 // Statistics and Information
 MemStats memory_get_stats(void);
-void memory_print_stats(void);
-void memory_print_detailed(void);
-
-void memory_validate(void);
-void memory_dump_blocks(void);
-
-// Internal utilities
-size_t memory_get_peak_usage(void);
-void memory_reset_peak(void);
-bool memory_is_valid_ptr(void *ptr);
 
 void mem_memset(void *dest, int val, size_t len);
 void mem_memcpy(void *dest, const void *src, size_t len);
