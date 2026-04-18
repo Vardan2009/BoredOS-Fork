@@ -69,18 +69,20 @@ double sqrt(double x) {
 double log(double x) {
     if (x <= 0.0) return -1e30;
 
+    /* Normalize x to [1, 2) so the atanh-series converges quickly. */
     int e = 0;
-    while (x > 2.0)  { x /= 2.0; e++; }
-    while (x < 0.5)  { x *= 2.0; e--; }
+    while (x >= 2.0) { x *= 0.5; e++; }
+    while (x < 1.0)  { x *= 2.0; e--; }
 
-    double t  = (x - 1.0) / (x + 1.0);
-    double t2 = t * t;
-    double sum = t, term = t;
-    for (int i = 1; i <= 20; i++) {
-        term *= t2;
-        sum  += term / (2*i + 1);
+    double y = (x - 1.0) / (x + 1.0);
+    double y2 = y * y;
+    double term = y;
+    double sum = 0.0;
+    for (int n = 1; n <= 31; n += 2) {
+        sum += term / (double)n;
+        term *= y2;
     }
-    return 2.0 * sum + e * M_LN2;
+    return 2.0 * sum + (double)e * M_LN2;
 }
 
 double log2(double x) {
