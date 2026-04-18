@@ -6,6 +6,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "sysinclude/time.h"
 
 static int os_clock(lua_State *L) {
     lua_pushnumber(L, (lua_Number)clock() / (lua_Number)CLOCKS_PER_SEC);
