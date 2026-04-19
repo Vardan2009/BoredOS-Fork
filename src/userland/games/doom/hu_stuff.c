@@ -25,6 +25,7 @@
 
 #include "deh_main.h"
 #include "i_swap.h"
+#include "i_system.h"
 #include "i_video.h"
 
 #include "hu_stuff.h"
@@ -288,14 +289,47 @@ void HU_Init(void)
 
     int		i;
     int		j;
+    int         fallback_lump = -1;
     char	buffer[9];
 
     // load the heads-up font
     j = HU_FONTSTART;
     for (i=0;i<HU_FONTSIZE;i++)
     {
-	DEH_snprintf(buffer, 9, "STCFN%.3d", j++);
-	hu_font[i] = (patch_t *) W_CacheLumpName(buffer, PU_STATIC);
+    int lump;
+    DEH_snprintf(buffer, 9, "STCFN%.3d", j++);
+    lump = W_CheckNumForName(buffer);
+
+    if (lump < 0 && fallback_lump < 0)
+    {
+        int probe;
+        for (probe = HU_FONTSTART; probe <= HU_FONTEND; ++probe)
+        {
+        DEH_snprintf(buffer, 9, "STCFN%.3d", probe);
+        fallback_lump = W_CheckNumForName(buffer);
+        if (fallback_lump >= 0)
+        {
+            break;
+        }
+        }
+
+        if (fallback_lump < 0)
+        {
+        fallback_lump = W_CheckNumForName("STTNUM0");
+        }
+    }
+
+    if (lump < 0)
+    {
+        lump = fallback_lump;
+    }
+
+    if (lump < 0)
+    {
+        I_Error("HU_Init: no usable HUD font lumps (missing STCFNxxx/STTNUM0)");
+    }
+
+    hu_font[i] = (patch_t *) W_CacheLumpNum(lump, PU_STATIC);
     }
 
 }

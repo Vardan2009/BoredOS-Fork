@@ -1,11 +1,9 @@
-#ifndef DOOM_COMPAT_SYS_STAT_H
-#define DOOM_COMPAT_SYS_STAT_H
-
-#include "types.h"
+#ifndef BOREDOS_LIBC_SYS_STAT_H
+#define BOREDOS_LIBC_SYS_STAT_H
 
 struct stat {
-	int st_size;
-	int st_mode;
+    int st_size;
+    int st_mode;
 };
 
 int stat(const char *pathname, struct stat *statbuf);

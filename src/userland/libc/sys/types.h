@@ -1,5 +1,5 @@
-#ifndef DOOM_COMPAT_SYS_TYPES_H
-#define DOOM_COMPAT_SYS_TYPES_H
+#ifndef BOREDOS_LIBC_SYS_TYPES_H
+#define BOREDOS_LIBC_SYS_TYPES_H
 
 typedef long ssize_t;
 typedef long off_t;
