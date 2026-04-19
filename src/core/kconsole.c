@@ -85,11 +85,16 @@ void kconsole_write(const char *s) {
     if (!s) return;
     
     uint64_t flags = spinlock_acquire_irqsave(&console_lock);
+    if (!kconsole_active) {
+        spinlock_release_irqrestore(&console_lock, flags);
+        return;
+    }
+
     while (*s) {
         kconsole_putc_nolock(*s++);
     }
     
-    // Flip buffer after a write batch during boot
+    // Flip once after a write batch to keep console updates coherent.
     graphics_flip_buffer();
     spinlock_release_irqrestore(&console_lock, flags);
 }

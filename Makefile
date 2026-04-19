@@ -25,10 +25,10 @@ C_SOURCES = $(wildcard $(SRC_DIR)/core/*.c) \
             $(wildcard $(SRC_DIR)/net/nic/*.c) \
             $(wildcard $(SRC_DIR)/fs/*.c) \
             $(wildcard $(SRC_DIR)/wm/*.c) \
-            $(wildcard $(SRC_DIR)/net/lwip/core/*.c) \
-            $(wildcard $(SRC_DIR)/net/lwip/core/ipv4/*.c) \
-			$(SRC_DIR)/net/lwip/netif/ethernet.c \
-			$(SRC_DIR)/net/lwip/netif/bridgeif.c
+			$(wildcard $(SRC_DIR)/net/third_party/lwip/core/*.c) \
+			$(wildcard $(SRC_DIR)/net/third_party/lwip/core/ipv4/*.c) \
+			$(SRC_DIR)/net/third_party/lwip/netif/ethernet.c \
+			$(SRC_DIR)/net/third_party/lwip/netif/bridgeif.c
 
 ASM_SOURCES = $(wildcard $(SRC_DIR)/arch/*.asm)
 OBJ_FILES = $(patsubst $(SRC_DIR)/core/%.c, $(BUILD_DIR)/%.o, $(wildcard $(SRC_DIR)/core/*.c)) \
@@ -39,13 +39,13 @@ OBJ_FILES = $(patsubst $(SRC_DIR)/core/%.c, $(BUILD_DIR)/%.o, $(wildcard $(SRC_D
             $(patsubst $(SRC_DIR)/net/nic/%.c, $(BUILD_DIR)/%.o, $(wildcard $(SRC_DIR)/net/nic/*.c)) \
             $(patsubst $(SRC_DIR)/fs/%.c, $(BUILD_DIR)/%.o, $(wildcard $(SRC_DIR)/fs/*.c)) \
             $(patsubst $(SRC_DIR)/wm/%.c, $(BUILD_DIR)/%.o, $(wildcard $(SRC_DIR)/wm/*.c)) \
-            $(patsubst $(SRC_DIR)/net/lwip/%.c, $(BUILD_DIR)/lwip/%.o, $(filter $(SRC_DIR)/net/lwip/%.c, $(C_SOURCES))) \
+			$(patsubst $(SRC_DIR)/net/third_party/lwip/%.c, $(BUILD_DIR)/lwip/%.o, $(filter $(SRC_DIR)/net/third_party/lwip/%.c, $(C_SOURCES))) \
             $(patsubst $(SRC_DIR)/arch/%.asm, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
 
 CFLAGS = -g -O2 -pipe -Wall -Wextra -std=gnu11 -ffreestanding \
          -fno-stack-protector -fno-stack-check -fno-lto -fPIE \
          -m64 -march=x86-64 -msse -msse2 -mstackrealign -mno-red-zone \
-         -I$(SRC_DIR) -I$(SRC_DIR)/net/lwip -I$(SRC_DIR)/core -I$(SRC_DIR)/sys -I$(SRC_DIR)/mem -I$(SRC_DIR)/dev -I$(SRC_DIR)/net -I$(SRC_DIR)/net/nic -I$(SRC_DIR)/fs -I$(SRC_DIR)/wm
+		 -I$(SRC_DIR) -I$(SRC_DIR)/net/third_party/lwip -I$(SRC_DIR)/core -I$(SRC_DIR)/sys -I$(SRC_DIR)/mem -I$(SRC_DIR)/dev -I$(SRC_DIR)/net -I$(SRC_DIR)/net/nic -I$(SRC_DIR)/fs -I$(SRC_DIR)/wm
 
 LDFLAGS = -m elf_x86_64 -nostdlib -static -pie --no-dynamic-linker \
           -z text -z max-page-size=0x1000 -T linker.ld
@@ -112,7 +112,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/wm/%.c | $(BUILD_DIR) limine-setup
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/lwip/%.o: $(SRC_DIR)/net/lwip/%.c | $(BUILD_DIR) limine-setup
+$(BUILD_DIR)/lwip/%.o: $(SRC_DIR)/net/third_party/lwip/%.c | $(BUILD_DIR) limine-setup
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

@@ -7,12 +7,13 @@ extern syscall_handler_c
 section .text
 
 ; Syscall ABI:
-; RDI = syscall_num
-; RSI = arg1
-; RDX = arg2
-; R10 = arg3
-; R8  = arg4
-; R9  = arg5
+; RAX = syscall_num
+; RDI = arg1
+; RSI = arg2
+; RDX = arg3
+; R10 = arg4
+; R8  = arg5
+; R9  = arg6
 
 syscall_entry:
     swapgs 

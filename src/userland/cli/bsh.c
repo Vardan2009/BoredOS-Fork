@@ -49,7 +49,6 @@ static alias_t g_aliases[MAX_ALIASES];
 static int g_alias_count = 0;
 
 static int g_tty_id = -1;
-static bool g_need_prompt_newline = false;
 static uint32_t g_color_dir = 0;
 static uint32_t g_color_file = 0;
 static uint32_t g_color_size = 0;
@@ -1388,8 +1387,6 @@ static int execute_line_inner(const char *line, int depth) {
     if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, pid);
     wait_for_pid(pid);
     if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, 0);
-    g_need_prompt_newline = true;
-
     return 0;
 }
 
@@ -1641,10 +1638,6 @@ int main(int argc, char **argv) {
         if (g_tty_id >= 0) sys_tty_set_fg(g_tty_id, 0);
 
         const char *prompt_tmpl = g_cfg.prompt_left[0] ? g_cfg.prompt_left : DEFAULT_PROMPT;
-        if (g_need_prompt_newline) {
-            sys_write(1, "\n", 1);
-            g_need_prompt_newline = false;
-        }
         sys_write(1, "\r", 1);
         sys_write(1, "\x1b[K", 3);
         prompt_write_with_right(prompt_tmpl, g_cfg.prompt_right);
@@ -1655,7 +1648,6 @@ int main(int argc, char **argv) {
 
         history_add(line);
         int res = execute_line(line);
-        if (g_cfg.prompt_minimal_history) g_need_prompt_newline = true;
         if (res == 2) break;
     }
 
