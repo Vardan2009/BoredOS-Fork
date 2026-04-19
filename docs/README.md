@@ -25,7 +25,9 @@ Instructions for compiling the OS from source.
 
 ### 3. 🚀 [Application Development](appdev/)
 The SDK and toolchain guides for creating your own `.elf` userland binaries.
--   [`SDK Reference`](appdev/sdk_reference.md): Explanation of the custom `libc` wrappers (`stdlib.h`, `string.h`) and system calls.
+-   [`SDK Reference`](appdev/sdk_reference.md): Overview hub for SDK layout, includes, and links to detailed libc/syscall docs.
+-   [`Syscalls`](appdev/syscalls.md): Current syscall numbers, FS/SYSTEM command IDs, and wrapper guidance.
+-   [`libc Reference`](appdev/libc_reference.md): Current libc headers, implemented APIs, and behavior notes.
 -   [`UI API`](appdev/ui_api.md): Drawing on the screen, creating windows, and polling the event loop using `libui.h`.
 -   [`Widget API`](appdev/widget_api.md): High-level UI components like buttons, textboxes, and scrollbars using `libwidget.h`.
 -   [`Custom Apps`](appdev/custom_apps.md): A step-by-step tutorial on writing a new graphical C application, editing the Makefile, and bundling it into the ISO.
