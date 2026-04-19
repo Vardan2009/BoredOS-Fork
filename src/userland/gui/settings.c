@@ -769,14 +769,14 @@ static void control_panel_paint(ui_window_t win) {
 }
 
 static void save_desktop_config(void) {
-    sys_system(4 /*SET_DESKTOP_PROP*/, 1, desktop_snap_to_grid, 0, 0);
-    sys_system(4, 2, desktop_auto_align, 0, 0);
-    sys_system(4, 3, desktop_max_rows_per_col, 0, 0);
-    sys_system(4, 4, desktop_max_cols, 0, 0);
+    sys_system(SYSTEM_CMD_SET_DESKTOP_PROP, 1, desktop_snap_to_grid, 0, 0);
+    sys_system(SYSTEM_CMD_SET_DESKTOP_PROP, 2, desktop_auto_align, 0, 0);
+    sys_system(SYSTEM_CMD_SET_DESKTOP_PROP, 3, desktop_max_rows_per_col, 0, 0);
+    sys_system(SYSTEM_CMD_SET_DESKTOP_PROP, 4, desktop_max_cols, 0, 0);
 }
 
 static void save_mouse_config(void) {
-    sys_system(5 /*SET_MOUSE_SPEED*/, mouse_speed, 0, 0, 0);
+    sys_system(SYSTEM_CMD_SET_MOUSE_SPEED, mouse_speed, 0, 0, 0);
 }
 
 static int parse_ip(const char* str, net_ipv4_address_t* ip) {
@@ -802,11 +802,11 @@ static int parse_ip(const char* str, net_ipv4_address_t* ip) {
 }
 
 static void fetch_kernel_state(void) {
-    desktop_snap_to_grid = sys_system(7 /*GET_DESKTOP_PROP*/, 1, 0, 0, 0);
-    desktop_auto_align = sys_system(7, 2, 0, 0, 0);
-    desktop_max_rows_per_col = sys_system(7, 3, 0, 0, 0);
-    desktop_max_cols = sys_system(7, 4, 0, 0, 0);
-    mouse_speed = sys_system(8 /*GET_MOUSE_SPEED*/, 0, 0, 0, 0);
+    desktop_snap_to_grid = sys_system(SYSTEM_CMD_GET_DESKTOP_PROP, 1, 0, 0, 0);
+    desktop_auto_align = sys_system(SYSTEM_CMD_GET_DESKTOP_PROP, 2, 0, 0, 0);
+    desktop_max_rows_per_col = sys_system(SYSTEM_CMD_GET_DESKTOP_PROP, 3, 0, 0, 0);
+    desktop_max_cols = sys_system(SYSTEM_CMD_GET_DESKTOP_PROP, 4, 0, 0, 0);
+    mouse_speed = sys_system(SYSTEM_CMD_GET_MOUSE_SPEED, 0, 0, 0, 0);
     
     net_ipv4_address_t kip;
     if (sys_network_get_ip(&kip) == 0) {
@@ -889,7 +889,7 @@ static void control_panel_handle_mouse(int x, int y, bool is_down, bool is_click
                 if (disp_sel_color == 3) { bpp = 8; mode = 1; }
                 if (disp_sel_color == 4) { bpp = 8; mode = 2; }
                 
-                sys_system(47 /*SET_RESOLUTION*/, w, h, bpp, mode);
+                sys_system(SYSTEM_CMD_SET_RESOLUTION, w, h, bpp, mode);
             }
             return;
         }
@@ -912,28 +912,28 @@ static void control_panel_handle_mouse(int x, int y, bool is_down, bool is_click
                     uint32_t c = 0;
                     if (i==0) c = COLOR_COFFEE; else if(i==1) c = COLOR_TEAL; else if(i==2) c = COLOR_GREEN;
                     else if(i==3) c = COLOR_BLUE_BG; else if(i==4) c = COLOR_PURPLE; else if(i==5) c = COLOR_GREY;
-                    sys_system(1, c, 0, 0, 0); btn_wp_colors[i].pressed=false;
+                    sys_system(SYSTEM_CMD_SET_BG_COLOR, c, 0, 0, 0); btn_wp_colors[i].pressed=false;
                 }
                 return;
             }
         }
         if (widget_button_handle_mouse(&btn_wp_patterns[0], x, y, is_down, is_click, NULL)) {
-            if (is_click) { sys_system(2, (uint64_t)pattern_lumberjack, 0, 0, 0); btn_wp_patterns[0].pressed=false;} return;
+            if (is_click) { sys_system(SYSTEM_CMD_SET_BG_PATTERN, (uint64_t)pattern_lumberjack, 0, 0, 0); btn_wp_patterns[0].pressed=false;} return;
         }
         if (widget_button_handle_mouse(&btn_wp_patterns[1], x, y, is_down, is_click, NULL)) {
-            if (is_click) { sys_system(2, (uint64_t)pattern_blue_diamond, 0, 0, 0); btn_wp_patterns[1].pressed=false;} return;
+            if (is_click) { sys_system(SYSTEM_CMD_SET_BG_PATTERN, (uint64_t)pattern_blue_diamond, 0, 0, 0); btn_wp_patterns[1].pressed=false;} return;
         }
         if (widget_button_handle_mouse(&btn_wp_apply, x, y, is_down, is_click, NULL)) {
             if (is_click) {
                 uint32_t cust = parse_rgb_separate(rgb_r, rgb_g, rgb_b);
-                sys_system(1, cust, 0, 0, 0);
+                sys_system(SYSTEM_CMD_SET_BG_COLOR, cust, 0, 0, 0);
                 btn_wp_apply.pressed=false;
             }
             return;
         }
         for (int i=0; i<wallpaper_count; i++) {
             if (wallpapers[i].valid && widget_button_handle_mouse(&btn_wp_thumbs[i], x, y, is_down, is_click, NULL)) {
-                if (is_click) { sys_system(31, (uint64_t)wallpapers[i].path, 0, 0, 0); btn_wp_thumbs[i].pressed=false;} return;
+                if (is_click) { sys_system(SYSTEM_CMD_SET_WALLPAPER_PATH, (uint64_t)wallpapers[i].path, 0, 0, 0); btn_wp_thumbs[i].pressed=false;} return;
             }
         }
     }
@@ -948,7 +948,7 @@ static void control_panel_handle_mouse(int x, int y, bool is_down, bool is_click
         
         if (widget_button_handle_mouse(&btn_net_init, x, y, is_down, is_click, NULL)) {
             if (is_click) {
-                if (sys_system(6, 0, 0, 0, 0) == 0) {
+                if (sys_system(SYSTEM_CMD_NETWORK_INIT, 0, 0, 0, 0) == 0) {
                     net_status[0] = 'I'; net_status[1] = 'n'; net_status[2] = 'i'; 
                     net_status[3] = 't'; net_status[4] = 'e'; net_status[5] = 'd'; net_status[6] = 0;
                 } else {
@@ -993,7 +993,7 @@ static void control_panel_handle_mouse(int x, int y, bool is_down, bool is_click
     if (current_view == VIEW_FONTS) {
         for (int i=0; i<font_count; i++) {
             if (widget_button_handle_mouse(&btn_fonts[i], x, y, is_down, is_click, NULL)) {
-                if (is_click) { selected_font = i; sys_system(40 /*SET_FONT*/, (uint64_t)fonts[i].path, 0, 0, 0); btn_fonts[i].pressed=false;} return;
+                if (is_click) { selected_font = i; sys_system(SYSTEM_CMD_SET_FONT, (uint64_t)fonts[i].path, 0, 0, 0); btn_fonts[i].pressed=false;} return;
             }
         }
     }

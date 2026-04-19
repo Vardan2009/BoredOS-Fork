@@ -334,7 +334,7 @@ char* getcwd(char *buf, int size) {
 }
 
 void sleep(int ms) {
-    sys_system(46, ms, 0, 0, 0);
+    sys_system(SYSTEM_CMD_SLEEP, ms, 0, 0, 0);
 }
 
 void exit(int status) {

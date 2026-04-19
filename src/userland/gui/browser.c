@@ -313,7 +313,7 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
     int total = 0;
     int last_render = 0;
     if (progressive) inc_parse_offset = 0; 
-    long long last_data_tick = sys_system(16, 0, 0, 0, 0);
+    long long last_data_tick = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
 
     while (1) {
         int len = sys_tcp_recv_nb(dest_buf + total, max_len - 1 - total);
@@ -321,7 +321,7 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
         if (len == -2) break;
         
         if (len == 0) {
-            long long now = sys_system(16, 0, 0, 0, 0);
+            long long now = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
             if (now > last_data_tick + 1800) break; // 30 sec timeout
             
             gui_event_t ev;
@@ -353,7 +353,7 @@ static int fetch_content(const char *url, char *dest_buf, int max_len, bool prog
             continue;
         }
 
-        last_data_tick = sys_system(16, 0, 0, 0, 0);
+        last_data_tick = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
         total += len;
         if (total >= max_len - 1) break;
 
@@ -461,7 +461,7 @@ static void decode_image(unsigned char *data, int len, RenderElement *el) {
             el->img_delays = malloc(frame_count * sizeof(int));
             el->img_frame_count = frame_count;
             el->img_current_frame = 0;
-            el->next_frame_tick = sys_system(16, 0, 0, 0, 0) + (delays[0] * 60 / 1000);
+            el->next_frame_tick = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0) + (delays[0] * 60 / 1000);
             
             uint32_t step_x = (img_w_orig << 16) / fit_w;
             uint32_t step_y = (img_h_orig << 16) / fit_h;
@@ -2116,7 +2116,7 @@ int main(int argc, char **argv) {
 
         // Animated GIF progress
         bool gif_updated = false;
-        long long now = sys_system(16, 0, 0, 0, 0);
+        long long now = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
         for (int i = 0; i < element_count; i++) {
             if (elements[i].tag == TAG_IMG && elements[i].img_frames && elements[i].img_frame_count > 1) {
                 if (now >= elements[i].next_frame_tick) {

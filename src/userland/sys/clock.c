@@ -40,6 +40,10 @@ static long long sw_start_ticks = 0;
 static long long sw_elapsed_ticks = 0;
 static bool sw_running = false;
 
+static long long sys_ticks_now(void) {
+    return sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
+}
+
 static void format_time(char *buf, int h, int m, int s) {
     buf[0] = '0' + (h / 10);
     buf[1] = '0' + (h % 10);
@@ -55,7 +59,7 @@ static void format_time(char *buf, int h, int m, int s) {
 static void update_rtc_state(void) {
     int dt[6];
     int old_s = cur_s;
-    sys_system(11, (uint64_t)dt, 0, 0, 0);
+    sys_system(SYSTEM_CMD_RTC_GET, (uint64_t)dt, 0, 0, 0);
     cur_y = dt[0]; cur_mon = dt[1]; cur_d = dt[2];
     cur_h = dt[3]; cur_m = dt[4]; cur_s = dt[5];
     
@@ -123,7 +127,7 @@ static void clock_paint(void) {
         draw_btn((WIN_W - 120) / 2, 195, 120, 28, "Apply changes", false);
         
     } else if (current_tab == TAB_TIMER) {
-        long long now = sys_system(16, 0, 0, 0, 0);
+        long long now = sys_ticks_now();
         int display_h = timer_h, display_m = timer_m, display_s = timer_s;
         
         if (timer_running) {
@@ -131,7 +135,7 @@ static void clock_paint(void) {
             if (rem <= 0) {
                 timer_running = false;
                 display_h = display_m = display_s = 0;
-                for(int i=0; i<3; i++) sys_system(14, 440, 200, 0, 0);
+                for (int i = 0; i < 3; i++) sys_system(SYSTEM_CMD_BEEP, 440, 200, 0, 0);
             } else {
                 int s = rem / 60;
                 display_h = s / 3600;
@@ -157,7 +161,7 @@ static void clock_paint(void) {
         
     } else if (current_tab == TAB_STOPWATCH) {
         long long elapsed = sw_elapsed_ticks;
-        if (sw_running) elapsed += (sys_system(16, 0, 0, 0, 0) - sw_start_ticks);
+        if (sw_running) elapsed += (sys_ticks_now() - sw_start_ticks);
         
         int ms_val = (elapsed % 60) * 1000 / 60;
         int s_val = (elapsed / 60) % 60;
@@ -207,7 +211,7 @@ static void clock_click(int x, int y) {
             else if (x >= ax_clock + 73 && x <= ax_clock + 110) adj_s = (adj_s + 59) % 60;
         } else if (x >= (WIN_W - 120) / 2 && x <= (WIN_W + 120) / 2 && y >= 195 && y <= 223) {
             int dt[6] = {cur_y, cur_mon, cur_d, adj_h, adj_m, adj_s};
-            sys_system(32, (uint64_t)dt, 0, 0, 0);
+            sys_system(SYSTEM_CMD_RTC_SET, (uint64_t)dt, 0, 0, 0);
         }
     } else if (current_tab == TAB_TIMER) {
         if (!timer_running) {
@@ -225,16 +229,16 @@ static void clock_click(int x, int y) {
             if (!timer_running) {
                 if (timer_h > 0 || timer_m > 0 || timer_s > 0) {
                     timer_running = true;
-                    timer_end_ticks = sys_system(16, 0, 0, 0, 0) + (long long)(timer_h * 3600 + timer_m * 60 + timer_s) * 60;
+                    timer_end_ticks = sys_ticks_now() + (long long)(timer_h * 3600 + timer_m * 60 + timer_s) * 60;
                 }
             } else timer_running = false;
         }
     } else if (current_tab == TAB_STOPWATCH) {
         if (x >= 20 && x <= 110 && y >= 150 && y <= 180) {
-            if (sw_running) { sw_elapsed_ticks += (sys_system(16, 0, 0, 0, 0) - sw_start_ticks); sw_running = false; }
-            else { sw_start_ticks = sys_system(16, 0, 0, 0, 0); sw_running = true; }
+            if (sw_running) { sw_elapsed_ticks += (sys_ticks_now() - sw_start_ticks); sw_running = false; }
+            else { sw_start_ticks = sys_ticks_now(); sw_running = true; }
         } else if (x >= 140 && x <= 230 && y >= 150 && y <= 180) {
-            sw_elapsed_ticks = 0; sw_start_ticks = sys_system(16, 0, 0, 0, 0);
+            sw_elapsed_ticks = 0; sw_start_ticks = sys_ticks_now();
         }
     }
     clock_paint();
@@ -254,7 +258,7 @@ int main(void) {
             else if (ev.type == GUI_EVENT_CLICK) clock_click(ev.arg1, ev.arg2);
             else if (ev.type == GUI_EVENT_CLOSE) sys_exit(0);
         } else {
-            long long now = sys_system(16, 0, 0, 0, 0);
+            long long now = sys_ticks_now();
             if (now - last_rep >= 6) { clock_paint(); ui_mark_dirty(win_clock, 0, 0, WIN_W, WIN_H); last_rep = now; }
             sleep(10);
         }

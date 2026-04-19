@@ -269,7 +269,7 @@ void viewer_open_file(const char *path) {
             viewer_img_h = fit_h;
             viewer_has_image = (viewer_frame_count > 0);
             if (viewer_has_image) {
-                viewer_next_frame_tick = sys_system(16, 0, 0, 0, 0) + (viewer_delays[0] * 60 / 1000);
+                viewer_next_frame_tick = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0) + (viewer_delays[0] * 60 / 1000);
             }
         }
         free(delays);
@@ -337,7 +337,7 @@ int main(int argc, char **argv) {
                 win_w = ev.arg1;
                 win_h = ev.arg2;
                 resize_pending = true;
-                last_resize_tick = sys_system(16, 0, 0, 0, 0);
+                last_resize_tick = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
                 // Fast background clear during active resize
                 ui_draw_rect(win, 0, 0, win_w, win_h, 0xFF000000);
                 ui_mark_dirty(win, 0, 0, win_w, win_h - 20);
@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
             }
         } else {
             if (resize_pending) {
-                uint64_t now = sys_system(16, 0, 0, 0, 0);
+                uint64_t now = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
                 if (now > last_resize_tick + 10) {
                     viewer_paint(win);
                     ui_mark_dirty(win, 0, 0, win_w, win_h - 20);
@@ -357,7 +357,7 @@ int main(int argc, char **argv) {
             }
 
             if (viewer_has_image && viewer_frame_count > 1) {
-                uint64_t now = sys_system(16, 0, 0, 0, 0);
+                uint64_t now = sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0);
                 if (now >= viewer_next_frame_tick) {
                     viewer_current_frame = (viewer_current_frame + 1) % viewer_frame_count;
                     viewer_next_frame_tick = now + (viewer_delays[viewer_current_frame] * 60 / 1000);

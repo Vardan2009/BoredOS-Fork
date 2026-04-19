@@ -145,6 +145,22 @@ int sys_chdir(const char *path) {
     return (int)syscall2(SYS_FS, FS_CMD_CHDIR, (uint64_t)path);
 }
 
+int sys_dup(int oldfd) {
+    return (int)syscall2(SYS_FS, FS_CMD_DUP, (uint64_t)oldfd);
+}
+
+int sys_dup2(int oldfd, int newfd) {
+    return (int)syscall3(SYS_FS, FS_CMD_DUP2, (uint64_t)oldfd, (uint64_t)newfd);
+}
+
+int sys_pipe(int pipefd[2]) {
+    return (int)syscall2(SYS_FS, FS_CMD_PIPE, (uint64_t)pipefd);
+}
+
+int sys_fcntl(int fd, int cmd, int val) {
+    return (int)syscall4(SYS_FS, FS_CMD_FCNTL, (uint64_t)fd, (uint64_t)cmd, (uint64_t)val);
+}
+
 int sys_tty_create(void) {
     return (int)syscall2(SYS_SYSTEM, SYSTEM_CMD_TTY_CREATE, 0);
 }
@@ -163,6 +179,30 @@ int sys_tty_read_in(char *buf, int len) {
 
 int sys_spawn(const char *path, const char *args, uint64_t flags, uint64_t tty_id) {
     return (int)syscall5(SYS_SYSTEM, SYSTEM_CMD_SPAWN, (uint64_t)path, (uint64_t)args, flags, (uint64_t)tty_id);
+}
+
+int sys_exec(const char *path, const char *args) {
+    return (int)syscall4(SYS_SYSTEM, SYSTEM_CMD_EXEC, (uint64_t)path, (uint64_t)args, 0);
+}
+
+int sys_waitpid(int pid, int *status, int options) {
+    return (int)syscall4(SYS_SYSTEM, SYSTEM_CMD_WAITPID, (uint64_t)pid, (uint64_t)status, (uint64_t)options);
+}
+
+int sys_kill_signal(int pid, int sig) {
+    return (int)syscall4(SYS_SYSTEM, SYSTEM_CMD_KILL_SIGNAL, (uint64_t)pid, (uint64_t)sig, 0);
+}
+
+int sys_sigaction(int sig, const void *act, void *oldact) {
+    return (int)syscall4(SYS_SYSTEM, SYSTEM_CMD_SIGACTION, (uint64_t)sig, (uint64_t)act, (uint64_t)oldact);
+}
+
+int sys_sigprocmask(int how, const unsigned long *set, unsigned long *oldset) {
+    return (int)syscall4(SYS_SYSTEM, SYSTEM_CMD_SIGPROCMASK, (uint64_t)how, (uint64_t)set, (uint64_t)oldset);
+}
+
+int sys_sigpending(unsigned long *set) {
+    return (int)syscall3(SYS_SYSTEM, SYSTEM_CMD_SIGPENDING, (uint64_t)set, 0);
 }
 
 int sys_tty_set_fg(int tty_id, int pid) {

@@ -351,6 +351,13 @@ static void _b_append_strn(char *out, size_t cap, size_t *idx, const char *s, si
     }
 }
 
+static void _b_append_repeat(char *out, size_t cap, size_t *idx, char ch, int count) {
+    int i;
+    for (i = 0; i < count; i++) {
+        _b_append_char(out, cap, idx, ch);
+    }
+}
+
 static void _b_utoa(unsigned long long v, unsigned base, int upper, char *buf, size_t *len) {
     char tmp[64];
     size_t i = 0;
@@ -420,6 +427,7 @@ static void _b_ftoa(double d, int precision, char *buf, size_t *len) {
 
 __attribute__((weak)) int vsnprintf(char *str, size_t size, const char *fmt, va_list ap) {
     size_t out_i = 0;
+
     while (*fmt) {
         if (*fmt != '%') {
             _b_append_char(str, size, &out_i, *fmt++);
@@ -433,26 +441,49 @@ __attribute__((weak)) int vsnprintf(char *str, size_t size, const char *fmt, va_
             continue;
         }
 
-        while (*fmt == '-' || *fmt == '+' || *fmt == ' ' || *fmt == '#' || *fmt == '0') {
-            fmt++;
-        }
+        {
+            int left = 0;
+            int plus = 0;
+            int space = 0;
+            int alt = 0;
+            int zero = 0;
+            int width = -1;
+            int precision = -1;
+            int lcount = 0;
+            char spec;
 
-        if (*fmt == '*') {
-            (void)va_arg(ap, int);
-            fmt++;
-        } else {
-            while (isdigit((unsigned char)*fmt)) {
+            while (*fmt == '-' || *fmt == '+' || *fmt == ' ' || *fmt == '#' || *fmt == '0') {
+                if (*fmt == '-') left = 1;
+                else if (*fmt == '+') plus = 1;
+                else if (*fmt == ' ') space = 1;
+                else if (*fmt == '#') alt = 1;
+                else if (*fmt == '0') zero = 1;
                 fmt++;
             }
-        }
 
-        {
-            int precision = -1;
+            if (*fmt == '*') {
+                width = va_arg(ap, int);
+                if (width < 0) {
+                    left = 1;
+                    width = -width;
+                }
+                fmt++;
+            } else if (isdigit((unsigned char)*fmt)) {
+                width = 0;
+                while (isdigit((unsigned char)*fmt)) {
+                    width = width * 10 + (*fmt - '0');
+                    fmt++;
+                }
+            }
+
             if (*fmt == '.') {
                 fmt++;
                 precision = 0;
                 if (*fmt == '*') {
                     precision = va_arg(ap, int);
+                    if (precision < 0) {
+                        precision = -1;
+                    }
                     fmt++;
                 } else {
                     while (isdigit((unsigned char)*fmt)) {
@@ -462,57 +493,180 @@ __attribute__((weak)) int vsnprintf(char *str, size_t size, const char *fmt, va_
                 }
             }
 
-            int lcount = 0;
             while (*fmt == 'l') {
                 lcount++;
                 fmt++;
             }
 
-            switch (*fmt) {
+            spec = *fmt;
+            if (!spec) {
+                break;
+            }
+
+            switch (spec) {
                 case 'd':
                 case 'i': {
-                    long long v;
-                    char nbuf[64];
-                    size_t nlen = 0;
-                    if (lcount >= 2) v = va_arg(ap, long long);
-                    else if (lcount == 1) v = va_arg(ap, long);
-                    else v = va_arg(ap, int);
-                    _b_itoa(v, nbuf, &nlen);
-                    _b_append_strn(str, size, &out_i, nbuf, nlen);
+                    long long sv;
+                    unsigned long long uv;
+                    char digits[64];
+                    size_t dlen = 0;
+                    int neg = 0;
+                    char signch = '\0';
+                    int zeros = 0;
+                    int spaces = 0;
+                    int total;
+
+                    if (lcount >= 2) sv = va_arg(ap, long long);
+                    else if (lcount == 1) sv = va_arg(ap, long);
+                    else sv = va_arg(ap, int);
+
+                    if (sv < 0) {
+                        neg = 1;
+                        uv = (unsigned long long)(-(sv + 1)) + 1ULL;
+                    } else {
+                        uv = (unsigned long long)sv;
+                    }
+
+                    if (neg) signch = '-';
+                    else if (plus) signch = '+';
+                    else if (space) signch = ' ';
+
+                    if (!(precision == 0 && uv == 0ULL)) {
+                        _b_utoa(uv, 10U, 0, digits, &dlen);
+                    }
+
+                    if (precision > 0 && (size_t)precision > dlen) {
+                        zeros = precision - (int)dlen;
+                    }
+
+                    if (precision < 0 && zero && !left && width > 0) {
+                        int signw = (signch != '\0') ? 1 : 0;
+                        int need = width - (signw + (int)dlen);
+                        if (need > zeros) {
+                            zeros = need;
+                        }
+                    }
+
+                    total = ((signch != '\0') ? 1 : 0) + zeros + (int)dlen;
+                    if (width > total) {
+                        spaces = width - total;
+                    }
+
+                    if (!left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
+                    if (signch != '\0') {
+                        _b_append_char(str, size, &out_i, signch);
+                    }
+                    _b_append_repeat(str, size, &out_i, '0', zeros);
+                    _b_append_strn(str, size, &out_i, digits, dlen);
+                    if (left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     break;
                 }
+
                 case 'u':
                 case 'x':
                 case 'X':
                 case 'o': {
-                    unsigned long long v;
-                    unsigned base = (*fmt == 'o') ? 8U : ((*fmt == 'u') ? 10U : 16U);
-                    char nbuf[64];
-                    size_t nlen = 0;
-                    int upper = (*fmt == 'X');
-                    if (lcount >= 2) v = va_arg(ap, unsigned long long);
-                    else if (lcount == 1) v = va_arg(ap, unsigned long);
-                    else v = va_arg(ap, unsigned int);
-                    _b_utoa(v, base, upper, nbuf, &nlen);
-                    _b_append_strn(str, size, &out_i, nbuf, nlen);
+                    unsigned long long uv;
+                    unsigned base = (spec == 'o') ? 8U : ((spec == 'u') ? 10U : 16U);
+                    int upper = (spec == 'X');
+                    char digits[64];
+                    size_t dlen = 0;
+                    int zeros = 0;
+                    int spaces = 0;
+                    int prefix_len = 0;
+                    char p1 = '\0';
+                    char p2 = '\0';
+                    int total;
+
+                    if (lcount >= 2) uv = va_arg(ap, unsigned long long);
+                    else if (lcount == 1) uv = va_arg(ap, unsigned long);
+                    else uv = va_arg(ap, unsigned int);
+
+                    if (!(precision == 0 && uv == 0ULL)) {
+                        _b_utoa(uv, base, upper, digits, &dlen);
+                    }
+
+                    if (alt && uv != 0ULL) {
+                        if (spec == 'x' || spec == 'X') {
+                            p1 = '0';
+                            p2 = upper ? 'X' : 'x';
+                            prefix_len = 2;
+                        } else if (spec == 'o') {
+                            p1 = '0';
+                            prefix_len = 1;
+                        }
+                    }
+
+                    if (precision > 0 && (size_t)precision > dlen) {
+                        zeros = precision - (int)dlen;
+                    }
+
+                    if (precision < 0 && zero && !left && width > 0) {
+                        int need = width - (prefix_len + (int)dlen);
+                        if (need > zeros) {
+                            zeros = need;
+                        }
+                    }
+
+                    total = prefix_len + zeros + (int)dlen;
+                    if (width > total) {
+                        spaces = width - total;
+                    }
+
+                    if (!left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
+                    if (prefix_len >= 1) {
+                        _b_append_char(str, size, &out_i, p1);
+                    }
+                    if (prefix_len >= 2) {
+                        _b_append_char(str, size, &out_i, p2);
+                    }
+                    _b_append_repeat(str, size, &out_i, '0', zeros);
+                    _b_append_strn(str, size, &out_i, digits, dlen);
+                    if (left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     break;
                 }
+
                 case 'c': {
                     int c = va_arg(ap, int);
+                    int spaces = (width > 1) ? (width - 1) : 0;
+                    if (!left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     _b_append_char(str, size, &out_i, c);
+                    if (left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     break;
                 }
+
                 case 's': {
                     const char *s = va_arg(ap, const char *);
                     size_t slen;
+                    int spaces;
                     if (!s) s = "(null)";
                     slen = strlen(s);
                     if (precision >= 0 && (size_t)precision < slen) {
                         slen = (size_t)precision;
                     }
+                    spaces = (width > (int)slen) ? (width - (int)slen) : 0;
+                    if (!left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     _b_append_strn(str, size, &out_i, s, slen);
+                    if (left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     break;
                 }
+
                 case 'p': {
                     uintptr_t v = (uintptr_t)va_arg(ap, void *);
                     char nbuf[32];
@@ -522,22 +676,33 @@ __attribute__((weak)) int vsnprintf(char *str, size_t size, const char *fmt, va_
                     _b_append_strn(str, size, &out_i, nbuf, nlen);
                     break;
                 }
+
                 case 'f':
                 case 'g':
                 case 'e': {
                     double v = va_arg(ap, double);
                     char nbuf[96];
                     size_t nlen = 0;
+                    int spaces;
                     _b_ftoa(v, precision, nbuf, &nlen);
+                    spaces = (width > (int)nlen) ? (width - (int)nlen) : 0;
+                    if (!left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     _b_append_strn(str, size, &out_i, nbuf, nlen);
+                    if (left) {
+                        _b_append_repeat(str, size, &out_i, ' ', spaces);
+                    }
                     break;
                 }
+
                 default:
                     _b_append_char(str, size, &out_i, '%');
-                    _b_append_char(str, size, &out_i, *fmt);
+                    _b_append_char(str, size, &out_i, spec);
                     break;
             }
         }
+
         if (*fmt) {
             fmt++;
         }
@@ -547,6 +712,7 @@ __attribute__((weak)) int vsnprintf(char *str, size_t size, const char *fmt, va_
         size_t term = (out_i < size - 1) ? out_i : (size - 1);
         str[term] = '\0';
     }
+
     return (int)out_i;
 }
 

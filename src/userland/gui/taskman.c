@@ -397,7 +397,7 @@ int main(void) {
         ui_mark_dirty(win_taskman, 0, 0, 400, 480);
         
         // Proper blocking sleep (200ms)
-        sys_system(46, 200, 0, 0, 0); // SYSTEM_CMD_SLEEP
+        sys_system(SYSTEM_CMD_SLEEP, 200, 0, 0, 0);
     }
     
     return 0;

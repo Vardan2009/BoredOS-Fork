@@ -564,7 +564,7 @@ static void history_add(const char *line) {
 
 static void get_time_string(char *out, int max_len) {
     int dt[6] = {0};
-    sys_system(11, (uint64_t)dt, 0, 0, 0);
+    sys_system(SYSTEM_CMD_RTC_GET, (uint64_t)dt, 0, 0, 0);
     char hh[4], mm[4];
     itoa(dt[3], hh);
     itoa(dt[4], mm);
