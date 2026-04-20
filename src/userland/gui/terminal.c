@@ -430,30 +430,70 @@ static void get_tab_title(TerminalSession *s, char *out, int max_len) {
 
 static int read_config_value(const char *key, char *out, int max_len) {
     if (!key || !out || max_len <= 0) return -1;
+
     int fd = sys_open("/Library/bsh/bshrc", "r");
     if (fd < 0) return -1;
 
     char buf[4096];
     int bytes = sys_read(fd, buf, sizeof(buf) - 1);
     sys_close(fd);
+
     if (bytes <= 0) return -1;
     buf[bytes] = 0;
 
     char *line = buf;
+
     while (*line) {
         char *end = line;
         while (*end && *end != '\n' && *end != '\r') end++;
+
         char saved = *end;
         *end = 0;
 
         trim_end(line);
+
         if (line[0] != '#' && line[0] != 0) {
             char *sep = line;
+
             while (*sep && *sep != '=') sep++;
+
             if (*sep == '=') {
                 *sep = 0;
-                if (strcmp(line, key) == 0) {
-                    str_copy(out, sep + 1, max_len);
+
+                char *k = line;
+
+                // skip leading spaces
+                while (*k == ' ' || *k == '\t') k++;
+
+                // skip "export "
+                if (strncmp(k, "export ", 7) == 0) {
+                    k += 7;
+                }
+
+                // skip spaces again after export
+                while (*k == ' ' || *k == '\t') k++;
+
+                // trim end of key
+                char *kend = k + strlen(k) - 1;
+                while (kend > k && (*kend == ' ' || *kend == '\t')) {
+                    *kend = 0;
+                    kend--;
+                }
+
+                if (strcmp(k, key) == 0) {
+                    char *val = sep + 1;
+
+                    // skip leading spaces
+                    while (*val == ' ' || *val == '\t') val++;
+
+                    // remove "
+                    if (*val == '"') {
+                        val++;
+                        char *vend = strchr(val, '"');
+                        if (vend) *vend = 0;
+                    }
+
+                    str_copy(out, val, max_len);
                     return 0;
                 }
             }
@@ -826,24 +866,69 @@ static int create_tab(void) {
     return g_tab_count - 1;
 }
 
-// checks if a command exist in /bin
+static int parse_path(char paths[][128], int max_paths) {
+    char path_line[256];
+
+    if (read_config_value("PATH", path_line, sizeof(path_line)) != 0) {
+        str_copy(path_line, "/bin", sizeof(path_line));
+    }
+
+    if (path_line[0] == '"') {
+        memmove(path_line, path_line + 1, strlen(path_line));
+        char *end = strchr(path_line, '"');
+        if (end) *end = 0;
+    }
+
+    int count = 0;
+    int start = 0;
+
+    for (int i = 0;; i++) {
+        if (path_line[i] == ':' || path_line[i] == ';' || path_line[i] == 0) {
+            int len = i - start;
+
+            if (len > 0 && count < max_paths) {
+                if (len >= 128) len = 127;
+
+                memcpy(paths[count], &path_line[start], len);
+                paths[count][len] = 0;
+                count++;
+            }
+
+            start = i + 1;
+        }
+
+        if (path_line[i] == 0) break;
+    }
+
+    return count;
+}
+
 static bool command_exists(const char *cmd) {
-    char path[256];
-    
-    // test /bin/cmd
-    path[0] = 0;
-    str_append(path, "/bin/", sizeof(path));
-    str_append(path, cmd, sizeof(path));
+    if (!cmd || !cmd[0]) return false;
 
-    if (sys_exists(path)) return true;
+    char paths[16][128];
+    int path_count = parse_path(paths, 16);
 
-    // test /bin/cmd.elf
-    path[0] = 0;
-    str_append(path, "/bin/", sizeof(path));
-    str_append(path, cmd, sizeof(path));
-    str_append(path, ".elf", sizeof(path));
+    char full[256];
 
-    if (sys_exists(path)) return true;
+    for (int i = 0; i < path_count; i++) {
+        // folder/cmd
+        full[0] = 0;
+        str_append(full, paths[i], sizeof(full));
+        if (full[strlen(full) - 1] != '/') str_append(full, "/", sizeof(full));
+        str_append(full, cmd, sizeof(full));
+
+        if (sys_exists(full)) return true;
+
+        // folder/cmd.elf
+        full[0] = 0;
+        str_append(full, paths[i], sizeof(full));
+        if (full[strlen(full) - 1] != '/') str_append(full, "/", sizeof(full));
+        str_append(full, cmd, sizeof(full));
+        str_append(full, ".elf", sizeof(full));
+
+        if (sys_exists(full)) return true;
+    }
 
     return false;
 }
@@ -851,30 +936,36 @@ static bool command_exists(const char *cmd) {
 static bool command_starts_with(const char *prefix) {
     if (!prefix || !prefix[0]) return false;
 
+    char paths[16][128];
+    int path_count = parse_path(paths, 16);
+
     FAT32_FileInfo entries[128];
-    int count = sys_list("/bin", entries, 128);
-    if (count <= 0) return false;
 
-    for (int i = 0; i < count; i++) {
-        if (entries[i].is_directory) {
-            continue;
-        }
+    for (int p = 0; p < path_count; p++) {
+        int count = sys_list(paths[p], entries, 128);
+        if (count <= 0) continue;
 
-        char name[256];
-        str_copy(name, entries[i].name, sizeof(name));
+        for (int i = 0; i < count; i++) {
+            if (entries[i].is_directory) continue;
 
-        int len = (int)strlen(name);
-        if (len > 4 && strcmp(name + len - 4, ".elf") == 0) {
-            name[len - 4] = 0;
-        }
+            char name[256];
+            str_copy(name, entries[i].name, sizeof(name));
 
-        int j = 0;
-        while (prefix[j] && name[j] && prefix[j] == name[j]) {
-            j++;
-        }
+            int len = strlen(name);
 
-        if (prefix[j] == 0) {
-            return true;
+            // remove .elf
+            if (len > 4 && strcmp(name + len - 4, ".elf") == 0) {
+                name[len - 4] = 0;
+            }
+
+            int j = 0;
+            while (prefix[j] && name[j] && prefix[j] == name[j]) {
+                j++;
+            }
+
+            if (prefix[j] == 0) {
+                return true;
+            }
         }
     }
 
