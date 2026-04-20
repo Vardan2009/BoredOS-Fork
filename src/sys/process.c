@@ -10,6 +10,7 @@
 #include "memory_manager.h"
 #include "elf.h"
 #include "wm.h"
+#include "vfs.h"
 #include "spinlock.h"
 #include "smp.h"
 #include "lapic.h"
@@ -29,6 +30,47 @@ static uint32_t next_cpu_assign = 1;
 
 static void process_cleanup_inner(process_t *proc);
 
+static void process_close_fd_inner(process_t *proc, int fd) {
+    if (!proc || fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) {
+        return;
+    }
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+        if (ref) {
+            ref->refs--;
+            if (ref->refs <= 0) {
+                if (ref->file) vfs_close((vfs_file_t *)ref->file);
+                kfree(ref);
+            }
+        }
+    } else if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ || proc->fd_kind[fd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        if (pipe) {
+            if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ) pipe->readers--;
+            else pipe->writers--;
+            if (pipe->readers <= 0 && pipe->writers <= 0) {
+                kfree(pipe);
+            }
+        }
+    }
+
+    proc->fds[fd] = NULL;
+    proc->fd_kind[fd] = PROC_FD_KIND_NONE;
+    proc->fd_flags[fd] = 0;
+}
+
+static void process_init_signal_state(process_t *proc) {
+    if (!proc) return;
+    proc->signal_mask = 0;
+    proc->signal_pending = 0;
+    for (int i = 0; i < MAX_SIGNALS; i++) {
+        proc->signal_handlers[i] = 0;
+        proc->signal_action_mask[i] = 0;
+        proc->signal_action_flags[i] = 0;
+    }
+}
+
 void process_init(void) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
         processes[i].pid = 0xFFFFFFFF;
@@ -47,7 +89,16 @@ void process_init(void) {
     
     kernel_proc->fpu_initialized = true;
 
-    for (int i = 0; i < MAX_PROCESS_FDS; i++) kernel_proc->fds[i] = NULL;
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) {
+        kernel_proc->fds[i] = NULL;
+        kernel_proc->fd_kind[i] = 0;
+        kernel_proc->fd_flags[i] = 0;
+    }
+    kernel_proc->parent_pid = 0;
+    kernel_proc->pgid = 0;
+    kernel_proc->exited = false;
+    kernel_proc->exit_status = 0;
+    process_init_signal_state(kernel_proc);
     
     extern void mem_memcpy(void *dest, const void *src, size_t len);
     mem_memcpy(kernel_proc->name, "kernel", 7);
@@ -77,12 +128,18 @@ process_t* process_create(void (*entry_point)(void), bool is_user) {
         return NULL;
     }
     
+    process_t *parent = process_get_current();
+
     new_proc->pid = next_pid++;
     new_proc->is_user = is_user;
     new_proc->tty_id = -1;
     new_proc->kill_pending = false;
+    new_proc->parent_pid = parent ? parent->pid : 0;
+    new_proc->pgid = parent ? parent->pgid : new_proc->pid;
+    new_proc->exited = false;
+    new_proc->exit_status = 0;
+    process_init_signal_state(new_proc);
     
-    process_t *parent = process_get_current();
     if (parent) {
         extern void mem_memcpy(void *dest, const void *src, size_t len);
         mem_memcpy(new_proc->cwd, parent->cwd, 1024);
@@ -204,7 +261,11 @@ process_t* process_create_elf(const char* filepath, const char* args_str, bool t
     new_proc->pml4_phys = paging_create_user_pml4_phys();
     if (!new_proc->pml4_phys) return NULL;
 
-    for (int i = 0; i < MAX_PROCESS_FDS; i++) new_proc->fds[i] = NULL;
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) {
+        new_proc->fds[i] = NULL;
+        new_proc->fd_kind[i] = 0;
+        new_proc->fd_flags[i] = 0;
+    }
     new_proc->gui_event_head = 0;
     new_proc->gui_event_tail = 0;
     new_proc->ui_window = NULL;
@@ -213,15 +274,22 @@ process_t* process_create_elf(const char* filepath, const char* args_str, bool t
     new_proc->is_terminal_proc = terminal_proc;
     new_proc->tty_id = tty_id;
     new_proc->kill_pending = false;
+    new_proc->exited = false;
+    new_proc->exit_status = 0;
+    process_init_signal_state(new_proc);
 
     process_t *parent = process_get_current();
     if (parent) {
         extern void mem_memcpy(void *dest, const void *src, size_t len);
         mem_memcpy(new_proc->cwd, parent->cwd, 1024);
+        new_proc->parent_pid = parent->pid;
+        new_proc->pgid = parent->pgid;
     } else {
         extern void mem_memset(void *dest, int val, size_t len);
         mem_memset(new_proc->cwd, 0, 1024);
         new_proc->cwd[0] = '/';
+        new_proc->parent_pid = 0;
+        new_proc->pgid = new_proc->pid;
     }
 
     // 2. Load ELF executable
@@ -469,7 +537,7 @@ uint64_t process_schedule(uint64_t current_rsp) {
 
             current_process[my_cpu] = next_proc;
 
-            cur->pid = 0xFFFFFFFF;
+            cur->exited = true;
             cur->cpu_affinity = 0xFFFFFFFF;
             cur->ui_window = NULL;
             cur->is_terminal_proc = false;
@@ -570,7 +638,7 @@ uint64_t process_schedule(uint64_t current_rsp) {
 
 process_t* process_get_by_pid(uint32_t pid) {
     for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (processes[i].pid == pid) return &processes[i];
+        if (processes[i].pid == pid && !processes[i].exited) return &processes[i];
     }
     return NULL;
 }
@@ -593,12 +661,8 @@ static void process_cleanup_inner(process_t *proc) {
         proc->ui_window = NULL;
     }
     
-    extern void fat32_close(struct FAT32_FileHandle *fh);
     for (int i = 0; i < MAX_PROCESS_FDS; i++) {
-        if (proc->fds[i]) {
-            fat32_close(proc->fds[i]);
-            proc->fds[i] = NULL;
-        }
+        process_close_fd_inner(proc, i);
     }
     
     extern void cmd_process_finished(void);
@@ -613,12 +677,18 @@ static void process_cleanup_inner(process_t *proc) {
 }
 
 void process_terminate(process_t *to_delete) {
+    process_terminate_with_status(to_delete, 0);
+}
+
+void process_terminate_with_status(process_t *to_delete, int status) {
     if (!to_delete || to_delete->pid == 0xFFFFFFFF || to_delete->pid == 0) return;
 
     uint32_t cpu_count = smp_cpu_count();
     for (uint32_t c = 0; c < cpu_count && c < MAX_CPUS_SCHED; c++) {
         if (current_process[c] == to_delete) {
             to_delete->kill_pending = true;
+            to_delete->exit_status = status;
+            to_delete->exited = true;
             return;
         }
     }
@@ -662,13 +732,13 @@ void process_terminate(process_t *to_delete) {
     }
 
     // Mark slot as free
-    to_delete->pid = 0xFFFFFFFF; 
     to_delete->cpu_affinity = 0xFFFFFFFF;
     to_delete->kill_pending = false;
+    to_delete->exited = true;
+    to_delete->exit_status = status;
 
     if (to_delete->user_stack_alloc) kfree(to_delete->user_stack_alloc);
-    // Defer kernel stack until we switch away from it
-    to_delete->kernel_stack_alloc = NULL;
+    if (to_delete->kernel_stack_alloc) kfree(to_delete->kernel_stack_alloc);
     
     extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
     if (to_delete->pml4_phys && to_delete->is_user) {
@@ -694,6 +764,8 @@ uint64_t process_terminate_current(void) {
     }
     
     process_cleanup_inner(cur);
+    cur->exited = true;
+    cur->exit_status = 0;
 
     // 2. Find previous process in circular list
     process_t *prev = cur;
@@ -729,7 +801,6 @@ uint64_t process_terminate_current(void) {
     current_process[my_cpu] = next_proc;
     
     // Mark slot as free
-    to_delete->pid = 0xFFFFFFFF; 
     to_delete->cpu_affinity = 0xFFFFFFFF;
     to_delete->ui_window = NULL;
     to_delete->is_terminal_proc = false;
@@ -754,6 +825,222 @@ uint64_t process_terminate_current(void) {
     uint64_t next_rsp = current_process[my_cpu]->rsp;
     spinlock_release_irqrestore(&runqueue_lock, rflags);
     return next_rsp;
+}
+
+int process_reap(uint32_t caller_pid, uint32_t pid, int *status_out) {
+    process_t *p = NULL;
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        if (processes[i].pid == pid) {
+            p = &processes[i];
+            break;
+        }
+    }
+    if (!p) return -1;
+    if (!p->exited) return -2;
+    if (p->parent_pid != caller_pid && caller_pid != 0) return -1;
+
+    if (status_out) {
+        *status_out = p->exit_status;
+    }
+
+    p->pid = 0xFFFFFFFF;
+    p->parent_pid = 0;
+    p->pgid = 0;
+    p->cpu_affinity = 0xFFFFFFFF;
+    p->exited = false;
+    p->exit_status = 0;
+    p->sleep_until = 0;
+    p->ui_window = NULL;
+    p->is_terminal_proc = false;
+    p->tty_id = -1;
+    p->kill_pending = false;
+    p->used_memory = 0;
+    p->ticks = 0;
+    p->next = NULL;
+    for (int i = 0; i < MAX_PROCESS_FDS; i++) {
+        p->fds[i] = NULL;
+        p->fd_kind[i] = PROC_FD_KIND_NONE;
+        p->fd_flags[i] = 0;
+    }
+    process_init_signal_state(p);
+    return 0;
+}
+
+int process_waitpid(uint32_t caller_pid, int target_pid, int options, int *status_out) {
+    process_t *caller = process_get_by_pid(caller_pid);
+    int found_child = 0;
+    int found_waitable = 0;
+
+    for (int i = 0; i < MAX_PROCESSES; i++) {
+        process_t *p = &processes[i];
+        int match = 0;
+
+        if (p->pid == 0xFFFFFFFF || p->pid == 0 || p->parent_pid != caller_pid) {
+            continue;
+        }
+
+        found_child = 1;
+        if (target_pid > 0) {
+            match = ((int)p->pid == target_pid);
+        } else if (target_pid == -1) {
+            match = 1;
+        } else if (target_pid == 0) {
+            match = (caller && p->pgid == caller->pgid);
+        } else {
+            match = (p->pgid == (uint32_t)(-target_pid));
+        }
+
+        if (!match) {
+            continue;
+        }
+
+        found_waitable = 1;
+        if (!p->exited) {
+            continue;
+        }
+
+        if (process_reap(caller_pid, p->pid, status_out) != 0) {
+            return -1;
+        }
+        return (int)p->pid;
+    }
+
+    if (!found_child || !found_waitable) {
+        return -1;
+    }
+    if (options & 1) {
+        return 0;
+    }
+    return -2;
+}
+
+int process_exec_replace_current(registers_t *regs, const char* filepath, const char* args_str) {
+    process_t *proc = process_get_current();
+    if (!proc || !proc->is_user || !regs || !filepath) return -1;
+
+    uint64_t new_pml4 = paging_create_user_pml4_phys();
+    if (!new_pml4) return -1;
+
+    size_t elf_load_size = 0;
+    uint64_t entry_point = elf_load(filepath, new_pml4, &elf_load_size);
+    if (entry_point == 0) {
+        extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+        paging_destroy_user_pml4_phys(new_pml4);
+        return -1;
+    }
+
+    size_t user_stack_size = 262144;
+    void* stack = kmalloc_aligned(user_stack_size, 4096);
+    if (!stack) {
+        extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+        paging_destroy_user_pml4_phys(new_pml4);
+        return -1;
+    }
+
+    for (uint64_t i = 0; i < (user_stack_size / 4096); i++) {
+        paging_map_page(new_pml4, 0x800000 - user_stack_size + (i * 4096), v2p((uint64_t)stack + (i * 4096)), PT_PRESENT | PT_RW | PT_USER);
+    }
+
+    int argc = 1;
+    char *args_buf = (char *)stack + user_stack_size;
+    uint64_t user_args_buf = 0x800000;
+
+    int path_len = 0;
+    while (filepath[path_len]) path_len++;
+    args_buf -= (path_len + 1);
+    user_args_buf -= (path_len + 1);
+    for (int i = 0; i <= path_len; i++) args_buf[i] = filepath[i];
+
+    uint64_t argv_ptrs[32];
+    argv_ptrs[0] = user_args_buf;
+
+    if (args_str) {
+        int i = 0;
+        while (args_str[i] && argc < 31) {
+            while (args_str[i] == ' ') i++;
+            if (!args_str[i]) break;
+
+            int arg_start = i;
+            bool in_quotes = false;
+            if (args_str[i] == '"') {
+                in_quotes = true;
+                i++;
+                arg_start = i;
+                while (args_str[i] && args_str[i] != '"') i++;
+            } else {
+                while (args_str[i] && args_str[i] != ' ') i++;
+            }
+
+            int arg_len = i - arg_start;
+            args_buf -= (arg_len + 1);
+            user_args_buf -= (arg_len + 1);
+            for (int k = 0; k < arg_len; k++) args_buf[k] = args_str[arg_start + k];
+            args_buf[arg_len] = '\0';
+            argv_ptrs[argc++] = user_args_buf;
+            if (in_quotes && args_str[i] == '"') i++;
+        }
+    }
+    argv_ptrs[argc] = 0;
+
+    uint64_t current_user_sp = user_args_buf;
+    current_user_sp &= ~7ULL;
+    args_buf = (char *)((uint64_t)stack + (current_user_sp - (0x800000 - user_stack_size)));
+
+    int argv_size = (argc + 1) * (int)sizeof(uint64_t);
+    args_buf -= argv_size;
+    current_user_sp -= argv_size;
+    uint64_t actual_argv_ptr = current_user_sp;
+    uint64_t *user_argv_array = (uint64_t *)args_buf;
+    for (int i = 0; i <= argc; i++) user_argv_array[i] = argv_ptrs[i];
+
+    current_user_sp &= ~15ULL;
+
+    if (proc->user_stack_alloc) {
+        kfree(proc->user_stack_alloc);
+    }
+    if (proc->pml4_phys) {
+        extern void paging_destroy_user_pml4_phys(uint64_t pml4_phys);
+        paging_destroy_user_pml4_phys(proc->pml4_phys);
+    }
+
+    proc->pml4_phys = new_pml4;
+    proc->user_stack_alloc = stack;
+    proc->used_memory = elf_load_size + user_stack_size + 65536;
+    proc->heap_start = 0x20000000;
+    proc->heap_end = 0x20000000;
+    proc->sleep_until = 0;
+    process_init_signal_state(proc);
+
+    int last_slash = -1;
+    for (int i = 0; filepath[i]; i++) if (filepath[i] == '/') last_slash = i;
+    const char *filename = (last_slash == -1) ? filepath : (filepath + last_slash + 1);
+    int ni = 0;
+    while (filename[ni] && ni < 63) {
+        proc->name[ni] = filename[ni];
+        ni++;
+    }
+    proc->name[ni] = 0;
+
+    regs->rip = entry_point;
+    regs->rdi = argc;
+    regs->rsi = actual_argv_ptr;
+    regs->rsp = current_user_sp;
+    regs->rax = 0;
+    regs->rbx = 0;
+    regs->rcx = 0;
+    regs->rdx = 0;
+    regs->r8 = 0;
+    regs->r9 = 0;
+    regs->r10 = 0;
+    regs->r11 = 0;
+    regs->r12 = 0;
+    regs->r13 = 0;
+    regs->r14 = 0;
+    regs->r15 = 0;
+    regs->rbp = 0;
+
+    paging_switch_directory(proc->pml4_phys);
+    return 0;
 }
 
 // SMP: IPI handler called on AP cores when BSP broadcasts scheduling IPI

@@ -209,7 +209,7 @@ clean:
 run-windows: $(ISO_IMAGE)
 	qemu-system-x86_64 -m 4G -serial stdio -cdrom $< -boot d \
 	    -smp 4 \
-		-audiodev coreaudio,id=audio0 -machine pcspk-audiodev=audio0 \
+		-audiodev dsound,id=audio0 -machine pcspk-audiodev=audio0 \
 		-vga std -global VGA.xres=1920 -global VGA.yres=1080 \
 		-drive file=disk.img,format=raw,file.locking=off 
 run-mac: $(ISO_IMAGE)

@@ -967,6 +967,35 @@ static const syscall_handler_fn gui_cmd_table[GUI_CMD_TABLE_SIZE] = {
     [GUI_CMD_GET_DATETIME]           = gui_cmd_get_datetime,
 };
 
+#define O_RDONLY 0x0000
+#define O_WRONLY 0x0001
+#define O_RDWR   0x0002
+#define O_APPEND 0x0400
+#define O_NONBLOCK 0x0800
+#define F_GETFL 3
+#define F_SETFL 4
+
+static int fs_alloc_fd_slot(process_t *proc, int start) {
+    for (int i = start; i < MAX_PROCESS_FDS; i++) {
+        if (!proc->fds[i]) return i;
+    }
+    return -1;
+}
+
+static int fs_mode_to_flags(const char *mode) {
+    if (!mode || !mode[0]) return O_RDONLY;
+    if (mode[0] == 'r') {
+        return (mode[1] == '+') ? O_RDWR : O_RDONLY;
+    }
+    if (mode[0] == 'a') {
+        return (mode[1] == '+') ? (O_RDWR | O_APPEND) : (O_WRONLY | O_APPEND);
+    }
+    if (mode[0] == 'w') {
+        return (mode[1] == '+') ? O_RDWR : O_WRONLY;
+    }
+    return O_RDONLY;
+}
+
 static uint64_t fs_cmd_open(const syscall_args_t *args) {
     process_t *proc = process_get_current();
     const char *path = (const char *)args->arg2;
@@ -977,13 +1006,25 @@ static uint64_t fs_cmd_open(const syscall_args_t *args) {
     // but let's be explicit if we can.
     vfs_file_t *vf = vfs_open(path, mode);
     if (!vf) return -1;
-    
+
+    process_fd_file_ref_t *ref = (process_fd_file_ref_t *)kmalloc(sizeof(process_fd_file_ref_t));
+    if (!ref) {
+        vfs_close(vf);
+        return -1;
+    }
+    ref->file = vf;
+    ref->refs = 1;
+
     for (int i = 0; i < MAX_PROCESS_FDS; i++) {
         if (proc->fds[i] == NULL) {
-            proc->fds[i] = vf;
+            proc->fds[i] = ref;
+            proc->fd_kind[i] = PROC_FD_KIND_FILE;
+            proc->fd_flags[i] = fs_mode_to_flags(mode);
             return (uint64_t)i;
         }
     }
+
+    kfree(ref);
     vfs_close(vf);
     return -1;
 }
@@ -994,7 +1035,35 @@ static uint64_t fs_cmd_read(const syscall_args_t *args) {
     void *buf = (void *)args->arg3;
     uint32_t len = (uint32_t)args->arg4;
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    return (uint64_t)vfs_read((vfs_file_t*)proc->fds[fd], buf, (int)len);
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+        if (!ref || !ref->file) return -1;
+        return (uint64_t)vfs_read(ref->file, buf, (int)len);
+    }
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        if (!pipe || !buf) return -1;
+        uint8_t *out = (uint8_t *)buf;
+        uint32_t n = 0;
+        while (n < len) {
+            if (pipe->count == 0) {
+                if (pipe->writers == 0) break;
+                if (proc->fd_flags[fd] & O_NONBLOCK) {
+                    if (n == 0) return (uint64_t)-1;
+                    break;
+                }
+                break;
+            }
+            out[n++] = pipe->data[pipe->read_pos];
+            pipe->read_pos = (pipe->read_pos + 1) % sizeof(pipe->data);
+            pipe->count--;
+        }
+        return n;
+    }
+
+    return -1;
 }
 
 static uint64_t fs_cmd_write(const syscall_args_t *args) {
@@ -1003,15 +1072,65 @@ static uint64_t fs_cmd_write(const syscall_args_t *args) {
     const void *buf = (const void *)args->arg3;
     uint32_t len = (uint32_t)args->arg4;
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    return (uint64_t)vfs_write((vfs_file_t*)proc->fds[fd], buf, (int)len);
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+        if (!ref || !ref->file) return -1;
+        return (uint64_t)vfs_write(ref->file, buf, (int)len);
+    }
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        if (!pipe || !buf) return -1;
+        if (pipe->readers <= 0) return (uint64_t)-1;
+        const uint8_t *in = (const uint8_t *)buf;
+        uint32_t n = 0;
+        while (n < len) {
+            if (pipe->count == sizeof(pipe->data)) {
+                if (proc->fd_flags[fd] & O_NONBLOCK) {
+                    if (n == 0) return (uint64_t)-1;
+                    break;
+                }
+                break;
+            }
+            pipe->data[pipe->write_pos] = in[n++];
+            pipe->write_pos = (pipe->write_pos + 1) % sizeof(pipe->data);
+            pipe->count++;
+        }
+        return n;
+    }
+
+    return -1;
 }
 
 static uint64_t fs_cmd_close(const syscall_args_t *args) {
     process_t *proc = process_get_current();
     int fd = (int)args->arg2;
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    vfs_close((vfs_file_t*)proc->fds[fd]);
+
+    if (proc->fd_kind[fd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+        if (ref) {
+            ref->refs--;
+            if (ref->refs <= 0) {
+                if (ref->file) vfs_close(ref->file);
+                kfree(ref);
+            }
+        }
+    } else if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ || proc->fd_kind[fd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        if (pipe) {
+            if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ) pipe->readers--;
+            else pipe->writers--;
+            if (pipe->readers <= 0 && pipe->writers <= 0) {
+                kfree(pipe);
+            }
+        }
+    }
+
     proc->fds[fd] = NULL;
+    proc->fd_kind[fd] = PROC_FD_KIND_NONE;
+    proc->fd_flags[fd] = 0;
     return 0;
 }
 
@@ -1021,21 +1140,142 @@ static uint64_t fs_cmd_seek(const syscall_args_t *args) {
     int offset = (int)args->arg3;
     int whence = (int)args->arg4; // 0=SET, 1=CUR, 2=END
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    return (uint64_t)vfs_seek((vfs_file_t*)proc->fds[fd], offset, whence);
+    if (proc->fd_kind[fd] != PROC_FD_KIND_FILE) return -1;
+    process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+    if (!ref || !ref->file) return -1;
+    return (uint64_t)vfs_seek(ref->file, offset, whence);
 }
 
 static uint64_t fs_cmd_tell(const syscall_args_t *args) {
     process_t *proc = process_get_current();
     int fd = (int)args->arg2;
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    return (uint64_t)vfs_file_position((vfs_file_t*)proc->fds[fd]);
+    if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ || proc->fd_kind[fd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        return pipe ? pipe->count : 0;
+    }
+    if (proc->fd_kind[fd] != PROC_FD_KIND_FILE) return -1;
+    process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+    if (!ref || !ref->file) return -1;
+    return (uint64_t)vfs_file_position(ref->file);
 }
 
 static uint64_t fs_cmd_size(const syscall_args_t *args) {
     process_t *proc = process_get_current();
     int fd = (int)args->arg2;
     if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
-    return (uint64_t)vfs_file_size((vfs_file_t*)proc->fds[fd]);
+    if (proc->fd_kind[fd] == PROC_FD_KIND_PIPE_READ || proc->fd_kind[fd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[fd];
+        return pipe ? pipe->count : 0;
+    }
+    if (proc->fd_kind[fd] != PROC_FD_KIND_FILE) return -1;
+    process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[fd];
+    if (!ref || !ref->file) return -1;
+    return (uint64_t)vfs_file_size(ref->file);
+}
+
+static uint64_t fs_cmd_dup(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int oldfd = (int)args->arg2;
+    if (oldfd < 0 || oldfd >= MAX_PROCESS_FDS || !proc->fds[oldfd]) return -1;
+
+    int newfd = fs_alloc_fd_slot(proc, 0);
+    if (newfd < 0) return -1;
+
+    proc->fds[newfd] = proc->fds[oldfd];
+    proc->fd_kind[newfd] = proc->fd_kind[oldfd];
+    proc->fd_flags[newfd] = proc->fd_flags[oldfd];
+
+    if (proc->fd_kind[oldfd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[oldfd];
+        if (ref) ref->refs++;
+    } else if (proc->fd_kind[oldfd] == PROC_FD_KIND_PIPE_READ) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[oldfd];
+        if (pipe) pipe->readers++;
+    } else if (proc->fd_kind[oldfd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[oldfd];
+        if (pipe) pipe->writers++;
+    }
+
+    return (uint64_t)newfd;
+}
+
+static uint64_t fs_cmd_dup2(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int oldfd = (int)args->arg2;
+    int newfd = (int)args->arg3;
+    if (oldfd < 0 || oldfd >= MAX_PROCESS_FDS || !proc->fds[oldfd]) return -1;
+    if (newfd < 0 || newfd >= MAX_PROCESS_FDS) return -1;
+    if (oldfd == newfd) return (uint64_t)newfd;
+
+    if (proc->fds[newfd]) {
+        syscall_args_t close_args = *args;
+        close_args.arg2 = (uint64_t)newfd;
+        if (fs_cmd_close(&close_args) != 0) return -1;
+    }
+
+    proc->fds[newfd] = proc->fds[oldfd];
+    proc->fd_kind[newfd] = proc->fd_kind[oldfd];
+    proc->fd_flags[newfd] = proc->fd_flags[oldfd];
+
+    if (proc->fd_kind[oldfd] == PROC_FD_KIND_FILE) {
+        process_fd_file_ref_t *ref = (process_fd_file_ref_t *)proc->fds[oldfd];
+        if (ref) ref->refs++;
+    } else if (proc->fd_kind[oldfd] == PROC_FD_KIND_PIPE_READ) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[oldfd];
+        if (pipe) pipe->readers++;
+    } else if (proc->fd_kind[oldfd] == PROC_FD_KIND_PIPE_WRITE) {
+        process_fd_pipe_t *pipe = (process_fd_pipe_t *)proc->fds[oldfd];
+        if (pipe) pipe->writers++;
+    }
+
+    return (uint64_t)newfd;
+}
+
+static uint64_t fs_cmd_pipe(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int *pipefd = (int *)args->arg2;
+    if (!pipefd) return -1;
+
+    int rfd = fs_alloc_fd_slot(proc, 0);
+    if (rfd < 0) return -1;
+    int wfd = fs_alloc_fd_slot(proc, rfd + 1);
+    if (wfd < 0) return -1;
+
+    process_fd_pipe_t *pipe = (process_fd_pipe_t *)kmalloc(sizeof(process_fd_pipe_t));
+    if (!pipe) return -1;
+    mem_memset(pipe, 0, sizeof(*pipe));
+    pipe->readers = 1;
+    pipe->writers = 1;
+
+    proc->fds[rfd] = pipe;
+    proc->fd_kind[rfd] = PROC_FD_KIND_PIPE_READ;
+    proc->fd_flags[rfd] = O_RDONLY;
+
+    proc->fds[wfd] = pipe;
+    proc->fd_kind[wfd] = PROC_FD_KIND_PIPE_WRITE;
+    proc->fd_flags[wfd] = O_WRONLY;
+
+    pipefd[0] = rfd;
+    pipefd[1] = wfd;
+    return 0;
+}
+
+static uint64_t fs_cmd_fcntl(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int fd = (int)args->arg2;
+    int cmd = (int)args->arg3;
+    int val = (int)args->arg4;
+    if (fd < 0 || fd >= MAX_PROCESS_FDS || !proc->fds[fd]) return -1;
+
+    if (cmd == F_GETFL) {
+        return (uint64_t)proc->fd_flags[fd];
+    }
+    if (cmd == F_SETFL) {
+        proc->fd_flags[fd] = (proc->fd_flags[fd] & ~(O_APPEND | O_NONBLOCK)) | (val & (O_APPEND | O_NONBLOCK));
+        return 0;
+    }
+    return -1;
 }
 
 static uint64_t fs_cmd_list(const syscall_args_t *args) {
@@ -1137,7 +1377,7 @@ static uint64_t fs_cmd_chdir(const syscall_args_t *args) {
     }
     return -1;
 }
-#define FS_CMD_TABLE_SIZE 15
+#define FS_CMD_TABLE_SIZE 19
 static const syscall_handler_fn fs_cmd_table[FS_CMD_TABLE_SIZE] = {
     [FS_CMD_OPEN]     = fs_cmd_open,      // 1
     [FS_CMD_READ]     = fs_cmd_read,      // 2
@@ -1153,6 +1393,10 @@ static const syscall_handler_fn fs_cmd_table[FS_CMD_TABLE_SIZE] = {
     [FS_CMD_GETCWD]   = fs_cmd_getcwd,    // 12
     [FS_CMD_CHDIR]    = fs_cmd_chdir,     // 13
     [FS_CMD_GET_INFO] = fs_cmd_get_info,  // 14
+    [FS_CMD_DUP]      = fs_cmd_dup,       // 15
+    [FS_CMD_DUP2]     = fs_cmd_dup2,      // 16
+    [FS_CMD_PIPE]     = fs_cmd_pipe,      // 17
+    [FS_CMD_FCNTL]    = fs_cmd_fcntl,     // 18
 };
 
 static uint64_t sys_cmd_set_bg_color(const syscall_args_t *args) {
@@ -1178,7 +1422,7 @@ static uint64_t sys_cmd_set_bg_pattern(const syscall_args_t *args) {
     return 0;
 }
 
-static uint64_t sys_cmd_set_wallpaper_obsolete(const syscall_args_t *args) {
+static uint64_t sys_cmd_set_wallpaper(const syscall_args_t *args) {
     (void)args;
     return -1;
 }
@@ -1230,7 +1474,7 @@ static uint64_t sys_cmd_get_mouse_speed(const syscall_args_t *args) {
     return mouse_speed;
 }
 
-static uint64_t sys_cmd_get_wallpaper_thumb_obsolete(const syscall_args_t *args) {
+static uint64_t sys_cmd_get_wallpaper_thumb(const syscall_args_t *args) {
     (void)args;
     return -1;
 }
@@ -1268,6 +1512,21 @@ static uint64_t sys_cmd_beep(const syscall_args_t *args) {
     extern void k_beep(int freq, int ms);
     k_beep(freq, ms);
     return 0;
+}
+
+static uint64_t sys_cmd_get_mem_info(const syscall_args_t *args) {
+    uint64_t *out = (uint64_t *)args->arg2;
+    if (!out) return -1;
+    MemStats stats = memory_get_stats();
+    out[0] = (uint64_t)stats.total_memory;
+    out[1] = (uint64_t)stats.used_memory;
+    return 0;
+}
+
+static uint64_t sys_cmd_get_ticks(const syscall_args_t *args) {
+    (void)args;
+    extern uint32_t wm_get_ticks(void);
+    return (uint64_t)wm_get_ticks();
 }
 
 static uint64_t sys_cmd_pci_list(const syscall_args_t *args) {
@@ -1661,6 +1920,140 @@ static uint64_t sys_cmd_spawn_process(const syscall_args_t *args) {
     return (uint64_t)child->pid;
 }
 
+typedef struct {
+    uint64_t sa_handler;
+    uint64_t sa_mask;
+    int sa_flags;
+} k_sigaction_t;
+
+#define SA_RESETHAND 0x80000000
+#define SIGKILL_NUM 9
+
+static uint64_t sys_cmd_exec_process(const syscall_args_t *args) {
+    const char *user_path = (const char *)args->arg2;
+    const char *user_args = (const char *)args->arg3;
+    if (!user_path) return -1;
+
+    char path_buf[256];
+    int pi = 0;
+    while (pi < 255 && user_path[pi]) {
+        path_buf[pi] = user_path[pi];
+        pi++;
+    }
+    path_buf[pi] = 0;
+
+    char args_buf[512];
+    const char *args_ptr = NULL;
+    if (user_args) {
+        int ai = 0;
+        while (ai < 511 && user_args[ai]) {
+            args_buf[ai] = user_args[ai];
+            ai++;
+        }
+        args_buf[ai] = 0;
+        args_ptr = args_buf;
+    }
+
+    return process_exec_replace_current(args->regs, path_buf, args_ptr);
+}
+
+static uint64_t sys_cmd_waitpid(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int pid = (int)args->arg2;
+    int *status = (int *)args->arg3;
+    int options = (int)args->arg4;
+    if (!proc) return -1;
+
+    int st = 0;
+    int res = process_waitpid(proc->pid, pid, options, &st);
+    if (res == -2) {
+        if (options & 1) return 0; // WNOHANG
+        return (uint64_t)-2;
+    }
+    if (res < 0) return (uint64_t)-1;
+    if (status) *status = st;
+    return (uint64_t)res;
+}
+
+static uint64_t sys_cmd_kill_signal(const syscall_args_t *args) {
+    int pid = (int)args->arg2;
+    int sig = (int)args->arg3;
+    process_t *target;
+    if (pid == -1) {
+        target = process_get_current();
+    } else {
+        target = process_get_by_pid((uint32_t)pid);
+    }
+    if (!target) return -1;
+    if (sig == 0) return 0;
+    if (sig <= 0 || sig >= MAX_SIGNALS) return -1;
+
+    if (sig == 9) {
+        process_terminate_with_status(target, 128 + sig);
+        return 0;
+    }
+
+    target->signal_pending |= (1ULL << (uint32_t)sig);
+    return 0;
+}
+
+static uint64_t sys_cmd_sigaction(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int sig = (int)args->arg2;
+    const k_sigaction_t *act = (const k_sigaction_t *)args->arg3;
+    k_sigaction_t *oldact = (k_sigaction_t *)args->arg4;
+    if (!proc || sig <= 0 || sig >= MAX_SIGNALS) return -1;
+
+    if (oldact) {
+        oldact->sa_handler = proc->signal_handlers[sig];
+        oldact->sa_mask = proc->signal_action_mask[sig];
+        oldact->sa_flags = proc->signal_action_flags[sig];
+    }
+    if (act) {
+        if (sig == SIGKILL_NUM && act->sa_handler != 0) {
+            return -1;
+        }
+        proc->signal_handlers[sig] = act->sa_handler;
+        proc->signal_action_mask[sig] = act->sa_mask;
+        proc->signal_action_flags[sig] = act->sa_flags;
+    }
+    return 0;
+}
+
+static uint64_t sys_cmd_sigprocmask(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    int how = (int)args->arg2;
+    const uint64_t *set = (const uint64_t *)args->arg3;
+    uint64_t *oldset = (uint64_t *)args->arg4;
+    if (!proc) return -1;
+
+    if (oldset) {
+        *oldset = proc->signal_mask;
+    }
+    if (!set) return 0;
+
+    if (how == 0) {
+        proc->signal_mask |= *set;
+    } else if (how == 1) {
+        proc->signal_mask &= ~(*set);
+    } else if (how == 2) {
+        proc->signal_mask = *set;
+    } else {
+        return -1;
+    }
+    proc->signal_mask &= ~(1ULL << SIGKILL_NUM);
+
+    return 0;
+}
+
+static uint64_t sys_cmd_sigpending(const syscall_args_t *args) {
+    process_t *proc = process_get_current();
+    uint64_t *set = (uint64_t *)args->arg2;
+    if (!proc || !set) return -1;
+    *set = proc->signal_pending;
+    return 0;
+}
+
 static uint64_t sys_cmd_tty_set_fg(const syscall_args_t *args) {
     int tty_id = (int)args->arg2;
     int pid = (int)args->arg3;
@@ -1694,61 +2087,69 @@ static uint64_t sys_cmd_tty_destroy(const syscall_args_t *args) {
     return tty_destroy(tty_id);
 }
 
-#define SYS_CMD_TABLE_SIZE 70
+#define SYS_CMD_TABLE_SIZE 76
 static const syscall_handler_fn sys_cmd_table[SYS_CMD_TABLE_SIZE] = {
-    [1]  = sys_cmd_set_bg_color,
-    [2]  = sys_cmd_set_bg_pattern,
-    [3]  = sys_cmd_set_wallpaper_obsolete,
-    [4]  = sys_cmd_set_desktop_prop,
-    [5]  = sys_cmd_set_mouse_speed,
-    [6]  = sys_cmd_network_init,
-    [7]  = sys_cmd_get_desktop_prop,
-    [8]  = sys_cmd_get_mouse_speed,
-    [9]  = sys_cmd_get_wallpaper_thumb_obsolete,
-    [10] = sys_cmd_clear_screen,
-    [11] = sys_cmd_rtc_get,
-    [12] = sys_cmd_reboot,
-    [13] = sys_cmd_shutdown,
-    [14] = sys_cmd_beep,
-    [17] = sys_cmd_pci_list,
-    [18] = sys_cmd_network_dhcp,
-    [19] = sys_cmd_network_get_mac,
-    [20] = sys_cmd_network_get_ip,
-    [21] = sys_cmd_network_set_ip,
-    [22] = sys_cmd_udp_send,
-    [23] = sys_cmd_network_get_stats,
-    [24] = sys_cmd_network_get_gateway,
-    [25] = sys_cmd_network_get_dns,
-    [26] = sys_cmd_icmp_ping,
-    [27] = sys_cmd_network_is_init,
-    [28] = sys_cmd_get_shell_config,
-    [29] = sys_cmd_set_text_color,
-    [30] = sys_cmd_network_has_ip,
-    [31] = sys_cmd_set_wallpaper_path,
-    [32] = sys_cmd_rtc_set,
-    [33] = sys_cmd_tcp_connect,
-    [34] = sys_cmd_tcp_send,
-    [35] = sys_cmd_tcp_recv,
-    [36] = sys_cmd_tcp_close,
-    [37] = sys_cmd_dns_lookup,
-    [38] = sys_cmd_set_dns,
-    [39] = sys_cmd_net_unlock,
-    [40] = sys_cmd_set_font,
-    [41] = sys_cmd_set_raw_mode,
-    [42] = sys_cmd_tcp_recv_nb,
-    [47] = sys_cmd_set_resolution,
-    [48] = sys_cmd_network_get_nic_name,
-    [50] = sys_cmd_parallel_run,
-    [60] = sys_cmd_tty_create,
-    [61] = sys_cmd_tty_read_out,
-    [62] = sys_cmd_tty_write_in,
-    [63] = sys_cmd_tty_read_in,
-    [64] = sys_cmd_spawn_process,
-    [65] = sys_cmd_tty_set_fg,
-    [66] = sys_cmd_tty_get_fg,
-    [67] = sys_cmd_tty_kill_fg,
-    [68] = sys_cmd_tty_kill_all,
-    [69] = sys_cmd_tty_destroy,
+    [SYSTEM_CMD_SET_BG_COLOR]        = sys_cmd_set_bg_color,
+    [SYSTEM_CMD_SET_BG_PATTERN]      = sys_cmd_set_bg_pattern,
+    [SYSTEM_CMD_SET_WALLPAPER]       = sys_cmd_set_wallpaper,
+    [SYSTEM_CMD_SET_DESKTOP_PROP]    = sys_cmd_set_desktop_prop,
+    [SYSTEM_CMD_SET_MOUSE_SPEED]     = sys_cmd_set_mouse_speed,
+    [SYSTEM_CMD_NETWORK_INIT]        = sys_cmd_network_init,
+    [SYSTEM_CMD_GET_DESKTOP_PROP]    = sys_cmd_get_desktop_prop,
+    [SYSTEM_CMD_GET_MOUSE_SPEED]     = sys_cmd_get_mouse_speed,
+    [SYSTEM_CMD_GET_WALLPAPER_THUMB] = sys_cmd_get_wallpaper_thumb,
+    [SYSTEM_CMD_CLEAR_SCREEN]        = sys_cmd_clear_screen,
+    [SYSTEM_CMD_RTC_GET]             = sys_cmd_rtc_get,
+    [SYSTEM_CMD_REBOOT]              = sys_cmd_reboot,
+    [SYSTEM_CMD_SHUTDOWN]            = sys_cmd_shutdown,
+    [SYSTEM_CMD_BEEP]                = sys_cmd_beep,
+    [SYSTEM_CMD_GET_MEM_INFO]        = sys_cmd_get_mem_info,
+    [SYSTEM_CMD_GET_TICKS]           = sys_cmd_get_ticks,
+    [SYSTEM_CMD_PCI_LIST]            = sys_cmd_pci_list,
+    [SYSTEM_CMD_NETWORK_DHCP]        = sys_cmd_network_dhcp,
+    [SYSTEM_CMD_NETWORK_GET_MAC]     = sys_cmd_network_get_mac,
+    [SYSTEM_CMD_NETWORK_GET_IP]      = sys_cmd_network_get_ip,
+    [SYSTEM_CMD_NETWORK_SET_IP]      = sys_cmd_network_set_ip,
+    [SYSTEM_CMD_UDP_SEND]            = sys_cmd_udp_send,
+    [SYSTEM_CMD_NETWORK_GET_STATS]   = sys_cmd_network_get_stats,
+    [SYSTEM_CMD_NETWORK_GET_GATEWAY] = sys_cmd_network_get_gateway,
+    [SYSTEM_CMD_NETWORK_GET_DNS]     = sys_cmd_network_get_dns,
+    [SYSTEM_CMD_ICMP_PING]           = sys_cmd_icmp_ping,
+    [SYSTEM_CMD_NETWORK_IS_INIT]     = sys_cmd_network_is_init,
+    [SYSTEM_CMD_GET_SHELL_CONFIG]    = sys_cmd_get_shell_config,
+    [SYSTEM_CMD_SET_TEXT_COLOR]      = sys_cmd_set_text_color,
+    [SYSTEM_CMD_NETWORK_HAS_IP]      = sys_cmd_network_has_ip,
+    [SYSTEM_CMD_SET_WALLPAPER_PATH]  = sys_cmd_set_wallpaper_path,
+    [SYSTEM_CMD_RTC_SET]             = sys_cmd_rtc_set,
+    [SYSTEM_CMD_TCP_CONNECT]         = sys_cmd_tcp_connect,
+    [SYSTEM_CMD_TCP_SEND]            = sys_cmd_tcp_send,
+    [SYSTEM_CMD_TCP_RECV]            = sys_cmd_tcp_recv,
+    [SYSTEM_CMD_TCP_CLOSE]           = sys_cmd_tcp_close,
+    [SYSTEM_CMD_DNS_LOOKUP]          = sys_cmd_dns_lookup,
+    [SYSTEM_CMD_SET_DNS]             = sys_cmd_set_dns,
+    [SYSTEM_CMD_NET_UNLOCK]          = sys_cmd_net_unlock,
+    [SYSTEM_CMD_SET_FONT]            = sys_cmd_set_font,
+    [SYSTEM_CMD_SET_RAW_MODE]        = sys_cmd_set_raw_mode,
+    [SYSTEM_CMD_TCP_RECV_NB]         = sys_cmd_tcp_recv_nb,
+    [SYSTEM_CMD_SET_RESOLUTION]      = sys_cmd_set_resolution,
+    [SYSTEM_CMD_NETWORK_GET_NIC_NAME] = sys_cmd_network_get_nic_name,
+    [SYSTEM_CMD_PARALLEL_RUN]        = sys_cmd_parallel_run,
+    [SYSTEM_CMD_TTY_CREATE]          = sys_cmd_tty_create,
+    [SYSTEM_CMD_TTY_READ_OUT]        = sys_cmd_tty_read_out,
+    [SYSTEM_CMD_TTY_WRITE_IN]        = sys_cmd_tty_write_in,
+    [SYSTEM_CMD_TTY_READ_IN]         = sys_cmd_tty_read_in,
+    [SYSTEM_CMD_SPAWN]               = sys_cmd_spawn_process,
+    [SYSTEM_CMD_TTY_SET_FG]          = sys_cmd_tty_set_fg,
+    [SYSTEM_CMD_TTY_GET_FG]          = sys_cmd_tty_get_fg,
+    [SYSTEM_CMD_TTY_KILL_FG]         = sys_cmd_tty_kill_fg,
+    [SYSTEM_CMD_TTY_KILL_ALL]        = sys_cmd_tty_kill_all,
+    [SYSTEM_CMD_TTY_DESTROY]         = sys_cmd_tty_destroy,
+    [SYSTEM_CMD_EXEC]                = sys_cmd_exec_process,
+    [SYSTEM_CMD_WAITPID]             = sys_cmd_waitpid,
+    [SYSTEM_CMD_KILL_SIGNAL]         = sys_cmd_kill_signal,
+    [SYSTEM_CMD_SIGACTION]           = sys_cmd_sigaction,
+    [SYSTEM_CMD_SIGPROCMASK]         = sys_cmd_sigprocmask,
+    [SYSTEM_CMD_SIGPENDING]          = sys_cmd_sigpending,
 };
 
 static uint64_t handle_sys_write(const syscall_args_t *args) {
@@ -1871,6 +2272,49 @@ static uint64_t syscall_handler_inner(registers_t *regs) {
     return 0;
 }
 
+static uint64_t syscall_maybe_deliver_signal(registers_t *regs) {
+    process_t *proc = process_get_current();
+    if (!proc || !proc->is_user) return (uint64_t)regs;
+
+    uint64_t pending = proc->signal_pending & ~proc->signal_mask;
+    if (!pending) return (uint64_t)regs;
+
+    int sig = -1;
+    for (int i = 1; i < MAX_SIGNALS; i++) {
+        if (pending & (1ULL << (uint32_t)i)) {
+            sig = i;
+            break;
+        }
+    }
+    if (sig < 0) return (uint64_t)regs;
+
+    proc->signal_pending &= ~(1ULL << (uint32_t)sig);
+    uint64_t handler = proc->signal_handlers[sig];
+    int flags = proc->signal_action_flags[sig];
+
+    if (handler == 1) {
+        return (uint64_t)regs;
+    }
+
+    if (handler == 0 || sig == 9) {
+        process_terminate_with_status(proc, 128 + sig);
+        return process_schedule((uint64_t)regs);
+    }
+
+    if (flags & SA_RESETHAND) {
+        proc->signal_handlers[sig] = 0;
+        proc->signal_action_mask[sig] = 0;
+        proc->signal_action_flags[sig] = 0;
+    }
+
+    uint64_t new_rsp = regs->rsp - sizeof(uint64_t);
+    *((uint64_t *)new_rsp) = regs->rip;
+    regs->rsp = new_rsp;
+    regs->rip = handler;
+    regs->rdi = (uint64_t)sig;
+    return (uint64_t)regs;
+}
+
 uint64_t syscall_handler_c(registers_t *regs) {
     uint64_t syscall_num = regs->rax;
     
@@ -1899,13 +2343,13 @@ uint64_t syscall_handler_c(registers_t *regs) {
         }
     }
     
-    if (syscall_num == 5 && regs->rdi == 43) { // SYSTEM_CMD_YIELD
+    if (syscall_num == SYS_SYSTEM && regs->rdi == SYSTEM_CMD_YIELD) {
         extern uint64_t process_schedule(uint64_t current_rsp);
         regs->rax = 0;
         return process_schedule((uint64_t)regs);
     }
     
-    if (syscall_num == 5 && regs->rdi == 46) { // SYSTEM_CMD_SLEEP
+    if (syscall_num == SYS_SYSTEM && regs->rdi == SYSTEM_CMD_SLEEP) {
         uint32_t ms = (uint32_t)regs->rsi;
         process_t *proc = process_get_current();
         extern uint32_t wm_get_ticks(void);
@@ -1918,7 +2362,11 @@ uint64_t syscall_handler_c(registers_t *regs) {
     
     // Normal syscalls
     regs->rax = syscall_handler_inner(regs);
-    
-    // Return current RSP to assembly wrapper
-    return (uint64_t)regs;
+
+    if (syscall_num == SYS_SYSTEM && regs->rdi == SYSTEM_CMD_WAITPID && regs->rax == (uint64_t)-2) {
+        regs->rax = 0;
+        return process_schedule((uint64_t)regs);
+    }
+
+    return syscall_maybe_deliver_signal(regs);
 }

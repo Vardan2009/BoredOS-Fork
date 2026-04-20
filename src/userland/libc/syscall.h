@@ -28,6 +28,10 @@
 #define FS_CMD_GETCWD 12
 #define FS_CMD_CHDIR 13
 #define FS_CMD_GET_INFO 14
+#define FS_CMD_DUP 15
+#define FS_CMD_DUP2 16
+#define FS_CMD_PIPE 17
+#define FS_CMD_FCNTL 18
 
 // System Commands (via SYS_SYSTEM)
 #define SYSTEM_CMD_SET_BG_COLOR 1
@@ -44,6 +48,8 @@
 #define SYSTEM_CMD_REBOOT 12
 #define SYSTEM_CMD_SHUTDOWN 13
 #define SYSTEM_CMD_BEEP 14
+#define SYSTEM_CMD_GET_MEM_INFO 15
+#define SYSTEM_CMD_GET_TICKS 16
 #define SYSTEM_CMD_PCI_LIST 17
 #define SYSTEM_CMD_NETWORK_DHCP 18
 #define SYSTEM_CMD_NETWORK_GET_MAC 19
@@ -60,6 +66,7 @@
 #define SYSTEM_CMD_NETWORK_GET_NIC_NAME 48
 #define SYSTEM_CMD_SET_TEXT_COLOR 29
 #define SYSTEM_CMD_SET_WALLPAPER_PATH 31
+#define SYSTEM_CMD_RTC_SET 32
 #define SYSTEM_CMD_TCP_CONNECT 33
 #define SYSTEM_CMD_TCP_SEND 34
 #define SYSTEM_CMD_TCP_RECV 35
@@ -67,10 +74,12 @@
 #define SYSTEM_CMD_DNS_LOOKUP 37
 #define SYSTEM_CMD_SET_DNS 38
 #define SYSTEM_CMD_NET_UNLOCK 39
+#define SYSTEM_CMD_SET_FONT 40
 #define SYSTEM_CMD_SLEEP 46
 #define SYSTEM_CMD_SET_RAW_MODE 41
 #define SYSTEM_CMD_TCP_RECV_NB 42
 #define SYSTEM_CMD_YIELD 43
+#define SYSTEM_CMD_SET_RESOLUTION 47
 #define SYSTEM_CMD_PARALLEL_RUN 50
 #define SYSTEM_CMD_TTY_CREATE 60
 #define SYSTEM_CMD_TTY_READ_OUT 61
@@ -82,10 +91,17 @@
 #define SYSTEM_CMD_TTY_KILL_FG 67
 #define SYSTEM_CMD_TTY_KILL_ALL 68
 #define SYSTEM_CMD_TTY_DESTROY 69
+#define SYSTEM_CMD_EXEC 70
+#define SYSTEM_CMD_WAITPID 71
+#define SYSTEM_CMD_KILL_SIGNAL 72
+#define SYSTEM_CMD_SIGACTION 73
+#define SYSTEM_CMD_SIGPROCMASK 74
+#define SYSTEM_CMD_SIGPENDING 75
 
 #define SPAWN_FLAG_TERMINAL 0x1
 #define SPAWN_FLAG_INHERIT_TTY 0x2
 #define SPAWN_FLAG_TTY_ID 0x4
+#define SPAWN_FLAG_BACKGROUND 0x8
 
 // Internal assembly entry into Ring 0
 extern uint64_t syscall0(uint64_t sys_num);
@@ -128,12 +144,22 @@ int sys_mkdir(const char *path);
 int sys_exists(const char *path);
 int sys_getcwd(char *buf, int size);
 int sys_chdir(const char *path);
+int sys_dup(int oldfd);
+int sys_dup2(int oldfd, int newfd);
+int sys_pipe(int pipefd[2]);
+int sys_fcntl(int fd, int cmd, int val);
 
 int sys_tty_create(void);
 int sys_tty_read_out(int tty_id, char *buf, int len);
 int sys_tty_write_in(int tty_id, const char *buf, int len);
 int sys_tty_read_in(char *buf, int len);
 int sys_spawn(const char *path, const char *args, uint64_t flags, uint64_t tty_id);
+int sys_exec(const char *path, const char *args);
+int sys_waitpid(int pid, int *status, int options);
+int sys_kill_signal(int pid, int sig);
+int sys_sigaction(int sig, const void *act, void *oldact);
+int sys_sigprocmask(int how, const unsigned long *set, unsigned long *oldset);
+int sys_sigpending(unsigned long *set);
 int sys_tty_set_fg(int tty_id, int pid);
 int sys_tty_get_fg(int tty_id);
 int sys_tty_kill_fg(int tty_id);

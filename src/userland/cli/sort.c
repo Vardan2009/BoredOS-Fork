@@ -85,7 +85,7 @@ int main(void) {
     if (!fb) return 1;
 
     // Seed PRNG with system time (ticks)
-    my_srand((unsigned int)sys_system(16, 0, 0, 0, 0));
+    my_srand((unsigned int)sys_system(SYSTEM_CMD_GET_TICKS, 0, 0, 0, 0));
 
     // Initialize perfect slope
     int max_h = WIN_H - 40; // max height

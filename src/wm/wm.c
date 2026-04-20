@@ -246,6 +246,9 @@ static uint32_t timer_ticks = 0;
 static int last_cursor_x = 400;
 static int last_cursor_y = 300;
 
+#define CURSOR_W 18
+#define CURSOR_H 18
+
 static bool periodic_refresh_pending = false;
 
 // --- Desktop State ---
@@ -1344,27 +1347,38 @@ void draw_window(Window *win) {
     }
 }
 
-// Draw Mouse Cursor (Simple Arrow)
+// Draw Mouse Cursor (classic outlined arrow)
 void draw_cursor(int x, int y) {
-    // 0 = Transparent (skip), 1 = Black, 2 = White
-    static const uint8_t cursor_bitmap[10][10] = {
-        {1,1,0,0,0,0,0,0,0,0},
-        {1,2,1,0,0,0,0,0,0,0},
-        {1,2,2,1,0,0,0,0,0,0},
-        {1,2,2,2,1,0,0,0,0,0},
-        {1,2,2,2,2,1,0,0,0,0},
-        {1,2,2,2,2,2,1,0,0,0},
-        {1,2,2,1,1,1,1,0,0,0},
-        {1,1,1,0,1,2,1,0,0,0},
-        {0,0,0,0,0,1,2,1,0,0},
-        {0,0,0,0,0,0,1,0,0,0}
+    // '.' transparent, 'w' white outline, 'b' black fill
+    static const char cursor_bitmap[CURSOR_H][CURSOR_W + 1] = {
+        "w.................",
+        "ww................",
+        "wbw...............",
+        "wbbw..............",
+        "wbbbw.............",
+        "wbbbbw............",
+        "wbbbbbw...........",
+        "wbbbbbbw..........",
+        "wbbbbbbbw.........",
+        "wbbbbbbbbw........",
+        "wbbbbbbbbw........",
+        "wbbbbbbbw.........",
+        "wbbbbbbbw.........",
+        "wbbbbbbw..........",
+        "wwwwbbbw..........",
+        "....wbbw..........",
+        ".....wbw..........",
+        "......ww..........."
     };
-    
-    for (int r = 0; r < 10; r++) {
-        for (int c = 0; c < 10; c++) {
-            uint8_t p = cursor_bitmap[r][c];
-            if (p == 1) put_pixel(x + c, y + r, COLOR_BLACK);
-            else if (p == 2) put_pixel(x + c, y + r, COLOR_WHITE);
+
+    for (int r = 0; r < CURSOR_H; r++) {
+        for (int c = 0; c < CURSOR_W; c++) {
+            char p = cursor_bitmap[r][c];
+            if (p == 'w') {
+                put_pixel(x + c, y + r, COLOR_WHITE);
+            } else if (p == 'b') {
+                put_pixel(x + c, y + r, COLOR_BLACK);
+            }
         }
     }
 }
@@ -1377,8 +1391,8 @@ static void erase_cursor(int x, int y) {
     // Clamp to screen
     int x1 = x < 0 ? 0 : x;
     int y1 = y < 0 ? 0 : y;
-    int x2 = x + 10 > sw ? sw : x + 10;
-    int y2 = y + 10 > sh ? sh : y + 10;
+    int x2 = x + CURSOR_W > sw ? sw : x + CURSOR_W;
+    int y2 = y + CURSOR_H > sh ? sh : y + CURSOR_H;
     int w = x2 - x1;
     int h = y2 - y1;
     
@@ -1750,8 +1764,8 @@ void wm_paint(void) {
     int sh = get_screen_height();
     uint64_t rflags;
     rflags = wm_lock_acquire();
-    wm_mark_dirty(last_cursor_x, last_cursor_y, 12, 12);
-    wm_mark_dirty(mx, my, 12, 12);
+    wm_mark_dirty(last_cursor_x, last_cursor_y, CURSOR_W, CURSOR_H);
+    wm_mark_dirty(mx, my, CURSOR_W, CURSOR_H);
 
     DirtyRect dirty = graphics_get_dirty_rect();
     if (menubar_dirty_pending) {
@@ -2294,8 +2308,8 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
     if (my >= sh) my = sh - 1;
     
     if (move_x != 0 || move_y != 0) {
-        wm_mark_dirty(prev_mx, prev_my, 12, 12); // Extra padding for safety
-        wm_mark_dirty(mx, my, 12, 12);
+        wm_mark_dirty(prev_mx, prev_my, CURSOR_W, CURSOR_H);
+        wm_mark_dirty(mx, my, CURSOR_W, CURSOR_H);
     }
     
     if (dz != 0) {
@@ -2897,8 +2911,8 @@ static void wm_handle_mouse_internal(int dx, int dy, uint8_t buttons, int dz) {
     
     if (prev_mx != mx || prev_my != my) {
         // Cursor moved - just mark dirty cursor areas
-        wm_mark_dirty(prev_mx, prev_my, 10, 10);
-        wm_mark_dirty(mx, my, 10, 10);
+        wm_mark_dirty(prev_mx, prev_my, CURSOR_W, CURSOR_H);
+        wm_mark_dirty(mx, my, CURSOR_W, CURSOR_H);
     }
     
     prev_left = left;

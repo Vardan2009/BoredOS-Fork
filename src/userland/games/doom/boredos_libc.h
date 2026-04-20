@@ -5,18 +5,15 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
 
 #define EOF (-1)
-
-typedef struct {
-    int fd;
-    int eof;
-    int error;
-} FILE;
 
 extern FILE* stderr;
 extern FILE* stdout;
@@ -33,6 +30,14 @@ extern FILE* stdin;
 #define R_OK 4
 #define W_OK 2
 #define X_OK 1
+
+int open(const char *pathname, int flags, ...);
+int close(int fd);
+ssize_t read(int fd, void *buf, size_t count);
+ssize_t write(int fd, const void *buf, size_t count);
+off_t lseek(int fd, off_t offset, int whence);
+int unlink(const char *pathname);
+int isatty(int fd);
 
 FILE *fopen(const char *path, const char *mode);
 int fclose(FILE *stream);
@@ -73,11 +78,6 @@ int isupper(int c);
 
 int mkdir(const char *pathname, int mode);
 int access(const char *pathname, int mode);
-
-struct stat {
-    int st_size;
-    int st_mode;
-};
 int stat(const char *pathname, struct stat *statbuf);
 
 char *strstr(const char *haystack, const char *needle);

@@ -3,6 +3,9 @@
 
 #include <stddef.h>
 
+#ifndef BOREDOS_LIBC_TIME_H
+#define BOREDOS_LIBC_TIME_H
+
 typedef long long time_t;
 typedef unsigned long long clock_t;
 
@@ -26,5 +29,7 @@ struct tm *localtime(const time_t *timer);
 struct tm *gmtime(const time_t *timer);
 size_t strftime(char *s, size_t max, const char *fmt, const struct tm *tm);
 time_t mktime(struct tm *tm);
+
+#endif
 
 #endif

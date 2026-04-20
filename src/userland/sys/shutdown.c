@@ -7,6 +7,6 @@
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     printf("Shutting down...\n");
-    sys_system(13, 0, 0, 0, 0); // SYSTEM_CMD_SHUTDOWN
+    sys_system(SYSTEM_CMD_SHUTDOWN, 0, 0, 0, 0);
     return 0;
 }

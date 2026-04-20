@@ -16,15 +16,24 @@ void *memcpy(void *dest, const void *src, size_t n);
 // Math/Utility functions
 int atoi(const char *nptr);
 void itoa(int n, char *buf);
+int abs(int x);
+double strtod(const char *nptr, char **endptr);
 
 // IO functions
 void puts(const char *s);
 void printf(const char *fmt, ...);
 
+// Runtime stubs
+int system(const char *command);
+char *getenv(const char *name);
+void abort(void);
+
 // System/Process functions
 int chdir(const char *path);
 char* getcwd(char *buf, int size);
+int access(const char *pathname, int mode);
 void sleep(int ms);
 void exit(int status);
+void _exit(int status);
 
 #endif

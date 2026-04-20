@@ -10,7 +10,6 @@ extern uint64_t syscall6(uint64_t sys_num, uint64_t arg1, uint64_t arg2, uint64_
 
 // sys_gui uses syscall #3
 #define SYS_GUI 3
-#define GUI_CMD_GET_SCREEN_SIZE 17
 
 ui_window_t ui_window_create(const char *title, int x, int y, int w, int h) {
     uint64_t params[4] = { (uint64_t)x, (uint64_t)y, (uint64_t)w, (uint64_t)h };

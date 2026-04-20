@@ -59,7 +59,7 @@ $(BIN_DIR)/screenshot.elf: $(LIBC_OBJS) $(BIN_DIR)/screenshot.o $(BIN_DIR)/stb_i
 	$(LD) $(LDFLAGS) $^ -o $@
 
 $(BIN_DIR)/%.o: games/doom/%.c | $(BIN_DIR)
-	$(CC) $(CFLAGS) -Wno-error -Igames/doom -c $< -o $@
+	$(CC) $(CFLAGS) -Wno-error -DBOREDOS -Igames/doom -c $< -o $@
 
 $(BIN_DIR)/doom.elf: $(LIBC_OBJS) $(DOOM_OBJS) $(BIN_DIR)/stb_image.o
 	$(LD) $(LDFLAGS) $^ -o $@

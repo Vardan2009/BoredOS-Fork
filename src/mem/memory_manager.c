@@ -216,7 +216,7 @@ void* kmalloc_aligned(size_t size, size_t alignment) {
             // 4. [Allocated]
 
             // We'll modify block_list[i] and insert others as needed.
-            // To keep things simple and maintain sorted order, we update from right to left or carefully.
+            // To keep things simple and maintain sorted order, we update from right to left.
             
             if (padding > 0 && remaining_size > 0) {
                 // Case 1: Split into 3
