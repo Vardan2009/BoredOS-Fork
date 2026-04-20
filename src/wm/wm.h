@@ -127,6 +127,7 @@ void draw_document_icon(int x, int y, const char *label);
 void draw_pdf_icon(int x, int y, const char *label);
 void draw_elf_icon(int x, int y, const char *label);
 void draw_image_icon(int x, int y, const char *label);
+bool draw_icon_path(int x, int y, const char *path);
 void draw_notepad_icon(int x, int y, const char *label);
 void draw_calculator_icon(int x, int y, const char *label);
 void draw_terminal_icon(int x, int y, const char *label);

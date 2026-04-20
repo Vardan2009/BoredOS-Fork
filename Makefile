@@ -22,7 +22,10 @@ USERLAND_COLLOID_ICONS = $(shell { \
 	find $(SRC_DIR)/userland -type f -name '*.c' ! -path '*/third_party/*' -exec grep -hoE '"[^"]+\.png"' {} + 2>/dev/null; \
 	find $(SRC_DIR)/userland -type f -name '*.h' ! -path '*/third_party/*' ! -name 'stb_image.h' -exec grep -hoE '"[^"]+\.png"' {} + 2>/dev/null; \
 } | sed 's/"//g' | sed 's@.*/@@' | sort -u)
-COLLOID_ICONS = $(sort $(DOCK_COLLOID_ICONS) $(USERLAND_COLLOID_ICONS))
+USERLAND_METADATA_ICONS = $(shell { \
+	find $(SRC_DIR)/userland -type f -name '*.c' -exec sed -n 's@^[[:space:]]*//[[:space:]]*BOREDOS_APP_ICONS:[[:space:]]*@@p' {} + 2>/dev/null; \
+} | tr ';' '\n' | sed 's@.*/@@' | sed '/^[[:space:]]*$$/d' | sort -u)
+COLLOID_ICONS = $(sort $(DOCK_COLLOID_ICONS) $(USERLAND_COLLOID_ICONS) $(USERLAND_METADATA_ICONS) xterm.png)
 
 C_SOURCES = $(wildcard $(SRC_DIR)/core/*.c) \
             $(wildcard $(SRC_DIR)/sys/*.c) \

@@ -18,6 +18,7 @@
 #include "userland/stb_image.h"
 #include "memory_manager.h"
 #include "disk.h"
+#include "app_metadata.h"
 #include "../sys/work_queue.h"
 #include "../sys/smp.h"
 #include "../core/kconsole.h"
@@ -1103,6 +1104,39 @@ void draw_image_icon(int x, int y, const char *label) {
     // Removing the explicit `draw_icon_label` call here to prevent double-text since `wm.c` or Explorer manually draws it as well inside their draw block
 }
 
+bool draw_icon_path(int x, int y, const char *path) {
+    uint32_t *icon = NULL;
+
+    if (!path || !path[0]) return false;
+
+    icon = thumb_cache_lookup(path);
+    if (!icon && !thumb_cache_is_failed(path)) {
+        icon = thumb_cache_decode(path);
+    }
+    if (!icon) return false;
+
+    int dx = x + 24;
+    int dy = y + 12;
+    for (int ty = 0; ty < 32; ty++) {
+        for (int tx = 0; tx < 32; tx++) {
+            int src_x = tx * 48 / 32;
+            int src_y = ty * 48 / 32;
+            uint32_t src = icon[src_y * 48 + src_x];
+            uint32_t a = (src >> 24) & 0xFF;
+            if (a == 0) continue;
+
+            if (a == 255) {
+                put_pixel(dx + tx, dy + ty, 0xFF000000 | (src & 0x00FFFFFF));
+            } else {
+                uint32_t dst = graphics_get_pixel(dx + tx, dy + ty);
+                put_pixel(dx + tx, dy + ty, blend_src_over_dst(dst, src));
+            }
+        }
+    }
+
+    return true;
+}
+
 void draw_notepad_icon(int x, int y, const char *label) {
     draw_scaled_icon(x, y, draw_dock_notepad);
     draw_icon_label(x, y, label);
@@ -1839,7 +1873,29 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
                 else if (str_starts_with(icon->name, "Grapher")) draw_grapher_icon(icon->x, icon->y, label);
                 else draw_icon(icon->x, icon->y, label);
             } else {
-                if (str_ends_with(icon->name, ".elf")) draw_elf_icon(icon->x, icon->y, icon->name);
+                if (str_ends_with(icon->name, ".elf")) {
+                    char full_path[128] = "/root/Desktop/";
+                    char icon_path[BOREDOS_APP_METADATA_MAX_IMAGE_PATH];
+                    bool drew_icon = false;
+                    int p = 14;
+                    int n = 0;
+
+                    while (icon->name[n] && p < 127) full_path[p++] = icon->name[n++];
+                    full_path[p] = 0;
+
+                    if (app_metadata_get_primary_image(full_path, icon_path, sizeof(icon_path))) {
+                        drew_icon = draw_icon_path(icon->x, icon->y, icon_path);
+                    }
+                    if (!drew_icon) {
+                        drew_icon = draw_icon_path(icon->x, icon->y, "/Library/images/icons/colloid/xterm.png");
+                    }
+
+                    if (drew_icon) {
+                        draw_icon_label(icon->x, icon->y, icon->name);
+                    } else {
+                        draw_elf_icon(icon->x, icon->y, icon->name);
+                    }
+                }
                 else if (str_ends_with(icon->name, ".pnt")) draw_paint_icon(icon->x, icon->y, icon->name);
                 else if (is_image_file(icon->name)) {
                     char full_path[128] = "/root/Desktop/"; int p=14; int n=0; while(icon->name[n] && p < 127) full_path[p++] = icon->name[n++]; full_path[p]=0;

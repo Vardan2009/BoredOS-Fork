@@ -10,6 +10,7 @@
 #include "wm.h"
 #include "memory_manager.h"
 #include "process.h"
+#include "app_metadata.h"
 #define EXPLORER_ITEM_HEIGHT 80
 #define EXPLORER_ITEM_WIDTH 120
 #define EXPLORER_COLS 4
@@ -901,8 +902,6 @@ static void explorer_draw_colloid_slot_icon(int x, int y, int slot_index) {
 }
 
 static void explorer_draw_file_icon(int x, int y, bool is_dir, const char *filename, const char *current_path) {
-    (void)current_path;
-
     if (is_dir) {
         explorer_draw_colloid_slot_icon(x + 5, y + 5, EXPLORER_DOCK_SLOT_FILES);
     } else if (explorer_str_ends_with(filename, ".shortcut")) {
@@ -948,7 +947,17 @@ static void explorer_draw_file_icon(int x, int y, bool is_dir, const char *filen
     } else if (explorer_str_ends_with(filename, ".pdf")) {
         explorer_draw_colloid_slot_icon(x + 5, y + 5, EXPLORER_DOCK_SLOT_WORD);
     } else if (explorer_str_ends_with(filename, ".elf")) {
-        explorer_draw_colloid_slot_icon(x + 5, y + 5, EXPLORER_DOCK_SLOT_TERMINAL);
+        char app_path[FAT32_MAX_PATH];
+        char icon_path[BOREDOS_APP_METADATA_MAX_IMAGE_PATH];
+
+        explorer_strcpy(app_path, current_path);
+        if (app_path[explorer_strlen(app_path) - 1] != '/') explorer_strcat(app_path, "/");
+        explorer_strcat(app_path, filename);
+
+        if (!(app_metadata_get_primary_image(app_path, icon_path, sizeof(icon_path)) &&
+              draw_icon_path(x + 5, y + 5, icon_path))) {
+            explorer_draw_colloid_slot_icon(x + 5, y + 5, EXPLORER_DOCK_SLOT_TERMINAL);
+        }
     } else {
         explorer_draw_colloid_slot_icon(x + 5, y + 5, EXPLORER_DOCK_SLOT_NOTEPAD);
     }
