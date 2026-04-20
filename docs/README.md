@@ -17,6 +17,7 @@ Explains the logical layout of the kernel and internal components.
 -   [`Memory`](architecture/memory.md): Physical Memory Management (PMM) and Virtual Memory Management (VMM).
 -   [`Filesystem`](architecture/filesystem.md): Virtual File System (VFS) and the RAM-based FAT32 simulation.
 -   [`Window Manager`](architecture/window_manager.md): How the built-in Window Manager natively handles graphics, events, and compositing.
+-   [`Versioning`](architecture/versioning.md): The OS date-based version scheme (`YY.M[.x]`) and kernel semantic versioning (`MAJOR.MINOR.PATCH`).
 
 ### 2. [Building and Deployment](build/)
 Instructions for compiling the OS from source.
