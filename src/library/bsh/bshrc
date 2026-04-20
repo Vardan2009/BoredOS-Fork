@@ -5,7 +5,7 @@
 # Lines starting with # are comments.
 #
 # PATH controls command lookup order (colon-separated).
-export PATH="/bin"
+export PATH="/bin:/example/bin"
 
 # Scripts to run automatically.
 # STARTUP runs for interactive shells.
