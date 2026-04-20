@@ -31,6 +31,7 @@ The SDK and toolchain guides for creating your own `.elf` userland binaries.
 -   [`UI API`](appdev/ui_api.md): Drawing on the screen, creating windows, and polling the event loop using `libui.h`.
 -   [`Widget API`](appdev/widget_api.md): High-level UI components like buttons, textboxes, and scrollbars using `libwidget.h`.
 -   [`Custom Apps`](appdev/custom_apps.md): A step-by-step tutorial on writing a new graphical C application, editing the Makefile, and bundling it into the ISO.
+-   [`ELF App Metadata`](appdev/elf_metadata.md): How to declare app icons and descriptions using source annotations, how the build system embeds them into `.note.boredos.app` ELF sections, and how the kernel reads them at runtime.
 -   [`Example Apps`](appdev/examples/README.md): A collection of sample C applications ranging from basic terminal output to advanced TCP networking.
 -   [`Grapher`](appdev/grapher.md): Full reference for the built-in mathematical graphing application — equation syntax, keyboard controls, architecture, and configuration.
 
