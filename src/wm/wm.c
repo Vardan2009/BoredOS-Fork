@@ -898,8 +898,7 @@ void draw_elf_icon(int x, int y, const char *label) {
     draw_icon_label(x, y, label);
 }
 
-// === Dynamic thumbnail cache for JPG explorer icons ===
-#define THUMB_CACHE_SIZE 8
+#define THUMB_CACHE_SIZE 128
 #define THUMB_PIXELS (48 * 48)
 static struct {
     char path[FAT32_MAX_PATH];
@@ -910,7 +909,7 @@ static struct {
 static int thumb_cache_next = 0; // Round-robin eviction
 
 // Deferred Thumbnail Request Queue
-#define THUMB_QUEUE_SIZE 16
+#define THUMB_QUEUE_SIZE 128
 static char thumb_request_queue[THUMB_QUEUE_SIZE][FAT32_MAX_PATH];
 static int thumb_queue_head = 0;
 static int thumb_queue_tail = 0;
@@ -954,21 +953,49 @@ static uint32_t* thumb_cache_lookup(const char *path) {
     return NULL;
 }
 
+static void thumb_cache_mark_failed(const char *path) {
+    if (!path || !path[0]) return;
+
+    int slot = thumb_cache_next;
+    thumb_cache_next = (thumb_cache_next + 1) % THUMB_CACHE_SIZE;
+
+    int p = 0;
+    while (path[p] && p < FAT32_MAX_PATH - 1) {
+        thumb_cache[slot].path[p] = path[p];
+        p++;
+    }
+    thumb_cache[slot].path[p] = 0;
+    thumb_cache[slot].valid = false;
+    thumb_cache[slot].failed = true;
+}
+
 
 
 static uint32_t* thumb_cache_decode(const char *path) {
+    uint32_t *cached = thumb_cache_lookup(path);
+    if (cached) return cached;
+    if (thumb_cache_is_failed(path)) return NULL;
+
     // Open and read the JPG file
     FAT32_FileHandle *fh = fat32_open(path, "r");
-    if (!fh) return NULL;
+    if (!fh) {
+        thumb_cache_mark_failed(path);
+        return NULL;
+    }
     
     uint32_t file_size = fh->size;
     if (file_size == 0 || file_size > 8 * 1024 * 1024) {
         fat32_close(fh);
+        thumb_cache_mark_failed(path);
         return NULL;
     }
     
     unsigned char *buf = (unsigned char*)kmalloc(file_size);
-    if (!buf) { fat32_close(fh); return NULL; }
+    if (!buf) {
+        fat32_close(fh);
+        thumb_cache_mark_failed(path);
+        return NULL;
+    }
     
     int total = 0;
     while (total < (int)file_size) {
@@ -978,19 +1005,21 @@ static uint32_t* thumb_cache_decode(const char *path) {
     }
     fat32_close(fh);
     
-    if (total <= 0) { kfree(buf); return NULL; }
+    if (total <= 0) {
+        kfree(buf);
+        thumb_cache_mark_failed(path);
+        return NULL;
+    }
     
     // Decode image
     int img_w, img_h, channels;
     unsigned char *img = stbi_load_from_memory(buf, total, &img_w, &img_h, &channels, 4);
     if (!img || img_w <= 0 || img_h <= 0) {
-        serial_write("[WM] stbi_load_from_memory failed for deferred thumb\n");
         if (img) stbi_image_free(img);
         kfree(buf);
+        thumb_cache_mark_failed(path);
         return NULL;
     }
-    
-    serial_write("[WM] stbi_load_from_memory OK for deferred thumb\n");
     
     // Store in cache — downscale to 48x48
     int slot = thumb_cache_next;
@@ -3287,10 +3316,12 @@ void wm_process_deferred_thumbs(void) {
 
     // Pop from queue
     thumb_queue_head = (thumb_queue_head + 1) % THUMB_QUEUE_SIZE;
+
+    if (thumb_cache_lookup(path) || thumb_cache_is_failed(path)) return;
     
-    // Process (this takes time but it's okay because we are in the main loop with IRQs enabled)
-    thumb_cache_decode(path);
-    force_redraw = true;
+    if (thumb_cache_decode(path)) {
+        force_redraw = true;
+    }
 }
 
 void wm_init(void) {
