@@ -110,6 +110,7 @@ uint32_t wm_get_ticks(void);
 int wm_get_desktop_icon_count(void);
 void wm_show_message(const char *title, const char *message);
 void wm_notify_fs_change(void);
+bool wm_draw_dock_icon_scaled(int x, int y, int size, int slot_index);
 
 // Hook for external rendering (e.g. VM overlay)
 extern void (*wm_custom_paint_hook)(void);

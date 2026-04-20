@@ -564,8 +564,191 @@ static void draw_dock_clock(int x, int y);
 static void draw_dock_taskman(int x, int y);
 static void draw_dock_word(int x, int y);
 static void draw_dock_browser(int x, int y);
-static void draw_dock_editor(int x, int y);
 static void draw_filled_circle(int cx, int cy, int r, uint32_t color);
+
+#define DOCK_ICON_COUNT 12
+#define DOCK_ICON_SIZE 48
+#define DOCK_ICON_PIXELS (DOCK_ICON_SIZE * DOCK_ICON_SIZE)
+#define DOCK_ICON_BASE_PATH "/Library/images/icons/colloid/"
+
+typedef enum {
+    DOCK_ICON_UNTRIED = 0,
+    DOCK_ICON_LOADING = 1,
+    DOCK_ICON_READY = 2,
+    DOCK_ICON_FAILED = 3,
+} dock_icon_state_t;
+
+typedef struct {
+    const char *filename;
+    volatile int state;
+    uint32_t pixels[DOCK_ICON_PIXELS];
+} dock_icon_entry_t;
+
+static dock_icon_entry_t dock_icons[DOCK_ICON_COUNT] = {
+    {"file-manager.png", DOCK_ICON_UNTRIED, {0}},
+    {"preferences-system.png", DOCK_ICON_UNTRIED, {0}},
+    {"text-editor.png", DOCK_ICON_UNTRIED, {0}},
+    {"calc.png", DOCK_ICON_UNTRIED, {0}},
+    {"se.sjoerd.Graphs.png", DOCK_ICON_UNTRIED, {0}},
+    {"xterm.png", DOCK_ICON_UNTRIED, {0}},
+    {"gnome-mines.png", DOCK_ICON_UNTRIED, {0}},
+    {"gnome-paint.png", DOCK_ICON_UNTRIED, {0}},
+    {"web-browser.png", DOCK_ICON_UNTRIED, {0}},
+    {"utilities-system-monitor.png", DOCK_ICON_UNTRIED, {0}},
+    {"preferences-system-time.png", DOCK_ICON_UNTRIED, {0}},
+    {"libreoffice-writer.png", DOCK_ICON_UNTRIED, {0}},
+};
+
+static uint32_t blend_src_over_dst(uint32_t dst, uint32_t src) {
+    uint32_t sa = (src >> 24) & 0xFF;
+    if (sa == 0) return dst;
+    if (sa == 255) return 0xFF000000 | (src & 0x00FFFFFF);
+
+    uint32_t sr = (src >> 16) & 0xFF;
+    uint32_t sg = (src >> 8) & 0xFF;
+    uint32_t sb = src & 0xFF;
+
+    uint32_t dr = (dst >> 16) & 0xFF;
+    uint32_t dg = (dst >> 8) & 0xFF;
+    uint32_t db = dst & 0xFF;
+
+    uint32_t inv = 255 - sa;
+    uint32_t out_r = (sr * sa + dr * inv) / 255;
+    uint32_t out_g = (sg * sa + dg * inv) / 255;
+    uint32_t out_b = (sb * sa + db * inv) / 255;
+
+    return 0xFF000000 | (out_r << 16) | (out_g << 8) | out_b;
+}
+
+static bool dock_icon_decode_into_entry(dock_icon_entry_t *entry) {
+    if (!entry || !entry->filename) return false;
+
+    char full_path[192];
+    k_strcpy(full_path, DOCK_ICON_BASE_PATH);
+    k_strcpy(full_path + k_strlen(full_path), entry->filename);
+
+    FAT32_FileHandle *fh = fat32_open(full_path, "r");
+    if (!fh) return false;
+
+    uint32_t file_size = fh->size;
+    if (file_size == 0 || file_size > 8 * 1024 * 1024) {
+        fat32_close(fh);
+        return false;
+    }
+
+    unsigned char *encoded = (unsigned char*)kmalloc(file_size);
+    if (!encoded) {
+        fat32_close(fh);
+        return false;
+    }
+
+    int total = 0;
+    while (total < (int)file_size) {
+        int chunk = fat32_read(fh, encoded + total, (int)file_size - total);
+        if (chunk <= 0) break;
+        total += chunk;
+    }
+    fat32_close(fh);
+
+    if (total <= 0) {
+        kfree(encoded);
+        return false;
+    }
+
+    int img_w = 0, img_h = 0, channels = 0;
+    unsigned char *rgba = stbi_load_from_memory(encoded, total, &img_w, &img_h, &channels, 4);
+    kfree(encoded);
+    if (!rgba || img_w <= 0 || img_h <= 0) {
+        if (rgba) stbi_image_free(rgba);
+        return false;
+    }
+
+    int img_max_x = img_w - 1;
+    int img_max_y = img_h - 1;
+
+    k_memset(entry->pixels, 0, sizeof(entry->pixels));
+    for (int ty = 0; ty < DOCK_ICON_SIZE; ty++) {
+        for (int tx = 0; tx < DOCK_ICON_SIZE; tx++) {
+            int sx = (DOCK_ICON_SIZE > 1) ? (tx * img_max_x) / (DOCK_ICON_SIZE - 1) : 0;
+            int sy = (DOCK_ICON_SIZE > 1) ? (ty * img_max_y) / (DOCK_ICON_SIZE - 1) : 0;
+            if (sx < 0) sx = 0;
+            if (sy < 0) sy = 0;
+            if (sx > img_max_x) sx = img_max_x;
+            if (sy > img_max_y) sy = img_max_y;
+
+            int idx = (sy * img_w + sx) * 4;
+            uint32_t r = rgba[idx];
+            uint32_t g = rgba[idx + 1];
+            uint32_t b = rgba[idx + 2];
+            uint32_t a = rgba[idx + 3];
+            entry->pixels[ty * DOCK_ICON_SIZE + tx] = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+    }
+
+    stbi_image_free(rgba);
+    return true;
+}
+
+static dock_icon_entry_t *dock_icon_get_entry(int slot_index) {
+    if (slot_index < 0 || slot_index >= DOCK_ICON_COUNT) return NULL;
+
+    dock_icon_entry_t *entry = &dock_icons[slot_index];
+    int state = __atomic_load_n(&entry->state, __ATOMIC_ACQUIRE);
+    if (state == DOCK_ICON_READY || state == DOCK_ICON_FAILED) return entry;
+
+    if (state == DOCK_ICON_UNTRIED) {
+        int expected = DOCK_ICON_UNTRIED;
+        if (__atomic_compare_exchange_n(&entry->state, &expected, DOCK_ICON_LOADING, false,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+            bool ok = dock_icon_decode_into_entry(entry);
+            __atomic_store_n(&entry->state, ok ? DOCK_ICON_READY : DOCK_ICON_FAILED, __ATOMIC_RELEASE);
+            return entry;
+        }
+        state = __atomic_load_n(&entry->state, __ATOMIC_ACQUIRE);
+    }
+
+    if (state == DOCK_ICON_LOADING) return NULL;
+    return entry;
+}
+
+bool wm_draw_dock_icon_scaled(int x, int y, int size, int slot_index) {
+    if (size <= 0) return false;
+
+    dock_icon_entry_t *entry = dock_icon_get_entry(slot_index);
+    if (!entry) return false;
+    if (__atomic_load_n(&entry->state, __ATOMIC_ACQUIRE) != DOCK_ICON_READY) return false;
+
+    int src_max = DOCK_ICON_SIZE - 1;
+
+    for (int ty = 0; ty < size; ty++) {
+        int sy = (size > 1) ? (ty * src_max) / (size - 1) : 0;
+        if (sy < 0) sy = 0;
+        if (sy > src_max) sy = src_max;
+
+        for (int tx = 0; tx < size; tx++) {
+            int sx = (size > 1) ? (tx * src_max) / (size - 1) : 0;
+            if (sx < 0) sx = 0;
+            if (sx > src_max) sx = src_max;
+
+            uint32_t src = entry->pixels[sy * DOCK_ICON_SIZE + sx];
+            uint32_t a = (src >> 24) & 0xFF;
+            if (a == 0) continue;
+
+            if (a == 255) {
+                put_pixel(x + tx, y + ty, 0xFF000000 | (src & 0x00FFFFFF));
+            } else {
+                uint32_t dst = graphics_get_pixel(x + tx, y + ty);
+                put_pixel(x + tx, y + ty, blend_src_over_dst(dst, src));
+            }
+        }
+    }
+
+    return true;
+}
+
+static void draw_dock_icon_slot_png(int x, int y, int slot_index) {
+    (void)wm_draw_dock_icon_scaled(x, y, DOCK_ICON_SIZE, slot_index);
+}
 
 static void draw_scaled_icon(int x, int y, void (*draw_fn)(int, int)) {
     // 48x48 buffer for the dock icon
@@ -1090,7 +1273,7 @@ static long long isqrt(long long n) {
     return x;
 }
 
-static void draw_dock_word(int x, int y) {
+static void __attribute__((unused)) draw_dock_word(int x, int y) {
     // Rich blue document style
     draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF4A90E2);
     draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF5D9CE6);
@@ -1247,7 +1430,7 @@ static void draw_dock_paint(int x, int y) {
     draw_rounded_rect_filled(x + 30, y + 22, 3, 7, 1, 0xFF1A1A1A);
 }
 
-static void draw_dock_browser(int x, int y) {
+static void __attribute__((unused)) draw_dock_browser(int x, int y) {
     draw_rounded_rect_filled(x, y, 48, 48, 10, 0xFF0D47A1);
     draw_rounded_rect_filled(x + 1, y + 1, 46, 28, 9, 0xFF1976D2);
     draw_rounded_rect_filled(x + 1, y + 24, 46, 23, 9, 0xFF1565C0);
@@ -1667,18 +1850,10 @@ static void wm_paint_region(int y_start, int y_end, DirtyRect dirty, int pass) {
             int d_bg_x = (sw - d_total_w) / 2 - 12, d_bg_w = d_total_w + 24;
             draw_rounded_rect_blurred(d_bg_x, dock_y, d_bg_w, dock_h, 18, COLOR_DOCK_BG, 1, 180);
             int dx = (sw - d_total_w) / 2, dy = dock_y + 6;
-            draw_dock_files(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_settings(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_notepad(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_calculator(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_grapher(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_terminal(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_minesweeper(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_paint(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_browser(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_taskman(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_clock(dx, dy); dx += d_item_sz+d_space;
-            draw_dock_word(dx, dy);
+            for (int i = 0; i < DOCK_ICON_COUNT; i++) {
+                draw_dock_icon_slot_png(dx, dy, i);
+                dx += d_item_sz + d_space;
+            }
         }
         
         if (desktop_menu_visible) {
