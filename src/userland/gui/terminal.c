@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <syscall.h>
 #include "libc/libui.h"
+#include "libc/input.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -19,6 +20,7 @@
 #define TAB_CLOSE_PAD 6
 #define MAX_TABS 4
 #define TTY_READ_CHUNK 512
+#define LINE_MAX 256
 
 typedef struct {
     char c;
@@ -38,12 +40,19 @@ typedef struct {
     int cursor_col;
     uint32_t fg_color;
     uint32_t bg_color;
+    uint32_t input_color;
 
     int ansi_state;
     int ansi_params[8];
     int ansi_param_count;
     int saved_row;
     int saved_col;
+
+    bool colors_enabled;
+
+    // for color
+    char current_input[LINE_MAX];
+    int input_len;
 } TerminalSession;
 
 static ui_window_t g_win;
@@ -421,30 +430,70 @@ static void get_tab_title(TerminalSession *s, char *out, int max_len) {
 
 static int read_config_value(const char *key, char *out, int max_len) {
     if (!key || !out || max_len <= 0) return -1;
+
     int fd = sys_open("/Library/bsh/bshrc", "r");
     if (fd < 0) return -1;
 
     char buf[4096];
     int bytes = sys_read(fd, buf, sizeof(buf) - 1);
     sys_close(fd);
+
     if (bytes <= 0) return -1;
     buf[bytes] = 0;
 
     char *line = buf;
+
     while (*line) {
         char *end = line;
         while (*end && *end != '\n' && *end != '\r') end++;
+
         char saved = *end;
         *end = 0;
 
         trim_end(line);
+
         if (line[0] != '#' && line[0] != 0) {
             char *sep = line;
+
             while (*sep && *sep != '=') sep++;
+
             if (*sep == '=') {
                 *sep = 0;
-                if (strcmp(line, key) == 0) {
-                    str_copy(out, sep + 1, max_len);
+
+                char *k = line;
+
+                // skip leading spaces
+                while (*k == ' ' || *k == '\t') k++;
+
+                // skip "export "
+                if (strncmp(k, "export ", 7) == 0) {
+                    k += 7;
+                }
+
+                // skip spaces again after export
+                while (*k == ' ' || *k == '\t') k++;
+
+                // trim end of key
+                char *kend = k + strlen(k) - 1;
+                while (kend > k && (*kend == ' ' || *kend == '\t')) {
+                    *kend = 0;
+                    kend--;
+                }
+
+                if (strcmp(k, key) == 0) {
+                    char *val = sep + 1;
+
+                    // skip leading spaces
+                    while (*val == ' ' || *val == '\t') val++;
+
+                    // remove "
+                    if (*val == '"') {
+                        val++;
+                        char *vend = strchr(val, '"');
+                        if (vend) *vend = 0;
+                    }
+
+                    str_copy(out, val, max_len);
                     return 0;
                 }
             }
@@ -655,14 +704,37 @@ static void draw_session(TerminalSession *s) {
                 line_cols = g_cols;
             }
         }
+
+        int input_start = s->cursor_col - s->input_len;
+        if (input_start < 0) input_start = 0;
+        if (input_start >= g_cols) input_start = g_cols - 1;
+
+        // lenght of a command
+        int cmd_len = 0;
+        while (cmd_len < s->input_len &&
+            s->current_input[cmd_len] != ' ') {
+            cmd_len++;
+        }
+
+        int input_end = input_start + cmd_len;
+        if (input_end > g_cols) input_end = g_cols;
+
         for (int col = 0; col < g_cols; col++) {
             char ch = ' ';
             uint32_t color = s->fg_color;
+
             if (line && col < line_cols) {
                 ch = line[col].c;
                 if (ch == 0) ch = ' ';
                 color = line[col].color;
             }
+
+            if (s->scroll_offset == 0 && row == s->cursor_row) {
+                if (col >= input_start && col < input_end) {
+                    color = s->input_color;
+                }
+            }
+
             char str[2] = { ch, 0 };
             int x = col * CHAR_W;
             int y = base_y + row * g_line_h;
@@ -691,8 +763,24 @@ static void tab_init(TerminalSession *s, int tty_id, int bsh_pid) {
     s->ansi_param_count = 0;
     s->saved_row = 0;
     s->saved_col = 0;
+
+    s->input_len = 0;
+    s->current_input[0] = 0;
     session_reset_colors(s);
     scrollback_init(s);
+    
+    char value[64];
+
+    if (read_config_value("TERMINAL_COLOR", value, sizeof(value)) == 0) {
+        if (strcmp(value, "1") == 0 || strcmp(value, "true") == 0) {
+            s->colors_enabled = true;
+        } else {
+            s->colors_enabled = false;
+        }
+    } else {
+        s->colors_enabled = false;
+    }
+        
     session_clear(s);
 }
 
@@ -778,27 +866,168 @@ static int create_tab(void) {
     return g_tab_count - 1;
 }
 
+static int parse_path(char paths[][128], int max_paths) {
+    char path_line[256];
+
+    if (read_config_value("PATH", path_line, sizeof(path_line)) != 0) {
+        str_copy(path_line, "/bin", sizeof(path_line));
+    }
+
+    if (path_line[0] == '"') {
+        memmove(path_line, path_line + 1, strlen(path_line));
+        char *end = strchr(path_line, '"');
+        if (end) *end = 0;
+    }
+
+    int count = 0;
+    int start = 0;
+
+    for (int i = 0;; i++) {
+        if (path_line[i] == ':' || path_line[i] == ';' || path_line[i] == 0) {
+            int len = i - start;
+
+            if (len > 0 && count < max_paths) {
+                if (len >= 128) len = 127;
+
+                memcpy(paths[count], &path_line[start], len);
+                paths[count][len] = 0;
+                count++;
+            }
+
+            start = i + 1;
+        }
+
+        if (path_line[i] == 0) break;
+    }
+
+    return count;
+}
+
+static bool command_exists(const char *cmd) {
+    if (!cmd || !cmd[0]) return false;
+
+    char paths[16][128];
+    int path_count = parse_path(paths, 16);
+
+    char full[256];
+
+    for (int i = 0; i < path_count; i++) {
+        // folder/cmd
+        full[0] = 0;
+        str_append(full, paths[i], sizeof(full));
+        if (full[strlen(full) - 1] != '/') str_append(full, "/", sizeof(full));
+        str_append(full, cmd, sizeof(full));
+
+        if (sys_exists(full)) return true;
+
+        // folder/cmd.elf
+        full[0] = 0;
+        str_append(full, paths[i], sizeof(full));
+        if (full[strlen(full) - 1] != '/') str_append(full, "/", sizeof(full));
+        str_append(full, cmd, sizeof(full));
+        str_append(full, ".elf", sizeof(full));
+
+        if (sys_exists(full)) return true;
+    }
+
+    return false;
+}
+
+static bool command_starts_with(const char *prefix) {
+    if (!prefix || !prefix[0]) return false;
+
+    char paths[16][128];
+    int path_count = parse_path(paths, 16);
+
+    FAT32_FileInfo entries[128];
+
+    for (int p = 0; p < path_count; p++) {
+        int count = sys_list(paths[p], entries, 128);
+        if (count <= 0) continue;
+
+        for (int i = 0; i < count; i++) {
+            if (entries[i].is_directory) continue;
+
+            char name[256];
+            str_copy(name, entries[i].name, sizeof(name));
+
+            int len = strlen(name);
+
+            // remove .elf
+            if (len > 4 && strcmp(name + len - 4, ".elf") == 0) {
+                name[len - 4] = 0;
+            }
+
+            int j = 0;
+            while (prefix[j] && name[j] && prefix[j] == name[j]) {
+                j++;
+            }
+
+            if (prefix[j] == 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static void update_input_color(TerminalSession *s) {
+    if (!s->colors_enabled) {
+        return;
+    }
+    
+    if (s->input_len == 0) {
+        s->input_color = 0xFFFFFFFF;
+        return;
+    }
+
+    char cmd[64];
+    int i = 0;
+
+    while (i < s->input_len &&
+        s->current_input[i] != ' ' &&
+        s->current_input[i] != '\t' &&
+        i < 63) {
+        cmd[i] = s->current_input[i];
+        i++;
+    }
+    cmd[i] = 0;
+
+    if (command_exists(cmd)) {
+        s->input_color = 0xFF55FF55; // green
+    } else if (command_starts_with(cmd)) {
+        s->input_color = 0xFFFFFF55; // yellow
+    } else {
+        s->input_color = 0xFFFF5555; // red
+    }
+}
+
 static void handle_key(gui_event_t *ev) {
     TerminalSession *s = &g_tabs[g_active_tab];
     char c = (char)ev->arg1;
     bool ctrl = ev->arg3 != 0;
 
+    // create new tab with ctrl + t
     if (ctrl && c == 't') {
         int idx = create_tab();
         if (idx >= 0) g_active_tab = idx;
         return;
     }
 
-    if (ctrl && c == 20) {
+    // switch to tab right, with ctrl + arrow right
+    if (ctrl && c == KEY_RIGHT) {
         if (g_tab_count > 0) g_active_tab = (g_active_tab + 1) % g_tab_count;
         return;
     }
 
-    if (ctrl && c == 19) {
+    // switch to tab left, with ctrl + arrow left
+    if (ctrl && c == KEY_LEFT) {
         if (g_tab_count > 0) g_active_tab = (g_active_tab + g_tab_count - 1) % g_tab_count;
         return;
     }
 
+    // kill the processus with ctrl + c
     if (ctrl && (c == 'c' || c == 'C')) {
         int fg = sys_tty_get_fg(s->tty_id);
         if (fg > 0) {
@@ -810,6 +1039,29 @@ static void handle_key(gui_event_t *ev) {
         sys_tty_write_in(s->tty_id, &ch, 1);
         return;
     }
+
+    if (!ctrl) {
+        if (c == KEY_BACKSPACE) {
+            if (s->input_len > 0) {
+                s->input_len--;
+                s->current_input[s->input_len] = 0;
+            }
+        } else if (c >= 32 && c < 127) {
+            if (s->input_len < LINE_MAX - 1) {
+                s->current_input[s->input_len++] = c;
+                s->current_input[s->input_len] = 0;
+            }
+        }
+
+        update_input_color(s);
+    }
+
+    if (c == KEY_ENTER) {
+        s->input_color = 0xFFFFFFFF;
+        s->input_len = 0;
+        s->current_input[0] = 0;
+    }
+
 
     sys_tty_write_in(s->tty_id, &c, 1);
 }
@@ -885,8 +1137,7 @@ int main(void) {
             draw_tabs();
             draw_session(&g_tabs[g_active_tab]);
         } else {
-            // Avoid a tight poll loop when idle; sleep yields to the scheduler.
-            sleep(1);
+            sys_yield();
         }
     }
 
