@@ -7,7 +7,7 @@
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
   ![Platform: x86_64](https://img.shields.io/badge/Platform-x86_64-lightgrey)
   ![Status: Active](https://img.shields.io/badge/Status-Active-brightgreen)
-  [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/boreddevhq)
+  ![GitHub all releases](https://img.shields.io/github/downloads/boreddevnl/BoredOS/total?color=brightgreen)
 </div>
 
 ---
