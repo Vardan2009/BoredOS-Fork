@@ -469,7 +469,7 @@ bool explorer_clipboard_has_content(void) {
 
 static bool explorer_copy_recursive(const char *src_path, const char *dest_path) {
     if (vfs_is_directory(src_path)) {
-        if (!vfs_mkdir(dest_path)) return false;
+        if (!vfs_mkdir(dest_path) && !vfs_is_directory(dest_path)) return false;
         int capacity = 64;
         vfs_dirent_t *files = (vfs_dirent_t*)kmalloc(capacity * sizeof(vfs_dirent_t));
         if (!files) return false;
@@ -1761,9 +1761,10 @@ static void explorer_perform_move_internal(Window *win, const char *source_path,
         explorer_strcat(origin_path, ".origin");
         vfs_delete(origin_path);
     }
-
-    if (explorer_copy_recursive(source_path, dest_path)) {
-        explorer_delete_permanently(source_path);
+    if (!vfs_rename(source_path, dest_path)) {
+        if (explorer_copy_recursive(source_path, dest_path)) {
+            explorer_delete_permanently(source_path);
+        }
     }
         
     explorer_refresh_all();
